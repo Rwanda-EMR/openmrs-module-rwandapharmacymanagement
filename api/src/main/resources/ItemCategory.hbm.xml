@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="ItemCategory" table="rpm_item_category">
+        <id name="itemCategoryId" type="int" column="item_category_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <property name="name" column="name" type="string"/>
+        <property name="description" column="description" type="string"/>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+    </class>
+</hibernate-mapping>

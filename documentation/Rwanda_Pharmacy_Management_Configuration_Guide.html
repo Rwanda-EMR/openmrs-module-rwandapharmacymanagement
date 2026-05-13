@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>Rwanda Pharmacy Management Configuration Guide</title>
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.35; color: #222; }
+        h1 { font-size: 22pt; }
+        h2 { font-size: 16pt; margin-top: 22px; border-bottom: 1px solid #cccccc; padding-bottom: 4px; }
+        h3 { font-size: 13pt; margin-top: 16px; }
+        table { border-collapse: collapse; width: 100%; margin: 8px 0 14px; }
+        th, td { border: 1px solid #999999; padding: 6px; vertical-align: top; }
+        th { background: #eeeeee; }
+        code { font-family: Consolas, monospace; font-size: 10pt; }
+        pre { background: #f7f7f7; border: 1px solid #cccccc; padding: 8px; white-space: pre-wrap; }
+        .note { border: 1px solid #bbbbbb; background: #f7f7f7; padding: 8px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+<h1>Rwanda Pharmacy Management Full Configuration Guide</h1>
+<p><strong>Purpose:</strong> checklist and configuration reference required to make the Rwanda Pharmacy Management module work end to end.</p>
+
+<h2>1. Configuration Order</h2>
+<ol>
+    <li>Install and start required OpenMRS modules.</li>
+    <li>Assign module roles and privileges.</li>
+    <li>Configure global properties.</li>
+    <li>Configure OpenMRS locations and location tags.</li>
+    <li>Create pharmacy locations and link them to OpenMRS locations/tags.</li>
+    <li>Configure supplier/RMS and pull all master product items first.</li>
+    <li>Map master products to local items, concepts, drugs, programs, and material types.</li>
+    <li>Configure billing mappings for drugs and consumables where billing is expected.</li>
+    <li>Configure app framework links for pharmacy dashboard, lab request, general pharmacy request, consumable request, and prescription request.</li>
+    <li>Configure SMS, SMTP, HIE, reports, and alerts as needed.</li>
+    <li>Test each workflow using a real location, user role, patient, bill, and stock item.</li>
+</ol>
+
+<h2>2. Required Modules</h2>
+<table>
+    <tr><th>Module</th><th>Reason</th></tr>
+    <tr><td>appframework</td><td>Homepage and patient dashboard app links.</td></tr>
+    <tr><td>appui</td><td>UI includes and app shell.</td></tr>
+    <tr><td>coreapps</td><td>Patient dashboard integration.</td></tr>
+    <tr><td>emrapi</td><td>EMR API support used by OpenMRS distribution.</td></tr>
+    <tr><td>legacyui</td><td>Legacy OpenMRS UI compatibility.</td></tr>
+    <tr><td>uicommons</td><td>Shared UI resources.</td></tr>
+    <tr><td>uiframework</td><td>Page and fragment rendering.</td></tr>
+    <tr><td>webservices.rest</td><td>REST support.</td></tr>
+    <tr><td>mohbilling</td><td>Required if billing status and billable service mapping are used.</td></tr>
+</table>
+
+<h2>3. Roles and Privileges</h2>
+<table>
+    <tr><th>Privilege</th><th>Use</th></tr>
+    <tr><td><code>App: rwandapharmacymanagement.dashboard</code></td><td>Access pharmacy app/dashboard.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.viewStock</code></td><td>View stock and reports.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.viewPatientQueue</code></td><td>Use patient queue.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.dispenseWithOrder</code></td><td>Dispense queued requests.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.dispenseWithoutOrder</code></td><td>Dispense without order where enabled.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.transferStock</code></td><td>Transfer stock between pharmacies.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.approveMainToDispensingTransfer</code></td><td>Head of Finance approval for main-to-dispensing transfers.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.submitSupplierOrders</code></td><td>Create/submit/retry supplier purchase orders.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.approvePurchaseOrders</code></td><td>Health Facility Leader purchase order approval.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.receiveDeliveries</code></td><td>Receive supplier deliveries.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.adjustStock</code></td><td>Stock reconciliation/adjustment.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.manageItems</code></td><td>Item master administration.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.managePharmacies</code></td><td>Pharmacy location administration.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.manageSupplierSettings</code></td><td>Supplier/RMS/SMTP configuration.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.syncSupplierProducts</code></td><td>Pull/sync master product items.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.syncSupplierPrices</code></td><td>Sync supplier prices.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.manageClinicalSafetyRules</code></td><td>Manage safety rules.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.viewIntegrationLogs</code></td><td>View integration logs.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.manageSettings</code></td><td>Module settings.</td></tr>
+</table>
+
+<h2>4. Global Properties</h2>
+<table>
+    <tr><th>Property</th><th>Example</th><th>Use</th></tr>
+    <tr><td><code>rwandapharmacymanagement.facilityId</code></td><td><code>1660</code></td><td>Facility/FOSA ID for purchase orders, RMS, HIE, and SMS prescription number context. This is the correct property.</td></tr>
+    <tr><td><code>rwandapharmancymanagement.facilityId</code></td><td><code>1660</code></td><td>Legacy misspelled fallback. Keep same value during transition.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.purchaseOrder.hospital</code></td><td><code>Kirehe Hospital</code></td><td>Hospital name used in SMS message text.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.purchaseOrder.hospitalName</code></td><td><code>Kirehe Hospital</code></td><td>Hospital name on purchase order emails and PDFs. Keep same as hospital.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.prescription.paymentBillMode</code></td><td><code>strict</code> or <code>latest</code></td><td>Strict checks only linked bill. Latest can fall back to latest bill.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.alerts.expiryDays</code></td><td><code>90</code></td><td>Days before expiry for expiry alerts.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.pricing.dispensingMarkupPercentage</code></td><td><code>0</code></td><td>Markup for dispensing price calculations.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.lab.serviceConceptSet</code></td><td>Concept UUID or ID</td><td>Concept set/answers used for lab request services.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.prescription.frequencyConceptSet</code></td><td>Concept UUID or ID</td><td>Concept set/answers used for prescription frequency options.</td></tr>
+</table>
+
+<h2>5. Supplier, RMS, and Product Master Setup</h2>
+<h3>5.1 Legacy RMS Defaults</h3>
+<table>
+    <tr><th>Property</th><th>Example</th><th>Use</th></tr>
+    <tr><td><code>rwandapharmacymanagement.supplier.baseUrl</code></td><td>RMS base URL</td><td>RMS/supplier API root.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.supplier.username</code></td><td>MOH.USER</td><td>RMS username.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.supplier.password</code></td><td>Password</td><td>RMS password.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.supplier.connectionTimeout</code></td><td><code>10000</code></td><td>API connection timeout in milliseconds.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.supplier.readTimeout</code></td><td><code>30000</code></td><td>API read timeout in milliseconds.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.supplier.enabled</code></td><td><code>true</code></td><td>Enable RMS integration.</td></tr>
+</table>
+
+<h3>5.2 Supplier Records</h3>
+<p>Create suppliers in <strong>Supplier Configuration</strong>. For RMS set API enabled. For non-RMS suppliers, set email address and leave API disabled if orders are sent by email.</p>
+
+<h3>5.3 First Product Master Pull</h3>
+<ol>
+    <li>Open <strong>Product sync</strong>.</li>
+    <li>Authenticate to RMS if required.</li>
+    <li>Pull all master product items before creating local items or purchase orders.</li>
+    <li>Confirm each item has NPC code, name, material type, program, price, and active status.</li>
+    <li>Remember that the same NPC can appear more than once when it belongs to different programs. Do not merge these records unless the program is also the same.</li>
+</ol>
+
+<h3>5.4 Local Item Mapping</h3>
+<table>
+    <tr><th>Field</th><th>Rule</th></tr>
+    <tr><td>Name</td><td>Use a clear item name matching product master where possible.</td></tr>
+    <tr><td>Code/NPC</td><td>Use NPC code from product master.</td></tr>
+    <tr><td>Program</td><td>Set program from product master. Same NPC in different programs should create separate program-aware item/price behavior.</td></tr>
+    <tr><td>Material type</td><td>Drug or consumable based on RMS material type. Drugs are prescribed; consumables are requested from patient consumable workflow.</td></tr>
+    <tr><td>Drug/concept</td><td>Map drugs to OpenMRS Drug and concept where prescription and billing checks are needed.</td></tr>
+    <tr><td>Requires expiry</td><td>Enable for drugs and expiry-controlled items. Disable for consumables that can be received as N/A expiry.</td></tr>
+    <tr><td>Requires batch</td><td>Enable when stock should be tracked by batch.</td></tr>
+    <tr><td>Low stock threshold</td><td>Set for alerts and suggested purchase quantities.</td></tr>
+</table>
+
+<h2>6. Pharmacy Locations and OpenMRS Location Tags</h2>
+<ol>
+    <li>Create one main pharmacy location and mark it as main store.</li>
+    <li>Create each dispensing pharmacy.</li>
+    <li>Link each pharmacy to an OpenMRS location and/or one or more OpenMRS location tags.</li>
+    <li>If one OpenMRS location tag maps to more than one dispensing pharmacy, users will be asked to choose active pharmacy once per session.</li>
+    <li>If one dispensing pharmacy serves multiple OpenMRS location tags, add all relevant tags to that pharmacy.</li>
+</ol>
+
+<h2>7. Billing Configuration</h2>
+<ol>
+    <li>Install and configure MOH Billing.</li>
+    <li>Create facility services and billable services for drugs and consumables that should be billed.</li>
+    <li>Map each billed drug/consumable concept to a facility service price.</li>
+    <li>For prescriptions, drug billing mapping is checked through product drug concept and stocked local item concept/drug concept.</li>
+    <li>For consumables, mapped items create billing items when an unpaid bill is available. Unmapped or not-well-mapped items pass to the queue and can be linked later by admin.</li>
+    <li>Configure <code>rwandapharmacymanagement.prescription.paymentBillMode</code> as <code>strict</code> or <code>latest</code>.</li>
+</ol>
+
+<h2>8. SMS Configuration</h2>
+<table>
+    <tr><th>Property</th><th>Example</th><th>Use</th></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.enabled</code></td><td><code>true</code></td><td>Enable prescription SMS.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.postUrl</code></td><td><code>http://41.186.44.171:1401/send</code></td><td>Intouch HTTP send endpoint from the high-volume API documentation.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.username</code></td><td>Provided by Intouch</td><td>SMS username.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.password</code></td><td>Provided by Intouch</td><td>SMS password.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.sender</code></td><td>Approved sender name</td><td>SMS sender/from value.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.coding</code></td><td><code>0</code></td><td>SMS coding value.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.dlrLevel</code></td><td><code>2</code></td><td>Delivery report level.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.dlrUrl</code></td><td>Public callback URL</td><td>Optional delivery report callback. Must reach <code>/module/rwandapharmacymanagement/sms/dlr</code>.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.phonePersonAttributeTypeUuid</code></td><td>Phone attribute type UUID</td><td>Where patient phone number is stored.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.connectionTimeout</code></td><td><code>10000</code></td><td>Connection timeout.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.readTimeout</code></td><td><code>30000</code></td><td>Read timeout.</td></tr>
+</table>
+<div class="note">If Intouch requires IP whitelisting, provide the public outbound IP address of the OpenMRS server. A connection timeout can occur when the IP is not whitelisted or when the endpoint/port is blocked.</div>
+
+<h2>9. SMTP Configuration for Purchase Orders</h2>
+<table>
+    <tr><th>Property</th><th>Example</th><th>Use</th></tr>
+    <tr><td><code>rwandapharmacymanagement.smtp.host</code></td><td><code>smtp.gmail.com</code></td><td>SMTP host.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.smtp.port</code></td><td><code>587</code></td><td>SMTP port.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.smtp.username</code></td><td>Email username</td><td>SMTP username.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.smtp.password</code></td><td>App password</td><td>SMTP password.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.smtp.from</code></td><td>sender@example.org</td><td>From email.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.smtp.auth</code></td><td><code>true</code></td><td>Require authentication.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.smtp.starttls</code></td><td><code>true</code></td><td>Use STARTTLS.</td></tr>
+</table>
+
+<h2>10. HIE Configuration</h2>
+<table>
+    <tr><th>Property</th><th>Use</th></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.enabled</code></td><td>Enable HIE integration.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.baseUrl</code></td><td>HIE base URL.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.username</code></td><td>HIE username.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.password</code></td><td>HIE password.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.encounterPath</code></td><td>Encounter endpoint path.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.medicationRequestPath</code></td><td>MedicationRequest endpoint path.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.medicationDispensePath</code></td><td>MedicationDispense endpoint path.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.patientIdentifierTypeUuid</code></td><td>Patient identifier type sent to HIE.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.medicationCodeSystem</code></td><td>Medication code system URI.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.groupIdentifierSystem</code></td><td>Group identifier system for prescription/order number.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.connectionTimeout</code></td><td>Connection timeout.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.readTimeout</code></td><td>Read timeout.</td></tr>
+</table>
+
+<h2>11. App Framework Configuration</h2>
+<p>Use these app configurations as references. Adjust required privileges, order, labels, icons, and location rules for the deployment.</p>
+
+<h3>11.1 Pharmacy Main Dashboard App</h3>
+<pre>{
+  "id": "rwandapharmacymanagement.pharmacyManageApp",
+  "description": "Rwanda Pharmacy Management dashboard",
+  "order": 10,
+  "extensions": [
+    {
+      "id": "rwandapharmacymanagement.dashboard",
+      "label": "Pharmacy",
+      "extensionPointId": "org.openmrs.referenceapplication.homepageLink",
+      "type": "link",
+      "description": "Rwanda Pharmacy Management dashboard",
+      "order": 50,
+      "icon": "icon-medkit",
+      "url": "rwandapharmacymanagement/index.page",
+      "requiredPrivilege": "App: rwandapharmacymanagement.dashboard",
+      "require": "typeof sessionLocation !== 'undefined' &amp;&amp; hasMemberWithProperty(sessionLocation.tags, 'display', 'Pharmacy Location')"
+    }
+  ]
+}</pre>
+
+<h3>11.2 Prescription Request Patient Dashboard Action</h3>
+<pre>{
+  "id": "rwandapharmacymanagement.prescription.enter",
+  "label": "Prescription",
+  "description": "Create a drug prescription and queue it for pharmacy",
+  "extensions": [
+    {
+      "id": "rwandapharmacymanagement.prescription.enter.action",
+      "extensionPointId": "patientDashboard.overallActions",
+      "type": "link",
+      "label": "Prescription",
+      "url": "rwandapharmacymanagement/prescription/enter.page?patientId={{patient.uuid}}",
+      "icon": "icon-edit",
+      "order": 45,
+      "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
+    }
+  ],
+  "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
+}</pre>
+
+<h3>11.3 Consumable Request Patient Dashboard Action</h3>
+<pre>{
+  "id": "rwandapharmacymanagement.consumable.enter",
+  "label": "Consumables",
+  "description": "Request patient consumable items",
+  "extensions": [
+    {
+      "id": "rwandapharmacymanagement.consumable.enter.action",
+      "extensionPointId": "patientDashboard.overallActions",
+      "type": "link",
+      "label": "Consumables",
+      "url": "rwandapharmacymanagement/consumable/enter.page?patientId={{patient.uuid}}",
+      "icon": "icon-list",
+      "order": 46,
+      "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
+    }
+  ],
+  "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
+}</pre>
+
+<h3>11.4 Lab Request App</h3>
+<pre>{
+  "id": "rwandapharmacymanagement.lab.request",
+  "label": "Lab Supply Request",
+  "description": "Request lab supply items",
+  "extensions": [
+    {
+      "id": "rwandapharmacymanagement.lab.request.link",
+      "extensionPointId": "org.openmrs.referenceapplication.homepageLink",
+      "type": "link",
+      "label": "Lab Supply Request",
+      "url": "rwandapharmacymanagement/lab/request.page",
+      "icon": "icon-beaker",
+      "order": 55,
+      "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
+    }
+  ],
+  "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
+}</pre>
+
+<h3>11.5 General Pharmacy Item Request App</h3>
+<pre>{
+  "id": "rwandapharmacymanagement.pharmacyorder.request",
+  "label": "Pharmacy Item Request",
+  "description": "Request selected items from a selected pharmacy",
+  "extensions": [
+    {
+      "id": "rwandapharmacymanagement.pharmacyorder.request.link",
+      "extensionPointId": "org.openmrs.referenceapplication.homepageLink",
+      "type": "link",
+      "label": "Pharmacy Item Request",
+      "url": "rwandapharmacymanagement/pharmacyorder/request.page",
+      "icon": "icon-shopping-cart",
+      "order": 56,
+      "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
+    }
+  ],
+  "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
+}</pre>
+
+<h2>12. Workflow Setup Checklist</h2>
+<table>
+    <tr><th>Workflow</th><th>Required configuration before testing</th></tr>
+    <tr><td>Prescription request</td><td>Product master pulled; product linked to OpenMRS Drug/concept; local item exists; stock exists; billing mapping configured if billable; patient has visit; app action installed.</td></tr>
+    <tr><td>Consumable request</td><td>Product master pulled; item material type is consumable; local item exists; concept/billing mapping configured where billable; app action installed.</td></tr>
+    <tr><td>Lab request</td><td>Lab concept set configured; lab request app installed; lab location mapped to pharmacy tag/location; stock exists.</td></tr>
+    <tr><td>General pharmacy request</td><td>Pharmacies created; stock exists in requested pharmacy; app installed; active user has dashboard privilege.</td></tr>
+    <tr><td>Patient queue</td><td>OpenMRS location linked to pharmacy or tag; pharmacy selected where multiple; billing property configured.</td></tr>
+    <tr><td>Main to dispensing</td><td>Main store exists; dispensing pharmacy exists; Head of Finance role assigned; main stock exists.</td></tr>
+    <tr><td>Return to main</td><td>Main store active; dispensing pharmacies active; current main pharmacy can request; dispensing pharmacy can approve.</td></tr>
+    <tr><td>Dispensing to dispensing</td><td>At least two active dispensing pharmacies; stock exists in source; user active pharmacy is selected.</td></tr>
+    <tr><td>Purchase order</td><td>Product master and prices pulled; supplier configured; facility ID and hospital name set; Health Facility Leader approval role assigned; SMTP/API configured.</td></tr>
+    <tr><td>Delivery receive</td><td>Supplier/order exists; item mappings exist; expiry rules set; templates use accepted format.</td></tr>
+    <tr><td>Reports</td><td>Stock transactions exist; items and pharmacies are active; user has stock/report access.</td></tr>
+</table>
+
+<h2>13. Validation Queries for Troubleshooting</h2>
+<h3>13.1 Patient request and bill link</h3>
+<pre>select patient_dispensing_request_id, patient_id, patient_bill_id, billable,
+       payment_confirmed, request_status, request_type
+from rpm_patient_dispensing_request
+where patient_dispensing_request_id = &lt;REQUEST_ID&gt;;</pre>
+
+<h3>13.2 Patient bill paid flag</h3>
+<pre>select patient_bill_id, is_paid
+from moh_bill_patient_bill
+where patient_bill_id = &lt;PATIENT_BILL_ID&gt;;</pre>
+
+<h3>13.3 Request lines</h3>
+<pre>select patient_dispensing_request_line_id, patient_dispensing_request_id, line_status
+from rpm_patient_dispensing_request_line
+where patient_dispensing_request_id = &lt;REQUEST_ID&gt;;</pre>
+
+<h3>13.4 Inventory by item and pharmacy</h3>
+<pre>select i.name, b.pharmacy_location_id, b.batch_number, b.expiry_date, b.quantity_on_hand
+from rpm_inventory_balance b
+join rpm_item i on i.item_id = b.item_id
+where i.code = '&lt;NPC_CODE&gt;' and b.voided = 0;</pre>
+
+<h2>14. Final Go-Live Test Script</h2>
+<ol>
+    <li>Login as administrator and verify global properties, roles, app links, and locations.</li>
+    <li>Pull master products and prices from RMS.</li>
+    <li>Create or verify local items for one drug and one consumable.</li>
+    <li>Receive stock into main pharmacy.</li>
+    <li>Transfer stock from main to dispensing through approval.</li>
+    <li>Create a prescription for a patient with an active visit and test SMS/logs if enabled.</li>
+    <li>Pay or link the patient bill and confirm the patient queue updates.</li>
+    <li>Dispense the prescription.</li>
+    <li>Create a consumable request and confirm it appears in queue even if mapping is missing.</li>
+    <li>Create a general pharmacy item request and approve from its queue.</li>
+    <li>Create a lab request and approve from lab queue.</li>
+    <li>Create a return-to-main request from main and approve it from dispensing.</li>
+    <li>Create a purchase order, edit prices, approve, and dispatch to supplier/API/email.</li>
+    <li>Receive delivery and verify stock balances and movement reports.</li>
+    <li>Export item movement report to Excel/PDF and confirm receiving/issuing pharmacy columns.</li>
+</ol>
+
+</body>
+</html>

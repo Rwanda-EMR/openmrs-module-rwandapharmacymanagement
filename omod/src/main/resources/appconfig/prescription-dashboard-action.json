@@ -1,0 +1,20 @@
+[
+  {
+    "id": "rwandapharmacymanagement.prescription.enter",
+    "label": "Prescription",
+    "description": "Create a drug prescription and queue it for pharmacy",
+    "extensions": [
+      {
+        "id": "rwandapharmacymanagement.prescription.enter.action",
+        "extensionPointId": "patientDashboard.overallActions",
+        "type": "link",
+        "label": "Prescription",
+        "url": "rwandapharmacymanagement/prescription/enter.page?patientId={{patient.uuid}}",
+        "icon": "icon-edit",
+        "order": 45,
+        "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
+      }
+    ],
+    "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
+  }
+]

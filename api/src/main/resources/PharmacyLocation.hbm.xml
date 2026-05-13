@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="PharmacyLocation" table="rpm_pharmacy_location">
+        <id name="pharmacyLocationId" type="int" column="pharmacy_location_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <property name="name" column="name" type="string"/>
+        <property name="code" column="code" type="string"/>
+        <many-to-one name="location" class="org.openmrs.Location" column="location_id"/>
+        <many-to-one name="locationTag" class="org.openmrs.LocationTag" column="location_tag_id"/>
+        <set name="locationTags" table="rpm_pharmacy_location_location_tag" lazy="false">
+            <key column="pharmacy_location_id"/>
+            <many-to-many class="org.openmrs.LocationTag" column="location_tag_id"/>
+        </set>
+        <property name="locationType" column="location_type">
+            <type name="org.hibernate.type.EnumType">
+                <param name="enumClass">org.openmrs.module.rwandapharmacymanagement.model.enums.PharmacyLocationType</param>
+                <param name="useNamed">true</param>
+            </type>
+        </property>
+        <property name="mainStore" column="main_store" type="boolean"/>
+        <property name="active" column="active" type="boolean"/>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+    </class>
+</hibernate-mapping>

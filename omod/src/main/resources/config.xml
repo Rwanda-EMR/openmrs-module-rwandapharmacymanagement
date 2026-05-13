@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module configVersion="1.2">
+
+    <id>${project.parent.artifactId}</id>
+    <name>${project.parent.name}</name>
+    <version>${project.parent.version}</version>
+    <package>${project.parent.groupId}.${project.parent.artifactId}</package>
+    <author>MoH Rwanda, PIH</author>
+    <description>${project.parent.description}</description>
+    <require_version>${openMRSVersion}</require_version>
+
+    <require_modules>
+        <require_module version="${appframeworkVersion}">org.openmrs.module.appframework</require_module>
+        <require_module version="${appuiVersion}">org.openmrs.module.appui</require_module>
+        <require_module version="${coreappsVersion}">org.openmrs.module.coreapps</require_module>
+        <require_module version="${emrapiVersion}">org.openmrs.module.emrapi</require_module>
+        <require_module version="${legacyuiVersion}">org.openmrs.module.legacyui</require_module>
+        <require_module version="${uicommonsVersion}">org.openmrs.module.uicommons</require_module>
+        <require_module version="${uiframeworkVersion}">org.openmrs.module.uiframework</require_module>
+        <require_module version="${webservicesRestVersion}">org.openmrs.module.webservices.rest</require_module>
+    </require_modules>
+
+    <activator>org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementActivator</activator>
+
+    <messages>
+        <lang>en</lang>
+        <file>messages.properties</file>
+    </messages>
+
+    <mappingFiles>
+        AdjustmentReason.hbm.xml
+        ClinicalSafetyRule.hbm.xml
+        DeliveryReceipt.hbm.xml
+        DeliveryReceiptLine.hbm.xml
+        DispenseRecord.hbm.xml
+        DispenseRecordLine.hbm.xml
+        IntegrationLog.hbm.xml
+        InterPharmacyTransfer.hbm.xml
+        InterPharmacyTransferLine.hbm.xml
+        InventoryBalance.hbm.xml
+        Item.hbm.xml
+        ItemCategory.hbm.xml
+        LabSupplyRequest.hbm.xml
+        LabSupplyRequestLine.hbm.xml
+        PatientDispensingRequest.hbm.xml
+        PatientDispensingRequestLine.hbm.xml
+        PharmacyItemRequest.hbm.xml
+        PharmacyItemRequestLine.hbm.xml
+        PharmacyLocation.hbm.xml
+        PurchaseOrder.hbm.xml
+        PurchaseOrderItem.hbm.xml
+        ProductMasterItem.hbm.xml
+        StockAdjustment.hbm.xml
+        StockAdjustmentLine.hbm.xml
+        StockTransaction.hbm.xml
+        Supplier.hbm.xml
+        SupplierOrder.hbm.xml
+        SupplierOrderLine.hbm.xml
+        SupplierPrice.hbm.xml
+        SupplierProductMapping.hbm.xml
+        SupplierSetting.hbm.xml
+    </mappingFiles>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.facilityId</property>
+        <defaultValue>1660</defaultValue>
+        <description>Facility id used when creating purchase orders.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmancymanagement.facilityId</property>
+        <defaultValue>1660</defaultValue>
+        <description>Legacy misspelled facility id property. Kept for backward compatibility.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.purchaseOrder.hospitalName</property>
+        <defaultValue></defaultValue>
+        <description>Hospital name shown on purchase order emails and PDFs.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.purchaseOrder.hospital</property>
+        <defaultValue></defaultValue>
+        <description>Hospital name shown in patient prescription SMS messages.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.smtp.host</property>
+        <defaultValue></defaultValue>
+        <description>SMTP host used for sending supplier purchase orders by email.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.smtp.port</property>
+        <defaultValue>587</defaultValue>
+        <description>SMTP port used for sending supplier purchase orders by email.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.smtp.username</property>
+        <defaultValue></defaultValue>
+        <description>SMTP username used for supplier email dispatch.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.smtp.password</property>
+        <defaultValue></defaultValue>
+        <description>SMTP password used for supplier email dispatch.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.smtp.from</property>
+        <defaultValue></defaultValue>
+        <description>From address used for supplier email dispatch.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.smtp.auth</property>
+        <defaultValue>true</defaultValue>
+        <description>Whether SMTP authentication is required.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.smtp.starttls</property>
+        <defaultValue>true</defaultValue>
+        <description>Whether SMTP STARTTLS is enabled.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.alerts.expiryDays</property>
+        <defaultValue>90</defaultValue>
+        <description>Days before expiry when stock should appear in alerts.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.pricing.dispensingMarkupPercentage</property>
+        <defaultValue>0</defaultValue>
+        <description>Percentage markup added to supplier-delivered cost when computing patient selling price.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.prescription.paymentBillMode</property>
+        <defaultValue>latest</defaultValue>
+        <description>Prescription payment check mode. Use strict to check only the bill linked to the prescription request, or latest to fall back to the latest patient bill.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.lab.serviceConceptSet</property>
+        <defaultValue></defaultValue>
+        <description>Concept question whose answers represent lab services available on lab supply requests.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.sms.enabled</property>
+        <defaultValue>false</defaultValue>
+        <description>Whether prescription SMS notifications are sent through Intouch.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.sms.username</property>
+        <defaultValue></defaultValue>
+        <description>Intouch SMS username.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.sms.password</property>
+        <defaultValue></defaultValue>
+        <description>Intouch SMS password.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.sms.postUrl</property>
+        <defaultValue>http://41.186.44.171:1401/send</defaultValue>
+        <description>Intouch SMS HTTP send endpoint.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.sms.sender</property>
+        <defaultValue></defaultValue>
+        <description>Intouch SMS sender name.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.sms.coding</property>
+        <defaultValue>0</defaultValue>
+        <description>Intouch SMS coding parameter.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.sms.dlrUrl</property>
+        <defaultValue></defaultValue>
+        <description>URL where Intouch should send SMS delivery reports.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.sms.dlrLevel</property>
+        <defaultValue>2</defaultValue>
+        <description>Intouch SMS delivery report level. Usually 2.</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>rwandapharmacymanagement.sms.phonePersonAttributeTypeUuid</property>
+        <defaultValue></defaultValue>
+        <description>Person attribute type UUID used to find the patient phone number for prescription SMS.</description>
+    </globalProperty>
+
+</module>

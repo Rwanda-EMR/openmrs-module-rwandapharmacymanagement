@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="PurchaseOrderItem" table="rpm_purchase_order_item">
+        <id name="purchaseOrderItemId" type="int" column="purchase_order_item_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <many-to-one name="purchaseOrder" class="org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrder" column="purchase_order_id"/>
+        <property name="orderNumber" column="order_number" type="string"/>
+        <property name="program" column="program" type="string"/>
+        <property name="itemName" column="item_name" type="string"/>
+        <property name="itemCode" column="item_code" type="string"/>
+        <property name="quantity" column="quantity" type="big_decimal"/>
+        <property name="unitPrice" column="unit_price" type="big_decimal"/>
+        <property name="totalPrice" column="total_price" type="big_decimal"/>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+        <property name="uuid" column="uuid" type="string"/>
+    </class>
+</hibernate-mapping>

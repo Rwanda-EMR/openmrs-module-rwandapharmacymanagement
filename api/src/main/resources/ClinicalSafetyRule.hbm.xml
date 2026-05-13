@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="ClinicalSafetyRule" table="rpm_clinical_safety_rule">
+        <id name="clinicalSafetyRuleId" type="int" column="clinical_safety_rule_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <property name="ruleType" column="rule_type">
+            <type name="org.hibernate.type.EnumType">
+                <param name="enumClass">org.openmrs.module.rwandapharmacymanagement.model.enums.ClinicalRuleType</param>
+                <param name="useNamed">true</param>
+            </type>
+        </property>
+        <property name="severity" column="severity">
+            <type name="org.hibernate.type.EnumType">
+                <param name="enumClass">org.openmrs.module.rwandapharmacymanagement.model.enums.RuleSeverity</param>
+                <param name="useNamed">true</param>
+            </type>
+        </property>
+        <property name="blocking" column="blocking" type="boolean"/>
+        <property name="active" column="active" type="boolean"/>
+        <property name="ruleName" column="rule_name" type="string"/>
+        <many-to-one name="drug" class="org.openmrs.Drug" column="drug_id"/>
+        <many-to-one name="interactingDrug" class="org.openmrs.Drug" column="interacting_drug_id"/>
+        <many-to-one name="contraindicatedCondition" class="org.openmrs.Concept" column="contraindicated_condition_id"/>
+        <property name="genderRestriction" column="gender_restriction" type="string"/>
+        <property name="ruleDefinition" column="rule_definition" type="text"/>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+    </class>
+</hibernate-mapping>

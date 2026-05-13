@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="StockAdjustmentLine" table="rpm_stock_adjustment_line">
+        <id name="stockAdjustmentLineId" type="int" column="stock_adjustment_line_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <many-to-one name="stockAdjustment" class="org.openmrs.module.rwandapharmacymanagement.model.StockAdjustment" column="stock_adjustment_id"/>
+        <many-to-one name="item" class="org.openmrs.module.rwandapharmacymanagement.model.Item" column="item_id"/>
+        <property name="batchNumber" column="batch_number" type="string"/>
+        <property name="expiryDate" column="expiry_date"/>
+        <property name="quantity" column="quantity" type="big_decimal"/>
+        <property name="systemQuantity" column="system_quantity" type="big_decimal"/>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+    </class>
+</hibernate-mapping>

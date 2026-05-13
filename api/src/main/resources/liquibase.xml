@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-2.0.xsd">
+
+    <changeSet id="rpm-initial-schema" author="codex">
+        <sqlFile path="sql/migrations/rpm-initial-schema.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-stock-transaction-performed-by" author="codex">
+        <sqlFile path="sql/migrations/rpm-stock-transaction-performed-by.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-product-master-and-suppliers" author="codex">
+        <sqlFile path="sql/migrations/rpm-product-master-and-suppliers.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-purchase-orders" author="codex">
+        <sqlFile path="sql/migrations/rpm-purchase-orders.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-purchase-order-facility-id-varchar" author="codex">
+        <sqlFile path="sql/migrations/rpm-purchase-order-facility-id-varchar.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-product-master-drug-link" author="codex">
+        <sqlFile path="sql/migrations/rpm-product-master-drug-link.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-delivery-receipt-purchase-order-link" author="codex">
+        <sqlFile path="sql/migrations/rpm-delivery-receipt-purchase-order-link.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-inter-pharmacy-transfer-workflow" author="codex">
+        <sqlFile path="sql/migrations/rpm-inter-pharmacy-transfer-workflow.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-pharmacy-location-tag" author="codex">
+        <sqlFile path="sql/migrations/rpm-pharmacy-location-tag.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-patient-request-billing-link" author="codex">
+        <sqlFile path="sql/migrations/rpm-patient-request-billing-link.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-request-line-order-link" author="codex">
+        <sqlFile path="sql/migrations/rpm-request-line-order-link.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-consumable-request-metadata" author="codex">
+        <sqlFile path="sql/migrations/rpm-consumable-request-metadata.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-requesting-location-link" author="codex">
+        <sqlFile path="sql/migrations/rpm-requesting-location-link.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-lab-supply-request-workflow" author="codex">
+        <sqlFile path="sql/migrations/rpm-lab-supply-request-workflow.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-purchase-order-fetched-receipt" author="codex">
+        <sqlFile path="sql/migrations/rpm-purchase-order-fetched-receipt.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-delivery-confirmation-line-metadata" author="codex">
+        <sqlFile path="sql/migrations/rpm-delivery-confirmation-line-metadata.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-inter-pharmacy-transfer-line-costs" author="codex">
+        <sqlFile path="sql/migrations/rpm-inter-pharmacy-transfer-line-costs.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-lab-service-concept" author="codex">
+        <sqlFile path="sql/migrations/rpm-lab-service-concept.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-product-master-nullable-npc" author="codex">
+        <sqlFile path="sql/migrations/rpm-product-master-nullable-npc.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-product-master-program-aware-prices" author="codex">
+        <sqlFile path="sql/migrations/rpm-product-master-program-aware-prices.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-pharmacy-location-tags-many" author="codex">
+        <sqlFile path="sql/migrations/rpm-pharmacy-location-tags-many.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-pharmacy-item-request-workflow" author="codex">
+        <sqlFile path="sql/migrations/rpm-pharmacy-item-request-workflow.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-performance-indexes" author="codex">
+        <sqlFile path="sql/migrations/rpm-performance-indexes.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+</databaseChangeLog>

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>Rwanda Pharmacy Management User Manual</title>
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.35; color: #222; }
+        h1 { font-size: 22pt; }
+        h2 { font-size: 16pt; margin-top: 22px; border-bottom: 1px solid #cccccc; padding-bottom: 4px; }
+        h3 { font-size: 13pt; margin-top: 16px; }
+        table { border-collapse: collapse; width: 100%; margin: 8px 0 14px; }
+        th, td { border: 1px solid #999999; padding: 6px; vertical-align: top; }
+        th { background: #eeeeee; }
+        code { font-family: Consolas, monospace; font-size: 10pt; }
+        .note { border: 1px solid #bbbbbb; background: #f7f7f7; padding: 8px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+<h1>Rwanda Pharmacy Management User Manual</h1>
+<p><strong>Module:</strong> Rwanda Pharmacy Management</p>
+<p><strong>Audience:</strong> pharmacy staff, dispensing store users, main pharmacy users, doctors, lab request users, purchase order users, finance approvers, facility leadership, and administrators.</p>
+
+<h2>1. Purpose</h2>
+<p>The module manages hospital pharmacy stock, patient prescription queues, consumable requests, lab supply requests, pharmacy item requests, pharmacy-to-pharmacy transfers, return-to-main transfers, purchase orders, supplier deliveries, inventory reports, billing linkage, alerts, and integrations such as SMS, email, RMS, and HIE.</p>
+
+<h2>2. Main Navigation</h2>
+<table>
+    <tr><th>Menu</th><th>Use</th></tr>
+    <tr><td>Dashboard</td><td>Quick actions and counts for queues, purchase orders, and alerts.</td></tr>
+    <tr><td>Patient queue</td><td>See patient prescription and consumable requests waiting for payment or dispensing in the current pharmacy.</td></tr>
+    <tr><td>Pharmacy item request</td><td>User requests specific items from one selected pharmacy. One request cannot mix different pharmacies.</td></tr>
+    <tr><td>Pharmacy item request queue</td><td>Pharmacy staff approve and issue items requested by users from their pharmacy.</td></tr>
+    <tr><td>Lab request / lab queue</td><td>Lab users request items and pharmacy staff approve/issue lab supplies.</td></tr>
+    <tr><td>Main pharmacy</td><td>Main store inventory, purchase order cart, delivery receiving, and reconciliation.</td></tr>
+    <tr><td>Dispensing pharmacies</td><td>Dispensing stock view, request cart, and pharmacy-specific stock operations.</td></tr>
+    <tr><td>Main to dispensing</td><td>Dispensing pharmacy requests stock from main; Head of Finance approval is required before transfer.</td></tr>
+    <tr><td>Return to main pharmacy</td><td>Main pharmacy requests items back from a dispensing pharmacy; the dispensing pharmacy approves or rejects.</td></tr>
+    <tr><td>Dispensing to dispensing</td><td>One dispensing pharmacy requests stock from another dispensing pharmacy.</td></tr>
+    <tr><td>Purchase orders</td><td>Create, edit, approve, reject, dispatch, and retry supplier purchase orders.</td></tr>
+    <tr><td>Receive delivery</td><td>Receive RMS/API deliveries, uploaded supplier templates, or direct delivery entries.</td></tr>
+    <tr><td>Reports</td><td>Stock, valuation, inventory movement, and item movement reports with exports.</td></tr>
+    <tr><td>Control</td><td>Alerts, link bills, safety rules, reconciliation, settings, and integration logs.</td></tr>
+</table>
+
+<h2>3. Current Pharmacy Selection</h2>
+<p>If the logged-in OpenMRS location is connected to more than one pharmacy, some pages ask the user to choose the active pharmacy. The selection is remembered for the session. Pages such as patient queue, dispensing store, pharmacy request queue, and transfer approvals use this active pharmacy to filter what the user sees.</p>
+
+<h2>4. Prescriptions</h2>
+<h3>4.1 Creating a Prescription</h3>
+<ol>
+    <li>Open the patient dashboard.</li>
+    <li>Click <strong>Prescription</strong>.</li>
+    <li>Select drugs, frequency, route, duration, quantity, and target pharmacy as required.</li>
+    <li>The page shows stock status and billing mapping status for items in store.</li>
+    <li>Submit the prescription.</li>
+</ol>
+<p>The system creates OpenMRS drug orders, creates a patient dispensing request, links a bill when available, and can send SMS/HIE notifications if enabled.</p>
+<div class="note"><strong>Billing note:</strong> if the configured payment mode is strict, only the bill linked to the request is checked. If it is latest, the system may use the latest patient bill when no bill was passed from the prescription page.</div>
+
+<h3>4.2 Patient Queue</h3>
+<ol>
+    <li>Open <strong>Patient queue</strong>.</li>
+    <li>Select the active pharmacy if prompted.</li>
+    <li>Requests with unpaid linked bills remain in payment status. Paid, unbillable, or allowed consumable requests move to pending dispense.</li>
+    <li>Open the request to view or dispense.</li>
+</ol>
+
+<h3>4.3 Drug Not Available</h3>
+<p>The <strong>Drug not available in all pharmacies</strong> action is available from the prescription workflow so the user can record unavailable drugs even when stock status may be uncertain.</p>
+
+<h2>5. Consumable Requests</h2>
+<ol>
+    <li>Open the patient dashboard.</li>
+    <li>Click the consumable request app/action.</li>
+    <li>Select consumable items and quantities.</li>
+    <li>Submit the request.</li>
+</ol>
+<p>Mapped consumables are billed when an unpaid bill is available. If no usable bill exists or an item is not mapped correctly, the request is allowed to pass as paid for dispensing and can be linked by an administrator later.</p>
+
+<h2>6. User Pharmacy Item Request</h2>
+<p>This page is for a user requesting items from a specific pharmacy, not for pharmacy-to-pharmacy transfers.</p>
+<ol>
+    <li>Open <strong>Pharmacy item request</strong>.</li>
+    <li>Select one pharmacy for the request.</li>
+    <li>Add items and quantities.</li>
+    <li>Submit the request.</li>
+</ol>
+<p>One request summary must contain items requested from only one pharmacy. The page includes <strong>My request history</strong> so users can track previous requests.</p>
+
+<h2>7. Pharmacy Item Request Queue</h2>
+<ol>
+    <li>Open <strong>Pharmacy item request queue</strong>.</li>
+    <li>The queue uses the current active pharmacy.</li>
+    <li>Review requested items and available stock.</li>
+    <li>Approve quantities. Stock is issued from the selected pharmacy.</li>
+</ol>
+
+<h2>8. Lab Supply Requests</h2>
+<h3>8.1 Creating Lab Requests</h3>
+<ol>
+    <li>Open <strong>Lab request</strong>.</li>
+    <li>Select configured lab service/request items.</li>
+    <li>Submit the request.</li>
+</ol>
+<h3>8.2 Lab Queue</h3>
+<ol>
+    <li>Open <strong>Lab dispensing queue</strong>.</li>
+    <li>Review pending requests.</li>
+    <li>Approve and issue available quantities.</li>
+</ol>
+
+<h2>9. Inventory</h2>
+<h3>9.1 Main Pharmacy</h3>
+<p>Main pharmacy users can view stock, search items, add items to the purchase order cart, receive deliveries, and reconcile stock.</p>
+<h3>9.2 Dispensing Pharmacy</h3>
+<p>Dispensing pharmacy users can view current stock, request items, and see requests and transfers related to the active pharmacy.</p>
+<h3>9.3 Expiry Rules</h3>
+<p>Drugs and items configured to require expiry must have an expiry date when received. Consumables that do not require expiry can be received with blank or N/A expiry.</p>
+
+<h2>10. Pharmacy Transfers</h2>
+<h3>10.1 Main to Dispensing Transfer</h3>
+<ol>
+    <li>A dispensing pharmacy opens <strong>Main to dispensing</strong>.</li>
+    <li>The destination pharmacy is the active dispensing pharmacy.</li>
+    <li>The user requests items from main pharmacy.</li>
+    <li>The Head of Finance opens the review/approval page and approves or rejects.</li>
+    <li>Approved requests are transferred using transfer labels and buttons.</li>
+</ol>
+
+<h3>10.2 Dispensing to Dispensing Transfer</h3>
+<ol>
+    <li>Open <strong>Dispensing to dispensing</strong>.</li>
+    <li>The source list excludes main pharmacy and excludes the current pharmacy.</li>
+    <li>The receiving pharmacy is the current active pharmacy.</li>
+    <li>The supplying dispensing pharmacy approves/transfers or rejects the request.</li>
+</ol>
+
+<h3>10.3 Return to Main Pharmacy</h3>
+<ol>
+    <li>Main pharmacy opens <strong>Return to main pharmacy</strong>.</li>
+    <li>Main selects the dispensing pharmacy, items, quantities, and reason.</li>
+    <li>The selected dispensing pharmacy sees the request and approves transfer back or rejects with a reason.</li>
+</ol>
+
+<h2>11. Purchase Orders</h2>
+<ol>
+    <li>Open <strong>Main pharmacy</strong>.</li>
+    <li>Add items to the order cart.</li>
+    <li>Edit quantity and unit price in the cart.</li>
+    <li>Select supplier and submit cart. Orders are grouped by program.</li>
+    <li>Health Facility Leader reviews pending purchase orders.</li>
+    <li>Prices are editable on the review page. RMS orders may refresh prices from RMS. Non-RMS supplier orders keep manually edited prices.</li>
+    <li>Approve to dispatch by API or email depending on supplier setup.</li>
+</ol>
+<p>Purchase order emails and PDFs include the configured hospital name.</p>
+
+<h2>12. Receiving Deliveries</h2>
+<p>Deliveries can be received from RMS/API details, uploaded supplier Excel templates, or direct entry. Templates include expected format examples in the first row and use zero values where a sample number is needed. Expiry can be N/A for consumables that do not require expiry.</p>
+
+<h2>13. Billing Link Administration</h2>
+<ol>
+    <li>Open <strong>Link patient request bills</strong>.</li>
+    <li>Search by request ID or patient identifier/name.</li>
+    <li>Enter the patient bill ID to link.</li>
+    <li>The request payment status is updated according to the bill paid status.</li>
+</ol>
+<p>This is intended for prescription and consumable requests that entered the system without a bill link or had billing mapping issues.</p>
+
+<h2>14. Alerts</h2>
+<p>The alerts dashboard shows low stock and expiry alerts. Expiry alert timing is controlled by the configured expiry days global property.</p>
+
+<h2>15. Reports</h2>
+<table>
+    <tr><th>Report</th><th>Purpose</th></tr>
+    <tr><td>Individual pharmacy report</td><td>Stock for one selected pharmacy.</td></tr>
+    <tr><td>Overall hospital stock report</td><td>Stock across all pharmacies.</td></tr>
+    <tr><td>Inventory movement report</td><td>Movements over a selected period.</td></tr>
+    <tr><td>Item movement report</td><td>All movements for one selected item, all pharmacies or one pharmacy, including batch, expiry, received, issued, balance, and months of stock.</td></tr>
+    <tr><td>Stock valuation</td><td>Stock values using available unit costs.</td></tr>
+</table>
+<p>Reports support Excel and/or PDF export where available.</p>
+
+<h2>16. Roles and Responsibilities</h2>
+<table>
+    <tr><th>Role</th><th>Main responsibility</th></tr>
+    <tr><td>Doctor/clinician</td><td>Create prescriptions from patient dashboard.</td></tr>
+    <tr><td>Dispenser</td><td>Use patient queue and dispense requests.</td></tr>
+    <tr><td>Main store manager</td><td>Main stock, purchase order cart, deliveries, transfers, reconciliation.</td></tr>
+    <tr><td>Dispensing store manager</td><td>Dispensing stock and dispensing pharmacy transfers.</td></tr>
+    <tr><td>Head of Finance</td><td>Approve main-to-dispensing transfers.</td></tr>
+    <tr><td>Health Facility Leader</td><td>Approve purchase orders.</td></tr>
+    <tr><td>Administrator</td><td>Settings, locations, items, roles, billing links, safety rules, integrations.</td></tr>
+</table>
+
+<h2>17. Troubleshooting</h2>
+<table>
+    <tr><th>Problem</th><th>What to check</th></tr>
+    <tr><td>Queue badge shows zero but records exist</td><td>Check OpenMRS logs for queue notification warnings. Confirm active pharmacy selection and location-tag mapping.</td></tr>
+    <tr><td>Prescription unpaid after bill is paid</td><td>Check request patient_bill_id, payment_confirmed, request_status, line_status, bill paid flag, and payment bill mode.</td></tr>
+    <tr><td>SMS times out</td><td>Check SMS endpoint, port, network access, server public IP whitelist, username, password, sender, and timeout properties.</td></tr>
+    <tr><td>Product not available for ordering</td><td>Pull/sync master product items first, then confirm local item mapping, material type, program, and stock flags.</td></tr>
+    <tr><td>Billing mapped shown incorrectly</td><td>Check item concept/drug concept and MOH Billing facility service/billable service mapping.</td></tr>
+    <tr><td>Transfer fails for stock</td><td>Check batch number, available balance, and whether the item is stocked in the selected source pharmacy.</td></tr>
+</table>
+
+</body>
+</html>

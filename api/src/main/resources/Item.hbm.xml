@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="Item" table="rpm_item">
+        <id name="itemId" type="int" column="item_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <property name="name" column="name" type="string"/>
+        <property name="code" column="code" type="string"/>
+        <property name="program" column="program" type="string"/>
+        <many-to-one name="itemCategory" class="org.openmrs.module.rwandapharmacymanagement.model.ItemCategory" column="item_category_id"/>
+        <many-to-one name="concept" class="org.openmrs.Concept" column="concept_id"/>
+        <many-to-one name="drug" class="org.openmrs.Drug" column="drug_id"/>
+        <property name="dispensable" column="dispensable" type="boolean"/>
+        <property name="stockable" column="stockable" type="boolean"/>
+        <property name="supplierManaged" column="supplier_managed" type="boolean"/>
+        <property name="lowStockThreshold" column="low_stock_threshold" type="integer"/>
+        <property name="requiresBatch" column="requires_batch" type="boolean"/>
+        <property name="requiresExpiry" column="requires_expiry" type="boolean"/>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+    </class>
+</hibernate-mapping>

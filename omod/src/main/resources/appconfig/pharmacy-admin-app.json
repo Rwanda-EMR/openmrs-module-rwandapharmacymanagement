@@ -1,0 +1,9 @@
+{
+  "id": "rwandapharmacymanagement.settings",
+  "label": "Pharmacy Settings",
+  "description": "Administration pages for the pharmacy module",
+  "order": 51,
+  "icon": "icon-cogs",
+  "url": "rwandapharmacymanagement/admin/settings.page",
+  "requiredPrivilege": "Task: rwandapharmacymanagement.manageSettings"
+}

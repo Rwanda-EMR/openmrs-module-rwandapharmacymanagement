@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="PatientDispensingRequest" table="rpm_patient_dispensing_request">
+        <id name="patientDispensingRequestId" type="int" column="patient_dispensing_request_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <many-to-one name="patient" class="org.openmrs.Patient" column="patient_id"/>
+        <many-to-one name="visit" class="org.openmrs.Visit" column="visit_id"/>
+        <many-to-one name="encounter" class="org.openmrs.Encounter" column="encounter_id"/>
+        <many-to-one name="requestingLocation" class="org.openmrs.Location" column="requesting_location_id"/>
+        <many-to-one name="order" class="org.openmrs.Order" column="order_id"/>
+        <many-to-one name="orderingProvider" class="org.openmrs.Provider" column="ordering_provider_id"/>
+        <many-to-one name="targetPharmacyLocation" class="org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation" column="target_pharmacy_location_id"/>
+        <property name="patientBillId" column="patient_bill_id" type="integer"/>
+        <property name="billable" column="billable" type="boolean"/>
+        <property name="paymentConfirmed" column="payment_confirmed" type="boolean"/>
+        <property name="requestStatus" column="request_status">
+            <type name="org.hibernate.type.EnumType">
+                <param name="enumClass">org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus</param>
+                <param name="useNamed">true</param>
+            </type>
+        </property>
+        <property name="requestType" column="request_type">
+            <type name="org.hibernate.type.EnumType">
+                <param name="enumClass">org.openmrs.module.rwandapharmacymanagement.model.enums.RequestType</param>
+                <param name="useNamed">true</param>
+            </type>
+        </property>
+        <property name="medicalActReference" column="medical_act_reference" type="string"/>
+        <bag name="lines" cascade="all-delete-orphan" inverse="true" lazy="false">
+            <key column="patient_dispensing_request_id"/>
+            <one-to-many class="org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine"/>
+        </bag>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+    </class>
+</hibernate-mapping>

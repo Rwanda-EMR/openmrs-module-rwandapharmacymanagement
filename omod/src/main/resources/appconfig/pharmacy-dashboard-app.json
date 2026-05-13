@@ -1,0 +1,19 @@
+{
+  "id": "rwandapharmacymanagement.pharmacyManageApp",
+  "description": "SPA Stock management",
+  "order": 10,
+  "extensions": [
+    {
+      "id": "rwandapharmacymanagement.dashboard",
+      "label": "Pharmacy",
+      "extensionPointId": "org.openmrs.referenceapplication.homepageLink",
+      "type": "link",
+      "description": "Rwanda Pharmacy Management dashboard",
+      "order": 50,
+      "icon": "icon-medkit",
+      "url": "rwandapharmacymanagement/index.page",
+      "requiredPrivilege": "App: rwandapharmacymanagement.dashboard",
+      "require": "typeof sessionLocation !== 'undefined' && hasMemberWithProperty(sessionLocation.tags, 'display', 'Pharmacy Location')"
+    }
+  ]
+}

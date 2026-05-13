@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="DeliveryReceiptLine" table="rpm_delivery_receipt_line">
+        <id name="deliveryReceiptLineId" type="int" column="delivery_receipt_line_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <many-to-one name="deliveryReceipt" class="org.openmrs.module.rwandapharmacymanagement.model.DeliveryReceipt" column="delivery_receipt_id"/>
+        <many-to-one name="item" class="org.openmrs.module.rwandapharmacymanagement.model.Item" column="item_id"/>
+        <property name="batchNumber" column="batch_number" type="string"/>
+        <property name="expiryDate" column="expiry_date"/>
+        <property name="orderedQuantity" column="ordered_quantity" type="big_decimal"/>
+        <property name="receivedQuantity" column="received_quantity" type="big_decimal"/>
+        <property name="acceptedQuantity" column="accepted_quantity" type="big_decimal"/>
+        <property name="unitPrice" column="unit_price" type="big_decimal"/>
+        <property name="confirmationItemNo" column="confirmation_item_no" type="string"/>
+        <property name="rejectionReasonCode" column="rejection_reason_code" type="string"/>
+        <property name="rejectionReasonDetail" column="rejection_reason_detail" type="text" length="16777215"/>
+        <property name="notes" column="notes" type="text" length="16777215"/>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+    </class>
+</hibernate-mapping>

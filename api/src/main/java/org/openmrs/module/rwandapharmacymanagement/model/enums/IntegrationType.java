@@ -1,0 +1,15 @@
+package org.openmrs.module.rwandapharmacymanagement.model.enums;
+
+public enum IntegrationType {
+    AUTHENTICATION,
+    PRODUCT_MASTER_SYNC,
+    PRICE_SYNC,
+    ORDER_SUBMISSION,
+    DELIVERY_DETAILS_FETCH,
+    DELIVERY_CONFIRMATION,
+    STOCK_RECEIPT_IMPORT,
+    HIE_ENCOUNTER,
+    HIE_MEDICATION_REQUEST,
+    HIE_MEDICATION_DISPENSE,
+    SMS_NOTIFICATION
+}

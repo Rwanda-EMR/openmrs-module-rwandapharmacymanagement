@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
+
+    <bean id="pharmacyDao" class="org.openmrs.module.rwandapharmacymanagement.db.hibernate.HibernatePharmacyDao">
+        <property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
+    <bean id="inventoryDao" class="org.openmrs.module.rwandapharmacymanagement.db.hibernate.HibernateInventoryDao">
+        <property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
+    <bean id="dispensingDao" class="org.openmrs.module.rwandapharmacymanagement.db.hibernate.HibernateDispensingDao">
+        <property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
+    <bean id="labSupplyDao" class="org.openmrs.module.rwandapharmacymanagement.db.hibernate.HibernateLabSupplyDao">
+        <property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
+    <bean id="pharmacyItemRequestDao" class="org.openmrs.module.rwandapharmacymanagement.db.hibernate.HibernatePharmacyItemRequestDao">
+        <property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
+    <bean id="clinicalSafetyDao" class="org.openmrs.module.rwandapharmacymanagement.db.hibernate.HibernateClinicalSafetyDao">
+        <property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
+    <bean id="integrationLogDao" class="org.openmrs.module.rwandapharmacymanagement.db.hibernate.HibernateIntegrationLogDao">
+        <property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
+    <bean id="supplierApiClient" class="org.openmrs.module.rwandapharmacymanagement.integration.supplier.SupplierApiClient"/>
+    <bean id="hieMedicationApiClient" class="org.openmrs.module.rwandapharmacymanagement.integration.hie.HieMedicationApiClient"/>
+    <bean id="hieMedicationPayloadBuilder" class="org.openmrs.module.rwandapharmacymanagement.integration.hie.HieMedicationPayloadBuilder"/>
+    <bean id="smsGatewayClient" class="org.openmrs.module.rwandapharmacymanagement.integration.sms.SmsGatewayClient"/>
+    <bean id="prescriptionCommunicationService" class="org.openmrs.module.rwandapharmacymanagement.integration.PrescriptionCommunicationService">
+        <property name="administrationService" ref="adminService"/>
+        <property name="integrationLogService" ref="integrationLogService"/>
+        <property name="hieMedicationApiClient" ref="hieMedicationApiClient"/>
+        <property name="hieMedicationPayloadBuilder" ref="hieMedicationPayloadBuilder"/>
+        <property name="smsGatewayClient" ref="smsGatewayClient"/>
+    </bean>
+
+    <bean id="pharmacyServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.PharmacyServiceImpl">
+        <property name="pharmacyDao" ref="pharmacyDao"/>
+        <property name="administrationService" ref="adminService"/>
+    </bean>
+
+    <bean id="inventoryServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.InventoryServiceImpl">
+        <property name="inventoryDao" ref="inventoryDao"/>
+        <property name="pharmacyService" ref="pharmacyService"/>
+    </bean>
+
+    <bean id="dispensingServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.DispensingServiceImpl">
+        <property name="dispensingDao" ref="dispensingDao"/>
+        <property name="inventoryDao" ref="inventoryDao"/>
+        <property name="pricingService" ref="pricingService"/>
+        <property name="clinicalSafetyService" ref="clinicalSafetyService"/>
+        <property name="paymentStatusService" ref="paymentStatusService"/>
+        <property name="prescriptionCommunicationService" ref="prescriptionCommunicationService"/>
+    </bean>
+
+    <bean id="clinicalSafetyServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.ClinicalSafetyServiceImpl">
+        <property name="clinicalSafetyDao" ref="clinicalSafetyDao"/>
+    </bean>
+
+    <bean id="integrationLogServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.IntegrationLogServiceImpl">
+        <property name="integrationLogDao" ref="integrationLogDao"/>
+    </bean>
+
+    <bean id="supplierIntegrationServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.SupplierIntegrationServiceImpl">
+        <property name="administrationService" ref="adminService"/>
+        <property name="integrationLogService" ref="integrationLogService"/>
+        <property name="pharmacyService" ref="pharmacyService"/>
+        <property name="supplierApiClient" ref="supplierApiClient"/>
+    </bean>
+
+    <bean id="pricingServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.PricingServiceImpl">
+        <property name="administrationService" ref="adminService"/>
+    </bean>
+
+    <bean id="paymentStatusServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.PaymentStatusServiceImpl"/>
+
+    <bean id="prescriptionServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.PrescriptionServiceImpl">
+        <property name="pharmacyService" ref="pharmacyService"/>
+        <property name="dispensingService" ref="dispensingService"/>
+        <property name="prescriptionCommunicationService" ref="prescriptionCommunicationService"/>
+    </bean>
+
+    <bean id="consumableOrderServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.ConsumableOrderServiceImpl">
+        <property name="pharmacyService" ref="pharmacyService"/>
+        <property name="dispensingService" ref="dispensingService"/>
+    </bean>
+
+    <bean id="labSupplyServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.LabSupplyServiceImpl">
+        <property name="labSupplyDao" ref="labSupplyDao"/>
+        <property name="inventoryDao" ref="inventoryDao"/>
+        <property name="pharmacyService" ref="pharmacyService"/>
+    </bean>
+
+    <bean id="pharmacyItemRequestServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.PharmacyItemRequestServiceImpl">
+        <property name="pharmacyItemRequestDao" ref="pharmacyItemRequestDao"/>
+        <property name="inventoryDao" ref="inventoryDao"/>
+        <property name="pharmacyService" ref="pharmacyService"/>
+    </bean>
+
+    <bean id="rwandaPharmacyAlertServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.AlertServiceImpl">
+        <property name="inventoryService" ref="inventoryService"/>
+        <property name="administrationService" ref="adminService"/>
+    </bean>
+
+    <bean id="pharmacyService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="pharmacyServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
+    <bean id="inventoryService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="inventoryServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
+    <bean id="dispensingService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="dispensingServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
+    <bean id="clinicalSafetyService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="clinicalSafetyServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
+    <bean id="integrationLogService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="integrationLogServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
+    <bean id="supplierIntegrationService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="supplierIntegrationServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
+    <bean id="rwandaPharmacyAlertService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="rwandaPharmacyAlertServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
+    <bean id="pricingService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="pricingServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
+    <bean id="paymentStatusService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="paymentStatusServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
+    <bean id="prescriptionService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="prescriptionServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
+    <bean id="consumableOrderService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="consumableOrderServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
+    <bean id="labSupplyService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="labSupplyServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
+    <bean id="pharmacyItemRequestService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="pharmacyItemRequestServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
+    <bean parent="serviceContext">
+        <property name="moduleService">
+            <list merge="true">
+                <value>org.openmrs.module.rwandapharmacymanagement.api.PharmacyService</value>
+                <ref bean="pharmacyService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.InventoryService</value>
+                <ref bean="inventoryService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.DispensingService</value>
+                <ref bean="dispensingService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.SupplierIntegrationService</value>
+                <ref bean="supplierIntegrationService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.ClinicalSafetyService</value>
+                <ref bean="clinicalSafetyService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.AlertService</value>
+                <ref bean="rwandaPharmacyAlertService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.IntegrationLogService</value>
+                <ref bean="integrationLogService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.PricingService</value>
+                <ref bean="pricingService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.PaymentStatusService</value>
+                <ref bean="paymentStatusService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.PrescriptionService</value>
+                <ref bean="prescriptionService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.ConsumableOrderService</value>
+                <ref bean="consumableOrderService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.LabSupplyService</value>
+                <ref bean="labSupplyService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.PharmacyItemRequestService</value>
+                <ref bean="pharmacyItemRequestService"/>
+            </list>
+        </property>
+    </bean>
+
+</beans>

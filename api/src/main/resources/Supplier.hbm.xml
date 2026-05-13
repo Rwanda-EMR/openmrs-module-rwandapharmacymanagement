@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="Supplier" table="rpm_supplier">
+        <id name="supplierId" type="int" column="supplier_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <property name="name" column="name" type="string"/>
+        <property name="code" column="code" type="string"/>
+        <property name="emailAddress" column="email_address" type="string"/>
+        <property name="apiEnabled" column="api_enabled" type="boolean"/>
+        <property name="apiBaseUrl" column="api_base_url" type="string"/>
+        <property name="apiUsername" column="api_username" type="string"/>
+        <property name="apiPassword" column="api_password" type="string"/>
+        <property name="facilityId" column="facility_id" type="string"/>
+        <property name="connectionTimeout" column="connection_timeout" type="int"/>
+        <property name="readTimeout" column="read_timeout" type="int"/>
+        <property name="active" column="active" type="boolean"/>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+    </class>
+</hibernate-mapping>

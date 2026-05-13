@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="PharmacyItemRequestLine" table="rpm_pharmacy_item_request_line">
+        <id name="pharmacyItemRequestLineId" type="int" column="pharmacy_item_request_line_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <many-to-one name="pharmacyItemRequest" class="org.openmrs.module.rwandapharmacymanagement.model.PharmacyItemRequest" column="pharmacy_item_request_id"/>
+        <many-to-one name="item" class="org.openmrs.module.rwandapharmacymanagement.model.Item" column="item_id"/>
+        <property name="requestedQuantity" column="requested_quantity" type="big_decimal"/>
+        <property name="approvedQuantity" column="approved_quantity" type="big_decimal"/>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+        <property name="uuid" column="uuid" type="string"/>
+    </class>
+</hibernate-mapping>

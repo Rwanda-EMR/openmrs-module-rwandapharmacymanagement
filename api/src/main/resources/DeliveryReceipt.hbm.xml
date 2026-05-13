@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="DeliveryReceipt" table="rpm_delivery_receipt">
+        <id name="deliveryReceiptId" type="int" column="delivery_receipt_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <property name="receiptNumber" column="receipt_number" type="string"/>
+        <many-to-one name="purchaseOrder" class="org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrder" column="purchase_order_id"/>
+        <many-to-one name="supplierOrder" class="org.openmrs.module.rwandapharmacymanagement.model.SupplierOrder" column="supplier_order_id"/>
+        <many-to-one name="deliveryLocation" class="org.openmrs.Location" column="delivery_location_id"/>
+        <many-to-one name="receivedIntoLocation" class="org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation" column="received_into_location_id"/>
+        <property name="status" column="status" type="string"/>
+        <bag name="lines" cascade="all-delete-orphan" inverse="true" lazy="false">
+            <key column="delivery_receipt_id"/>
+            <one-to-many class="org.openmrs.module.rwandapharmacymanagement.model.DeliveryReceiptLine"/>
+        </bag>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+    </class>
+</hibernate-mapping>

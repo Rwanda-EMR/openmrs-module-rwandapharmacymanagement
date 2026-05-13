@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="StockAdjustment" table="rpm_stock_adjustment">
+        <id name="stockAdjustmentId" type="int" column="stock_adjustment_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <many-to-one name="pharmacyLocation" class="org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation" column="pharmacy_location_id"/>
+        <many-to-one name="adjustmentReason" class="org.openmrs.module.rwandapharmacymanagement.model.AdjustmentReason" column="adjustment_reason_id"/>
+        <property name="comments" column="comments" type="string"/>
+        <many-to-one name="adjustedBy" class="org.openmrs.User" column="adjusted_by"/>
+        <bag name="lines" cascade="all-delete-orphan" inverse="true" lazy="false">
+            <key column="stock_adjustment_id"/>
+            <one-to-many class="org.openmrs.module.rwandapharmacymanagement.model.StockAdjustmentLine"/>
+        </bag>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+    </class>
+</hibernate-mapping>

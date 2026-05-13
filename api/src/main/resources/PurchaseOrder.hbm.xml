@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="PurchaseOrder" table="rpm_purchase_order">
+        <id name="purchaseOrderId" type="int" column="purchase_order_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <property name="program" column="program" type="string"/>
+        <property name="facilityId" column="facility_id" type="string"/>
+        <many-to-one name="supplier" class="org.openmrs.module.rwandapharmacymanagement.model.Supplier" column="supplier_id"/>
+        <property name="totalCost" column="total_cost" type="big_decimal"/>
+        <property name="requestedDate" column="requested_date"/>
+        <many-to-one name="requestedBy" class="org.openmrs.User" column="requested_by"/>
+        <property name="approvalStatus" column="approval_status" type="string"/>
+        <property name="approvedDate" column="approved_date"/>
+        <many-to-one name="approvedBy" class="org.openmrs.User" column="approved_by"/>
+        <property name="dispatchStatus" column="dispatch_status" type="string"/>
+        <property name="dispatchReference" column="dispatch_reference" type="string"/>
+        <property name="fetchedReceiptPayload" column="fetched_receipt_payload" type="text" length="16777215"/>
+        <property name="fetchedReceiptDate" column="fetched_receipt_date"/>
+        <bag name="items" cascade="all" inverse="true" lazy="false">
+            <key column="purchase_order_id"/>
+            <one-to-many class="org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrderItem"/>
+        </bag>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+        <property name="uuid" column="uuid" type="string"/>
+    </class>
+</hibernate-mapping>
