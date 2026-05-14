@@ -1,12 +1,16 @@
 package org.openmrs.module.rwandapharmacymanagement.page.controller.transfer;
 
 import org.openmrs.api.context.Context;
+import org.openmrs.Location;
+import org.openmrs.LocationTag;
+import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.model.InterPharmacyTransfer;
 import org.openmrs.module.rwandapharmacymanagement.model.InterPharmacyTransferLine;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
+import org.openmrs.module.rwandapharmacymanagement.model.enums.PharmacyLocationType;
 import org.openmrs.module.rwandapharmacymanagement.web.support.CurrentPharmacySupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
@@ -22,9 +26,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Controller
 public class ReturnToMainPageController {
@@ -39,9 +45,11 @@ public class ReturnToMainPageController {
         PharmacyLocation activePharmacy = (PharmacyLocation) model.getAttribute("activePharmacy");
         PharmacyLocation mainStore = pharmacyService.getMainStore();
         List<PharmacyLocation> dispensingPharmacies = getDispensingPharmacies(pharmacyService);
-        boolean canRequestReturn = isMainStore(activePharmacy, mainStore);
+        boolean canRequestReturn = isCurrentMainStore(mainStore);
         model.addAttribute("mainStore", mainStore);
         model.addAttribute("canRequestReturn", canRequestReturn);
+        model.addAttribute("canApproveReturnTransfer",
+                Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK));
         model.addAttribute("dispensingPharmacies", dispensingPharmacies);
         model.addAttribute("stockByPharmacy", buildStockByPharmacy(dispensingPharmacies, inventoryService));
         model.addAttribute("requests", getReturnTransfers(inventoryService, activePharmacy, mainStore));
@@ -65,12 +73,14 @@ public class ReturnToMainPageController {
             throw new IllegalArgumentException("Create a main pharmacy before returning stock");
         }
         if ("reject".equalsIgnoreCase(action) && transferId != null) {
+            Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK);
             PharmacyLocation activePharmacy = CurrentPharmacySupport.requireCurrentPharmacy(pharmacyService, session);
             validateReturnTransfer(inventoryService.getTransfer(transferId), activePharmacy, mainStore);
             inventoryService.rejectTransfer(transferId, rejectionReason);
             return redirect(ui);
         }
         if (("approve".equalsIgnoreCase(action) || "transfer".equalsIgnoreCase(action) || "serve".equalsIgnoreCase(action)) && transferId != null) {
+            Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK);
             PharmacyLocation activePharmacy = CurrentPharmacySupport.requireCurrentPharmacy(pharmacyService, session);
             validateReturnTransfer(inventoryService.getTransfer(transferId), activePharmacy, mainStore);
             inventoryService.serveTransfer(transferId, quantities, batchNumbers, parseDates(expiryDates));
@@ -78,8 +88,7 @@ public class ReturnToMainPageController {
         }
 
         PharmacyLocation sourcePharmacy = pharmacyService.getPharmacyLocation(sourcePharmacyLocationId);
-        PharmacyLocation activePharmacy = CurrentPharmacySupport.requireCurrentPharmacy(pharmacyService, session);
-        if (!isMainStore(activePharmacy, mainStore)) {
+        if (!isCurrentMainStore(mainStore)) {
             throw new IllegalArgumentException("Only the main pharmacy can request items back from a dispensing pharmacy");
         }
         validateReturnRequestSource(sourcePharmacy);
@@ -111,7 +120,8 @@ public class ReturnToMainPageController {
 
     private void validateReturnRequestSource(PharmacyLocation sourcePharmacy) {
         if (sourcePharmacy == null || !Boolean.TRUE.equals(sourcePharmacy.getActive())
-                || Boolean.TRUE.equals(sourcePharmacy.getMainStore())) {
+                || Boolean.TRUE.equals(sourcePharmacy.getMainStore())
+                || sourcePharmacy.getLocationType() != PharmacyLocationType.DISPENSING_PHARMACY) {
             throw new IllegalArgumentException("Choose an active dispensing pharmacy to return stock from");
         }
     }
@@ -122,7 +132,7 @@ public class ReturnToMainPageController {
             return Collections.emptyList();
         }
         Integer activePharmacyId = activePharmacy == null ? null : activePharmacy.getPharmacyLocationId();
-        boolean activeIsMainStore = isMainStore(activePharmacy, mainStore);
+        boolean activeIsMainStore = isCurrentMainStore(mainStore);
         List<InterPharmacyTransfer> requests = new ArrayList<InterPharmacyTransfer>(
                 inventoryService.getTransfers(null, activeIsMainStore ? null : activePharmacyId,
                         mainStore.getPharmacyLocationId(), 200));
@@ -134,17 +144,48 @@ public class ReturnToMainPageController {
         List<PharmacyLocation> pharmacies = new ArrayList<PharmacyLocation>();
         for (PharmacyLocation location : pharmacyService.getAllPharmacyLocations()) {
             if (location != null && Boolean.TRUE.equals(location.getActive())
-                    && !Boolean.TRUE.equals(location.getMainStore())) {
+                    && !Boolean.TRUE.equals(location.getMainStore())
+                    && location.getLocationType() == PharmacyLocationType.DISPENSING_PHARMACY) {
                 pharmacies.add(location);
             }
         }
         return pharmacies;
     }
 
-    private boolean isMainStore(PharmacyLocation activePharmacy, PharmacyLocation mainStore) {
-        return activePharmacy != null && activePharmacy.getPharmacyLocationId() != null
-                && mainStore != null && mainStore.getPharmacyLocationId() != null
-                && activePharmacy.getPharmacyLocationId().equals(mainStore.getPharmacyLocationId());
+    private boolean isCurrentMainStore(PharmacyLocation mainStore) {
+        Location currentLocation = Context.getUserContext() == null ? null : Context.getUserContext().getLocation();
+        return matchesOpenmrsLocation(mainStore, currentLocation);
+    }
+
+    private boolean matchesOpenmrsLocation(PharmacyLocation pharmacyLocation, Location location) {
+        if (pharmacyLocation == null || location == null || location.getLocationId() == null) {
+            return false;
+        }
+        if (pharmacyLocation.getLocation() != null && pharmacyLocation.getLocation().getLocationId() != null
+                && pharmacyLocation.getLocation().getLocationId().equals(location.getLocationId())) {
+            return true;
+        }
+        if (location.getTags() == null || location.getTags().isEmpty()) {
+            return false;
+        }
+        Set<Integer> currentTagIds = new HashSet<Integer>();
+        for (LocationTag tag : location.getTags()) {
+            if (tag != null && tag.getLocationTagId() != null) {
+                currentTagIds.add(tag.getLocationTagId());
+            }
+        }
+        if (pharmacyLocation.getLocationTag() != null && pharmacyLocation.getLocationTag().getLocationTagId() != null
+                && currentTagIds.contains(pharmacyLocation.getLocationTag().getLocationTagId())) {
+            return true;
+        }
+        if (pharmacyLocation.getLocationTags() != null) {
+            for (LocationTag tag : pharmacyLocation.getLocationTags()) {
+                if (tag != null && tag.getLocationTagId() != null && currentTagIds.contains(tag.getLocationTagId())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private List<InterPharmacyTransferLine> buildLines(PharmacyService pharmacyService,

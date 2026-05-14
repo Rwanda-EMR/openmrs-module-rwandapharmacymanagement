@@ -20,6 +20,7 @@ import org.openmrs.module.rwandapharmacymanagement.web.support.CurrentPharmacySu
 import org.openmrs.module.rwandapharmacymanagement.web.dto.DeliveryReceiptImportItem;
 import org.openmrs.module.rwandapharmacymanagement.web.dto.DeliveryReceiptImportRequest;
 import org.openmrs.module.rwandapharmacymanagement.web.support.DeliveryReceiptSupport;
+import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
@@ -54,6 +55,10 @@ import java.nio.charset.StandardCharsets;
 public class DeliveryReceivePageController {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String FLASH_RECEIVED = "rpm.deliveryReceive.received";
+    private static final String FLASH_UPLOAD_RECEIVED = "rpm.deliveryReceive.uploadReceived";
+    private static final String FLASH_DELIVERY_RECEIPT_ID = "rpm.deliveryReceive.deliveryReceiptId";
+    private static final String FLASH_ERROR_MESSAGE = "rpm.deliveryReceive.errorMessage";
 
     public void get(PageModel model,
                     @SpringBean("inventoryService") InventoryService inventoryService,
@@ -64,10 +69,6 @@ public class DeliveryReceivePageController {
                     @RequestParam(value = "purchaseOrderId", required = false) Integer purchaseOrderId,
                     @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
                     @RequestParam(value = "fetchRms", required = false) String fetchRms,
-                    @RequestParam(value = "received", required = false) String received,
-                    @RequestParam(value = "uploadReceived", required = false) String uploadReceived,
-                    @RequestParam(value = "deliveryReceiptId", required = false) Integer deliveryReceiptId,
-                    @RequestParam(value = "errorMessage", required = false) String errorMessage,
                     HttpSession session) {
         CurrentPharmacySupport.rememberSelection(pharmacyService, session, pharmacyLocationId);
         CurrentPharmacySupport.populateModel(model, pharmacyService, session);
@@ -102,6 +103,7 @@ public class DeliveryReceivePageController {
         String resolvedSource = normalizeSource(source, selectedPurchaseOrder);
 
         DeliveryReceiptImportRequest fetchedReceipt = null;
+        String errorMessage = FlashMessageSupport.consumeString(session, FLASH_ERROR_MESSAGE);
         if (selectedPurchaseOrder != null && "rms".equalsIgnoreCase(resolvedSource) && isTrueFlag(fetchRms)) {
             try {
                 fetchedReceipt = supplierIntegrationService.fetchRmsDeliveryDetails(selectedPurchaseOrder);
@@ -146,9 +148,9 @@ public class DeliveryReceivePageController {
         model.addAttribute("itemIdByCode", itemIdByCode);
         model.addAttribute("fetchedReceipt", fetchedReceipt);
         model.addAttribute("receiveRows", buildReceiveRows(pharmacyService, selectedPurchaseOrder, fetchedReceipt, itemIdByCode));
-        model.addAttribute("received", received != null);
-        model.addAttribute("uploadReceived", uploadReceived != null);
-        model.addAttribute("deliveryReceiptId", deliveryReceiptId);
+        model.addAttribute("received", FlashMessageSupport.consumeBoolean(session, FLASH_RECEIVED));
+        model.addAttribute("uploadReceived", FlashMessageSupport.consumeBoolean(session, FLASH_UPLOAD_RECEIVED));
+        model.addAttribute("deliveryReceiptId", FlashMessageSupport.consumeInteger(session, FLASH_DELIVERY_RECEIPT_ID));
         model.addAttribute("errorMessage", errorMessage);
     }
 
@@ -176,6 +178,7 @@ public class DeliveryReceivePageController {
                        @RequestParam(value = "deliveryDate", required = false) String deliveryDate,
                        @RequestParam(value = "sendConfirmation", required = false) Boolean sendConfirmation,
                        HttpServletRequest request,
+                       HttpSession session,
                        UiUtils ui) throws ParseException, IOException {
         try {
             MultipartFile receiptFile = extractReceiptFile(request);
@@ -186,8 +189,9 @@ public class DeliveryReceivePageController {
                 if (Boolean.TRUE.equals(sendConfirmation)) {
                     supplierIntegrationService.confirmDelivery(receipt);
                 }
+                setSuccessFlash(session, FLASH_UPLOAD_RECEIVED, receipt);
                 return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/deliveryReceive",
-                        successParams("receive", source, purchaseOrderId, "uploadReceived", receipt.getDeliveryReceiptId()));
+                        successParams("receive", source, purchaseOrderId));
             }
             if ("receiveManual".equals(action)) {
                 receipt = buildManualReceipt(pharmacyService, receiptNumber, purchaseOrderId, pharmacyLocationId, itemIds, itemCodes, orderedQuantities, quantities,
@@ -197,25 +201,28 @@ public class DeliveryReceivePageController {
                 if (shouldSendConfirmation(source, sendConfirmation)) {
                     supplierIntegrationService.confirmDelivery(receipt);
                 }
+                setSuccessFlash(session, FLASH_RECEIVED, receipt);
                 return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/deliveryReceive",
-                        successParams("receive", source, purchaseOrderId, "received", receipt.getDeliveryReceiptId()));
+                        successParams("receive", source, purchaseOrderId));
             }
             if ("uploadDirectReceipt".equals(action)) {
                 receipt = buildReceiptFromUpload(pharmacyService, receiptNumber, null, pharmacyLocationId, receiptFile);
                 inventoryService.receiveDelivery(receipt);
+                setSuccessFlash(session, FLASH_UPLOAD_RECEIVED, receipt);
                 return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/deliveryReceive",
-                        successParams("direct", null, null, "uploadReceived", receipt.getDeliveryReceiptId()));
+                        successParams("direct", null, null));
             }
             receipt = buildManualReceipt(pharmacyService, receiptNumber, null, pharmacyLocationId, itemIds, itemCodes, orderedQuantities, quantities,
                     acceptedQuantities, unitPrices, confirmationItemNos, batchNumbers, expiryDates,
                     rejectionReasonCodes, rejectionReasonDetails, lineNotes, deliveryDate);
             inventoryService.receiveDelivery(receipt);
+            setSuccessFlash(session, FLASH_RECEIVED, receipt);
             return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/deliveryReceive",
-                    successParams("direct", null, null, "received", receipt.getDeliveryReceiptId()));
+                    successParams("direct", null, null));
         }
         catch (IllegalArgumentException e) {
             java.util.Map<String, Object> params = new java.util.LinkedHashMap<String, Object>();
-            params.put("errorMessage", e.getMessage());
+            FlashMessageSupport.set(session, FLASH_ERROR_MESSAGE, e.getMessage());
             params.put("view", errorView(view, action, purchaseOrderId));
             if (purchaseOrderId != null) {
                 params.put("purchaseOrderId", purchaseOrderId);
@@ -850,13 +857,15 @@ public class DeliveryReceivePageController {
         }
     }
 
-    private Map<String, Object> successParams(String view, String source, Integer purchaseOrderId, String flag, Integer deliveryReceiptId) {
+    private void setSuccessFlash(HttpSession session, String flagKey, DeliveryReceipt receipt) {
+        FlashMessageSupport.set(session, flagKey, Boolean.TRUE);
+        FlashMessageSupport.set(session, FLASH_DELIVERY_RECEIPT_ID,
+                receipt == null ? null : receipt.getDeliveryReceiptId());
+    }
+
+    private Map<String, Object> successParams(String view, String source, Integer purchaseOrderId) {
         Map<String, Object> params = new HashMap<String, Object>();
         params.put("view", view);
-        params.put(flag, "true");
-        if (deliveryReceiptId != null) {
-            params.put("deliveryReceiptId", deliveryReceiptId);
-        }
         if (purchaseOrderId != null) {
             params.put("purchaseOrderId", purchaseOrderId);
         }

@@ -196,7 +196,7 @@
                     <% if (purchaseOrder.approvalStatus == 'APPROVED') { %>
                     <a class="stock-btn" href="${ downloadBase }?purchaseOrderId=${ purchaseOrder.purchaseOrderId }">Download PDF</a>
                     <% } %>
-                    <% if (purchaseOrder.approvalStatus == 'APPROVED' && purchaseOrder.dispatchStatus == 'FAILED') { %>
+                    <% if (purchaseOrder.approvalStatus == 'APPROVED' && purchaseOrder.dispatchStatus == 'FAILED' && canRetryPurchaseOrderDispatch) { %>
                     <form method="post" style="display:inline;margin:0;">
                         <input type="hidden" name="purchaseOrderId" value="${ purchaseOrder.purchaseOrderId }"/>
                         <input type="hidden" name="action" value="retryDispatch"/>

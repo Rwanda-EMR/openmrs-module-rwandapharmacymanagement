@@ -277,11 +277,39 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
             return null;
         }
         for (Object billableService : (Collection<?>) billableServices) {
-            if (billableService != null && !extractBoolean(billableService, "getRetired")) {
+            if (billableService != null && !extractBoolean(billableService, "getRetired")
+                    && billableServiceMatchesName(billableService, line)) {
                 return billableService;
             }
         }
         return null;
+    }
+
+    private boolean billableServiceMatchesName(Object billableService, PreparedLine line) {
+        if (line == null) {
+            return false;
+        }
+        String expected = normalizeBillingName(line.productMasterItem == null ? null : line.productMasterItem.getItemName());
+        if (expected.isEmpty()) {
+            expected = normalizeBillingName(line.item == null ? null : line.item.getName());
+        }
+        if (expected.isEmpty()) {
+            return false;
+        }
+        Object facilityServicePrice = invokeNoArg(billableService, "getFacilityServicePrice");
+        String[] labels = new String[] {
+                safeObject(invokeNoArg(facilityServicePrice, "getName")),
+                safeObject(invokeNoArg(facilityServicePrice, "getShortName")),
+                safeObject(invokeNoArg(facilityServicePrice, "getDescription")),
+                safeObject(billableService)
+        };
+        for (String label : labels) {
+            String normalized = normalizeBillingName(label);
+            if (!normalized.isEmpty() && (normalized.equals(expected) || normalized.contains(expected))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Object createBilledItem(Class<?> patientServiceBillClass) throws Exception {
@@ -376,6 +404,14 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private String safeObject(Object value) {
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private String normalizeBillingName(String value) {
+        return value == null ? "" : value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ENGLISH);
     }
 
     private static class PreparedLine {

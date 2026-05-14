@@ -87,6 +87,7 @@
         <property name="pharmacyService" ref="pharmacyService"/>
         <property name="dispensingService" ref="dispensingService"/>
         <property name="prescriptionCommunicationService" ref="prescriptionCommunicationService"/>
+        <property name="transactionManager" ref="transactionManager"/>
     </bean>
 
     <bean id="consumableOrderServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.ConsumableOrderServiceImpl">

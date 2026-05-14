@@ -8,12 +8,14 @@ import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.PharmacyItemRequestLineCommand;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
+import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import javax.servlet.http.HttpSession;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,14 +28,15 @@ import java.util.Map;
 public class RequestPageController {
 
     private static final int HISTORY_PAGE_SIZE = 10;
+    private static final String FLASH_REQUESTED = "rpm.pharmacyOrderRequest.requested";
+    private static final String FLASH_ERROR_MESSAGE = "rpm.pharmacyOrderRequest.errorMessage";
 
     public void get(PageModel model,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @SpringBean("pharmacyItemRequestService") PharmacyItemRequestService pharmacyItemRequestService,
-                    @RequestParam(value = "requested", required = false) Integer requested,
                     @RequestParam(value = "historyPage", required = false) Integer historyPage,
-                    @RequestParam(value = "errorMessage", required = false) String errorMessage) {
+                    HttpSession session) {
         User currentUser = Context.getAuthenticatedUser();
         int safeHistoryPage = historyPage == null || historyPage.intValue() < 1 ? 1 : historyPage.intValue();
         long historyTotalCount = currentUser == null ? 0L : pharmacyItemRequestService.countRequestsByCreator(currentUser);
@@ -50,8 +53,8 @@ public class RequestPageController {
         model.addAttribute("historyPage", safeHistoryPage);
         model.addAttribute("historyTotalCount", historyTotalCount);
         model.addAttribute("historyTotalPages", historyTotalPages);
-        model.addAttribute("requested", requested != null && requested.intValue() == 1);
-        model.addAttribute("errorMessage", errorMessage);
+        model.addAttribute("requested", FlashMessageSupport.consumeBoolean(session, FLASH_REQUESTED));
+        model.addAttribute("errorMessage", FlashMessageSupport.consumeString(session, FLASH_ERROR_MESSAGE));
     }
 
     public String post(@SpringBean("pharmacyService") PharmacyService pharmacyService,
@@ -61,6 +64,7 @@ public class RequestPageController {
                        @RequestParam(value = "quantity", required = false) BigDecimal[] quantities,
                        @RequestParam(value = "linePharmacyLocationId", required = false) Integer[] linePharmacyLocationIds,
                        @RequestParam(value = "reason", required = false) String reason,
+                       HttpSession session,
                        UiUtils ui) {
         try {
             PharmacyLocation requestedPharmacyLocation = pharmacyService.getPharmacyLocation(requestedPharmacyLocationId);
@@ -73,12 +77,12 @@ public class RequestPageController {
                 throw new IllegalArgumentException("Add at least one item before submitting the request.");
             }
             pharmacyItemRequestService.createRequest(requestedPharmacyLocation, reason, commands);
-            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "pharmacyorder/request") + "?requested=1";
+            FlashMessageSupport.set(session, FLASH_REQUESTED, Boolean.TRUE);
+            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "pharmacyorder/request");
         }
         catch (IllegalArgumentException e) {
-            java.util.Map<String, Object> params = new java.util.LinkedHashMap<String, Object>();
-            params.put("errorMessage", e.getMessage());
-            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "pharmacyorder/request", params);
+            FlashMessageSupport.set(session, FLASH_ERROR_MESSAGE, e.getMessage());
+            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "pharmacyorder/request");
         }
     }
 

@@ -39,6 +39,8 @@ public class MainToDispensingPageController {
         CurrentPharmacySupport.populateModel(model, pharmacyService, session);
         model.addAttribute("canApproveMainToDispensingTransfer",
                 Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER));
+        model.addAttribute("canTransferMainToDispensing",
+                Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK));
         PharmacyLocation activePharmacy = (PharmacyLocation) model.getAttribute("activePharmacy");
         PharmacyLocation mainStore = pharmacyService.getMainStore();
         model.addAttribute("mainStore", mainStore);
@@ -79,7 +81,7 @@ public class MainToDispensingPageController {
             return "redirect:" + ui.pageLink("rwandapharmacymanagement", "transfer/mainToDispensing");
         }
         if (("transfer".equalsIgnoreCase(action) || "serve".equalsIgnoreCase(action)) && transferId != null) {
-            Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER);
+            Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK);
             inventoryService.serveTransfer(transferId, quantities, batchNumbers, parseDates(expiryDates));
             return "redirect:" + ui.pageLink("rwandapharmacymanagement", "transfer/mainToDispensing");
         }

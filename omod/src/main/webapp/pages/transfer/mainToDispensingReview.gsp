@@ -10,6 +10,8 @@
         def combinedName = "${personName?.givenName ?: ''} ${personName?.familyName ?: ''}".trim()
         combinedName ?: (user?.username?.trim() ?: '')
     }
+    def canApproveTransfer = binding.hasVariable('canApproveMainToDispensingTransfer') ? (canApproveMainToDispensingTransfer ?: false) : false
+    def canTransferItems = binding.hasVariable('canTransferMainToDispensing') ? (canTransferMainToDispensing ?: false) : false
 %>
 <style>
     .review-shell {
@@ -133,17 +135,18 @@
                         </thead>
                         <tbody>
                         <% transfer.lines?.each { line -> %>
+                        <% def canEditLine = transfer.transferStatus == 'APPROVED' && canTransferItems %>
                         <tr class="review-main-line" data-item-id="${ line.item?.itemId ?: '' }" data-batch-number="${ line.batchNumber?.replace('\\', '\\\\')?.replace('"', '&quot;') ?: '' }" data-stored-unit-price="${ line.unitPrice ?: 0 }">
                             <td>${ line.item?.name ?: '' }</td>
-                            <td><input type="number" step="0.01" min="0.01" name="quantity" value="${ line.quantity }" ${ transfer.transferStatus == 'SERVED' || transfer.transferStatus == 'REJECTED' ? 'readonly="readonly"' : '' }/></td>
+                            <td><input type="number" step="0.01" min="0.01" name="quantity" value="${ line.quantity }" ${ canEditLine ? '' : 'readonly="readonly"' }/></td>
                             <td class="review-main-unit-price">${ line.unitPrice ?: 0 }</td>
                             <td class="review-main-line-value">${ line.totalAmount ?: ((line.unitPrice ?: 0) * (line.quantity ?: 0)) }</td>
                             <td>
-                                <select name="batchNumber" ${ transfer.transferStatus == 'SERVED' || transfer.transferStatus == 'REJECTED' ? 'disabled="disabled"' : '' }>
+                                <select name="batchNumber" ${ canEditLine ? '' : 'disabled="disabled"' }>
                                     <option value="">Select batch</option>
                                 </select>
                             </td>
-                            <td><input type="date" class="openmrs-date-field" name="expiryDate" value="${ line.expiryDate ? new java.text.SimpleDateFormat('yyyy-MM-dd').format(line.expiryDate) : '' }" ${ transfer.transferStatus == 'SERVED' || transfer.transferStatus == 'REJECTED' ? 'readonly="readonly"' : '' }/></td>
+                            <td><input type="date" class="openmrs-date-field" name="expiryDate" value="${ line.expiryDate ? new java.text.SimpleDateFormat('yyyy-MM-dd').format(line.expiryDate) : '' }" ${ canEditLine ? '' : 'readonly="readonly"' }/></td>
                             <td class="review-main-available"></td>
                         </tr>
                         <% } %>
@@ -159,10 +162,20 @@
                     Requested ${ transfer.dateCreated ? ui.formatDatePretty(transfer.dateCreated) : '' } by ${ plainUserName(transfer.creator) }.
                 </div>
                 <div class="review-action-bar">
-                    <% if (transfer.transferStatus == 'REQUESTED' || transfer.transferStatus == 'APPROVED') { %>
-                    <button type="submit" class="stock-btn stock-btn-primary" name="action" value="transfer">Transfer items</button>
+                    <% if (transfer.transferStatus == 'REQUESTED' && canApproveTransfer) { %>
+                    <button type="submit" class="stock-btn stock-btn-primary" name="action" value="approve">Approve request</button>
                     <input type="text" name="rejectionReason" placeholder="Reason"/>
                     <button type="submit" class="stock-btn" style="background:#d9534f;border-color:#d43f3a;color:#fff;" name="action" value="reject">Reject</button>
+                    <% } else if (transfer.transferStatus == 'REQUESTED') { %>
+                    <span style="color:#777;">Awaiting finance approval</span>
+                    <% } else if (transfer.transferStatus == 'APPROVED' && canTransferItems) { %>
+                    <button type="submit" class="stock-btn stock-btn-primary" name="action" value="transfer">Transfer items</button>
+                    <% } else if (transfer.transferStatus == 'APPROVED') { %>
+                    <span style="color:#777;">Awaiting main store transfer</span>
+                    <% } else if (transfer.transferStatus == 'SERVED') { %>
+                    <span style="color:#777;">Transferred</span>
+                    <% } else if (transfer.transferStatus == 'REJECTED') { %>
+                    <span style="color:#777;">Rejected</span>
                     <% } %>
                     <a class="stock-btn" href="${ ui.pageLink('rwandapharmacymanagement', 'transfer/mainToDispensing') }">Close</a>
                 </div>

@@ -11,6 +11,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.page.controller.support.PaginationSupport;
 import org.openmrs.module.rwandapharmacymanagement.api.PricingService;
 import org.openmrs.module.rwandapharmacymanagement.web.support.CurrentPharmacySupport;
+import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
@@ -32,6 +33,7 @@ import java.util.Map;
 public class DispensingStorePageController {
 
     private static final String REQUEST_CART_SESSION_KEY = "rwandaPharmacyDispensingRequestCart";
+    private static final String FLASH_REQUESTED = "rpm.dispensingStore.requested";
 
     public void get(PageModel model,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
@@ -40,7 +42,6 @@ public class DispensingStorePageController {
                     @RequestParam(value = "requestItemId", required = false) Integer requestItemId,
                     @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
                     @RequestParam(value = "cart", required = false) Boolean showCart,
-                    @RequestParam(value = "requested", required = false) String requested,
                     @RequestParam(value = "q", required = false) String query,
                     @RequestParam(value = "stockPage", required = false) Integer stockPage,
                     @RequestParam(value = "stockPageSize", required = false) Integer stockPageSize,
@@ -90,7 +91,7 @@ public class DispensingStorePageController {
         model.addAttribute("selectedSellingPrice", selectedItem == null ? null : pricingService.calculateSellingPrice(unitPriceForItem(allStockBalances, selectedItem.getItemId())));
         model.addAttribute("selectedSuggestedQuantity", selectedItem == null ? null : suggestedQuantity(selectedItem));
         model.addAttribute("showCartModal", Boolean.TRUE.equals(showCart));
-        model.addAttribute("requestSubmitted", requested != null);
+        model.addAttribute("requestSubmitted", FlashMessageSupport.consumeBoolean(session, FLASH_REQUESTED));
         model.addAttribute("requests", requests);
         PaginationSupport.addAttributes(model, "request", currentRequestPage, currentRequestPageSize, allRequests.size());
         model.addAttribute("pricingService", pricingService);
@@ -169,8 +170,8 @@ public class DispensingStorePageController {
         }
         if ("submitRequestCart".equals(action)) {
             submitCart(session, pharmacyService, inventoryService, activePharmacy, mainStore.getPharmacyLocationId(), reason);
-            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "inventory/dispensingStore",
-                    Collections.<String, Object>singletonMap("requested", "true"));
+            FlashMessageSupport.set(session, FLASH_REQUESTED, Boolean.TRUE);
+            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "inventory/dispensingStore");
         }
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "inventory/dispensingStore");
     }

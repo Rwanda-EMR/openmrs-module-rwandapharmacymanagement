@@ -14,7 +14,12 @@ import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingReques
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestType;
 
+import java.util.Date;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class HibernateDispensingDao implements DispensingDao {
 
@@ -61,6 +66,7 @@ public class HibernateDispensingDao implements DispensingDao {
             Disjunction pharmacyMatch = Restrictions.disjunction();
             pharmacyMatch.add(Restrictions.eq("targetPharmacyLocation.pharmacyLocationId", pharmacyLocationId));
             pharmacyMatch.add(Restrictions.eq("routedPharmacyLocation.pharmacyLocationId", pharmacyLocationId));
+            pharmacyMatch.add(Restrictions.isNull("targetPharmacyLocation"));
             criteria.add(pharmacyMatch);
             criteria.setResultTransformer(org.hibernate.Criteria.DISTINCT_ROOT_ENTITY);
         }
@@ -124,21 +130,31 @@ public class HibernateDispensingDao implements DispensingDao {
 
     @Override
     public Integer findLatestPatientBillId(Integer patientId) {
+        return findLatestPatientBillId(patientId, null);
+    }
+
+    @Override
+    public Integer findLatestPatientBillId(Integer patientId, Date referenceDate) {
         if (patientId == null) {
             return null;
         }
+        if (!tableExists("moh_bill_patient_bill")) {
+            return null;
+        }
         try {
-            String patientColumn = resolveExistingBillingColumn("patient_id", "patient", "beneficiary_patient_id", "beneficiary_id");
             String billIdColumn = resolveExistingBillingColumn("patient_bill_id", "bill_id", "id");
-            if (patientColumn == null || billIdColumn == null) {
+            if (billIdColumn == null) {
                 return null;
             }
-            Object result = sessionFactory.getCurrentSession()
-                    .createSQLQuery("select " + billIdColumn + " from moh_bill_patient_bill where " + patientColumn + " = :patientId order by " + billIdColumn + " desc")
-                    .setParameter("patientId", patientId)
-                    .setMaxResults(1)
-                    .uniqueResult();
-            return result instanceof Number ? Integer.valueOf(((Number) result).intValue()) : null;
+            Integer patientBillId = findLatestPatientBillIdFromPatientBill(patientId, billIdColumn, referenceDate);
+            if (patientBillId != null) {
+                return patientBillId;
+            }
+            patientBillId = findLatestPatientBillIdViaBeneficiary(patientId, billIdColumn, referenceDate);
+            if (patientBillId != null) {
+                return patientBillId;
+            }
+            return findLatestPatientBillIdViaConsommationPatient(patientId, billIdColumn, referenceDate);
         }
         catch (RuntimeException ignored) {
             return null;
@@ -146,8 +162,238 @@ public class HibernateDispensingDao implements DispensingDao {
     }
 
     @Override
+    public Integer findLatestPatientBillId(Integer patientId, Date referenceDate, Collection<String> itemNames) {
+        Integer patientBillId = findPatientBillIdByBilledItemNames(patientId, referenceDate, itemNames, true);
+        if (patientBillId != null) {
+            return patientBillId;
+        }
+        return itemNames == null || itemNames.isEmpty() ? findLatestPatientBillId(patientId, referenceDate) : null;
+    }
+
+    private Integer findPatientBillIdByBilledItemNames(Integer patientId, Date referenceDate, Collection<String> itemNames,
+                                                       boolean requirePatientMatch) {
+        if (referenceDate == null || itemNames == null || itemNames.isEmpty()
+                || !tableExists("moh_bill_patient_bill") || !tableExists("moh_bill_consommation")
+                || !tableExists("moh_bill_patient_service_bill")) {
+            return null;
+        }
+        List<String> names = new ArrayList<String>();
+        for (String itemName : itemNames) {
+            String name = itemName == null ? "" : itemName.trim().toLowerCase();
+            if (name.length() > 1 && !names.contains(name)) {
+                names.add(name);
+            }
+        }
+        if (names.isEmpty()) {
+            return null;
+        }
+        StringBuilder nameClause = new StringBuilder();
+        Map<String, Object> parameters = new HashMap<String, Object>();
+        for (int i = 0; i < names.size(); i++) {
+            if (i > 0) {
+                nameClause.append(" or ");
+            }
+            String parameterName = "itemName" + i;
+            nameClause.append("lower(trim(coalesce(fsp.name, ''))) = :").append(parameterName)
+                    .append(" or lower(trim(coalesce(fsp.short_name, ''))) = :").append(parameterName)
+                    .append(" or lower(trim(coalesce(fsp.description, ''))) = :").append(parameterName)
+                    .append(" or lower(trim(coalesce(psb.service_other, ''))) = :").append(parameterName)
+                    .append(" or lower(trim(coalesce(psb.service_other_description, ''))) = :").append(parameterName);
+            parameters.put(parameterName, names.get(i));
+        }
+        parameters.put("minimumBillDate", addMinutes(referenceDate, -5));
+        parameters.put("maximumBillDate", addMinutes(referenceDate, 30));
+        parameters.put("referenceDate", referenceDate);
+        if (requirePatientMatch) {
+            parameters.put("patientId", patientId);
+        }
+        String patientJoin = requirePatientMatch
+                ? "left join moh_bill_beneficiary b on b.beneficiary_id = c.beneficiary_id "
+                : "";
+        String patientClause = requirePatientMatch ? " and b.patient_id = :patientId" : "";
+        Object result = sessionFactory.getCurrentSession()
+                .createSQLQuery("select pb.patient_bill_id from moh_bill_patient_bill pb "
+                        + "join moh_bill_consommation c on c.patient_bill_id = pb.patient_bill_id "
+                        + patientJoin
+                        + "join moh_bill_patient_service_bill psb on psb.consommation_id = c.consommation_id "
+                        + "left join moh_bill_billable_service bs on bs.billable_service_id = psb.billable_service_id "
+                        + "left join moh_bill_facility_service_price fsp on fsp.facility_service_price_id = bs.facility_service_price_id "
+                        + "where coalesce(c.created_date, psb.created_date, pb.created_date) between :minimumBillDate and :maximumBillDate "
+                        + patientClause + " and (" + nameClause.toString() + ") "
+                        + "group by pb.patient_bill_id "
+                        + "order by count(distinct psb.patient_service_bill_id) desc, "
+                        + "abs(timestampdiff(second, coalesce(c.created_date, psb.created_date, pb.created_date), :referenceDate)) asc, "
+                        + "pb.patient_bill_id desc")
+                .setProperties(parameters)
+                .setMaxResults(1)
+                .uniqueResult();
+        return integerValue(result);
+    }
+
+    private Integer findLatestPatientBillIdFromPatientBill(Integer patientId, String billIdColumn, Date referenceDate) {
+        String patientColumn = resolveExistingBillingColumn("patient_id", "patient", "beneficiary_patient_id");
+        if (patientColumn == null) {
+            return null;
+        }
+        String dateColumn = resolveExistingBillingColumn("date_created", "created_date", "dateCreated", "createdDate");
+        String dateAlias = dateColumn == null ? null : "moh_bill_patient_bill." + dateColumn;
+        String timingClause = timingWhereClause(dateAlias, referenceDate);
+        String ordering = timingOrderClause(dateAlias, referenceDate, billIdColumn);
+        Object result = sessionFactory.getCurrentSession()
+                .createSQLQuery("select " + billIdColumn + " from moh_bill_patient_bill where " + patientColumn + " = :patientId"
+                        + timingClause + ordering)
+                .setParameter("patientId", patientId)
+                .setProperties(timingParameters(dateAlias, referenceDate))
+                .setMaxResults(1)
+                .uniqueResult();
+        return integerValue(result);
+    }
+
+    private Integer findLatestPatientBillIdViaBeneficiary(Integer patientId, String billIdColumn, Date referenceDate) {
+        String consommationTable = resolveExistingTable("moh_bill_consommation", "moh_bill_consumption");
+        String beneficiaryTable = resolveExistingTable("moh_bill_beneficiary", "moh_bill_beneficiaries");
+        if (consommationTable == null || beneficiaryTable == null) {
+            return null;
+        }
+        String consommationBillColumn = resolveExistingColumn(consommationTable, "patient_bill_id", "patient_bill", "bill_id");
+        String consommationBeneficiaryColumn = resolveExistingColumn(consommationTable, "beneficiary_id", "beneficiary");
+        String beneficiaryIdColumn = resolveExistingColumn(beneficiaryTable, "beneficiary_id", "id");
+        String beneficiaryPatientColumn = resolveExistingColumn(beneficiaryTable, "patient_id", "patient");
+        if (consommationBillColumn == null || consommationBeneficiaryColumn == null || beneficiaryIdColumn == null
+                || beneficiaryPatientColumn == null) {
+            return null;
+        }
+        String consommationDateColumn = resolveExistingColumn(consommationTable, "date_created", "created_date", "dateCreated", "createdDate");
+        String billDateColumn = resolveExistingBillingColumn("date_created", "created_date", "dateCreated", "createdDate");
+        String dateAlias = consommationDateColumn != null ? "c." + consommationDateColumn
+                : (billDateColumn == null ? null : "pb." + billDateColumn);
+        String timingClause = timingWhereClause(dateAlias, referenceDate);
+        String ordering = timingOrderClause(dateAlias, referenceDate, "pb." + billIdColumn);
+        Object result = sessionFactory.getCurrentSession()
+                .createSQLQuery("select pb." + billIdColumn + " from moh_bill_patient_bill pb "
+                        + "join " + consommationTable + " c on c." + consommationBillColumn + " = pb." + billIdColumn + " "
+                        + "join " + beneficiaryTable + " b on b." + beneficiaryIdColumn + " = c." + consommationBeneficiaryColumn + " "
+                        + "where b." + beneficiaryPatientColumn + " = :patientId" + timingClause + ordering)
+                .setParameter("patientId", patientId)
+                .setProperties(timingParameters(dateAlias, referenceDate))
+                .setMaxResults(1)
+                .uniqueResult();
+        return integerValue(result);
+    }
+
+    private Integer findLatestPatientBillIdViaConsommationPatient(Integer patientId, String billIdColumn, Date referenceDate) {
+        String consommationTable = resolveExistingTable("moh_bill_consommation", "moh_bill_consumption");
+        if (consommationTable == null) {
+            return null;
+        }
+        String consommationBillColumn = resolveExistingColumn(consommationTable, "patient_bill_id", "patient_bill", "bill_id");
+        String consommationPatientColumn = resolveExistingColumn(consommationTable, "patient_id", "patient", "beneficiary_patient_id");
+        if (consommationBillColumn == null || consommationPatientColumn == null) {
+            return null;
+        }
+        String consommationDateColumn = resolveExistingColumn(consommationTable, "date_created", "created_date", "dateCreated", "createdDate");
+        String billDateColumn = resolveExistingBillingColumn("date_created", "created_date", "dateCreated", "createdDate");
+        String dateAlias = consommationDateColumn != null ? "c." + consommationDateColumn
+                : (billDateColumn == null ? null : "pb." + billDateColumn);
+        String timingClause = timingWhereClause(dateAlias, referenceDate);
+        String ordering = timingOrderClause(dateAlias, referenceDate, "pb." + billIdColumn);
+        Object result = sessionFactory.getCurrentSession()
+                .createSQLQuery("select pb." + billIdColumn + " from moh_bill_patient_bill pb "
+                        + "join " + consommationTable + " c on c." + consommationBillColumn + " = pb." + billIdColumn + " "
+                        + "where c." + consommationPatientColumn + " = :patientId" + timingClause + ordering)
+                .setParameter("patientId", patientId)
+                .setProperties(timingParameters(dateAlias, referenceDate))
+                .setMaxResults(1)
+                .uniqueResult();
+        return integerValue(result);
+    }
+
+    private String timingWhereClause(String dateExpression, Date referenceDate) {
+        if (dateExpression == null || referenceDate == null) {
+            return "";
+        }
+        return " and " + dateExpression + " between :minimumBillDate and :maximumBillDate";
+    }
+
+    private String timingOrderClause(String dateExpression, Date referenceDate, String fallbackIdExpression) {
+        if (dateExpression == null || referenceDate == null) {
+            return " order by " + fallbackIdExpression + " desc";
+        }
+        return " order by abs(timestampdiff(second, " + dateExpression + ", :referenceDate)) asc, "
+                + fallbackIdExpression + " desc";
+    }
+
+    private java.util.Map<String, Date> timingParameters(String dateExpression, Date referenceDate) {
+        java.util.Map<String, Date> parameters = new java.util.HashMap<String, Date>();
+        if (dateExpression != null && referenceDate != null) {
+            parameters.put("referenceDate", referenceDate);
+            parameters.put("minimumBillDate", addMinutes(referenceDate, -5));
+            parameters.put("maximumBillDate", addMinutes(referenceDate, 30));
+        }
+        return parameters;
+    }
+
+    private Date addMinutes(Date date, int minutes) {
+        java.util.Calendar calendar = java.util.Calendar.getInstance();
+        calendar.setTime(date);
+        calendar.add(java.util.Calendar.MINUTE, minutes);
+        return calendar.getTime();
+    }
+
+    private Integer integerValue(Object result) {
+        return result instanceof Number ? Integer.valueOf(((Number) result).intValue()) : null;
+    }
+
+    private String resolveExistingTable(String... candidates) {
+        for (String candidate : candidates) {
+            if (tableExists(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private boolean tableExists(String tableName) {
+        try {
+            Object result = sessionFactory.getCurrentSession()
+                    .createSQLQuery("select table_name from information_schema.tables where table_schema = database() and table_name = :tableName")
+                    .setParameter("tableName", tableName)
+                    .setMaxResults(1)
+                    .uniqueResult();
+            return result != null;
+        }
+        catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private String resolveExistingColumn(String tableName, String... candidates) {
+        for (String candidate : candidates) {
+            try {
+                Object result = sessionFactory.getCurrentSession()
+                        .createSQLQuery("select column_name from information_schema.columns where table_schema = database() and table_name = :tableName and column_name = :columnName")
+                        .setParameter("tableName", tableName)
+                        .setParameter("columnName", candidate)
+                        .setMaxResults(1)
+                        .uniqueResult();
+                if (result != null) {
+                    return candidate;
+                }
+            }
+            catch (RuntimeException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private String resolveExistingBillingColumn(String... candidates) {
+        return resolveExistingColumn("moh_bill_patient_bill", candidates);
+    }
+
+    @Override
     public Boolean isPatientBillPaid(Integer patientBillId) {
-        if (patientBillId == null) {
+        if (patientBillId == null || !tableExists("moh_bill_patient_bill")) {
             return null;
         }
         try {
@@ -172,25 +418,6 @@ public class HibernateDispensingDao implements DispensingDao {
         catch (RuntimeException ignored) {
             return null;
         }
-    }
-
-    private String resolveExistingBillingColumn(String... candidates) {
-        for (String candidate : candidates) {
-            try {
-                Object result = sessionFactory.getCurrentSession()
-                        .createSQLQuery("select column_name from information_schema.columns where table_schema = database() and table_name = 'moh_bill_patient_bill' and column_name = :columnName")
-                        .setParameter("columnName", candidate)
-                        .setMaxResults(1)
-                        .uniqueResult();
-                if (result != null) {
-                    return candidate;
-                }
-            }
-            catch (RuntimeException ignored) {
-                return null;
-            }
-        }
-        return null;
     }
 
     @Override

@@ -4,6 +4,8 @@ import org.openmrs.api.OpenmrsService;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecord;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
 
+import java.util.Date;
+import java.util.Collection;
 import java.util.List;
 
 public interface DispensingService extends OpenmrsService {
@@ -17,6 +19,10 @@ public interface DispensingService extends OpenmrsService {
     List<PatientDispensingRequest> getPendingPaidRequests();
 
     Integer findLatestPatientBillId(Integer patientId);
+
+    Integer findLatestPatientBillId(Integer patientId, Date referenceDate);
+
+    Integer findLatestPatientBillId(Integer patientId, Date referenceDate, Collection<String> itemNames);
 
     Boolean isPatientBillPaid(Integer patientBillId);
 

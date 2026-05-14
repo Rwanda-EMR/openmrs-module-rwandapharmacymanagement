@@ -12,6 +12,7 @@ import org.openmrs.module.rwandapharmacymanagement.api.LabSupplyService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyItemRequestService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.model.LabSupplyRequest;
+import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 
 import javax.servlet.http.HttpSession;
@@ -101,7 +102,9 @@ public final class QueueNotificationSupport {
         if (activePharmacy == null || activePharmacy.getPharmacyLocationId() == null) {
             return 0;
         }
-        return safeInt(dispensingService().countPendingRequestsForPharmacy(activePharmacy.getPharmacyLocationId()));
+        List<PatientDispensingRequest> requests = dispensingService()
+                .getPendingRequestsForPharmacy(activePharmacy.getPharmacyLocationId());
+        return PatientRequestVisibilitySupport.filterForActivePharmacy(requests, activePharmacy).size();
     }
 
     private static PharmacyLocation resolveActivePharmacy(PharmacyService pharmacyService, Object session) {
@@ -145,28 +148,53 @@ public final class QueueNotificationSupport {
     private static int pharmacyItemRequestQueueCount(PharmacyService pharmacyService,
                                                      PharmacyLocation activePharmacy,
                                                      List<PharmacyLocation> candidatePharmacies) {
-        PharmacyItemRequestService requestService = pharmacyItemRequestService();
-        int count = 0;
-        for (PharmacyLocation pharmacyLocation : pharmacyService.getAllPharmacyLocations()) {
-            if (pharmacyLocation != null && Boolean.TRUE.equals(pharmacyLocation.getActive())) {
-                count += safeInt(requestService.countPendingRequestsForPharmacy(pharmacyLocation));
-            }
+        PharmacyLocation requestPharmacy = activePharmacy == null ? matchingMainStore(pharmacyService) : activePharmacy;
+        if (requestPharmacy == null) {
+            return 0;
         }
-        return count;
+        PharmacyItemRequestService requestService = pharmacyItemRequestService();
+        return safeInt(requestService.countPendingRequestsForPharmacy(requestPharmacy));
     }
 
     private static int labQueueCount(PharmacyService pharmacyService,
                                      PharmacyLocation activePharmacy,
                                      List<PharmacyLocation> candidatePharmacies) {
-        return safeInt(labSupplyService().countPendingRequests());
+        if (activePharmacy == null || pharmacyService == null) {
+            return 0;
+        }
+        int count = 0;
+        List<LabSupplyRequest> requests = labSupplyService().getPendingRequests();
+        if (requests == null) {
+            return 0;
+        }
+        for (LabSupplyRequest request : requests) {
+            if (isLabRequestVisibleToPharmacy(request, activePharmacy, pharmacyService)) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static int pharmacyTransferApprovalCount(PharmacyLocation selectedSourcePharmacy) {
+        PharmacyService pharmacyService = null;
+        try {
+            pharmacyService = Context.getRegisteredComponent("pharmacyService", PharmacyService.class);
+        }
+        catch (Exception ignored) {
+            return 0;
+        }
+        if (matchingMainStore(pharmacyService) == null) {
+            return 0;
+        }
         Integer selectedSourceId = selectedSourcePharmacy == null ? null : selectedSourcePharmacy.getPharmacyLocationId();
         return safeInt(inventoryService().countTransfers("REQUESTED", selectedSourceId, null));
     }
 
     private static int pendingPurchaseOrderCount(PharmacyService pharmacyService) {
+        if (!Context.hasPrivilege("Task: rwandapharmacymanagement.submitSupplierOrders")
+                && !Context.hasPrivilege("Task: rwandapharmacymanagement.approvePurchaseOrders")) {
+            return 0;
+        }
         return safeInt(pharmacyService.countPurchaseOrdersByApprovalStatus("PENDING"));
     }
 

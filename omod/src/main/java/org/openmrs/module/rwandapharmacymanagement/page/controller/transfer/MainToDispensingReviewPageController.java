@@ -29,7 +29,7 @@ public class MainToDispensingReviewPageController {
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @RequestParam("transferId") Integer transferId) {
-        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER);
+        requireReviewAccess();
         PharmacyLocation mainStore = pharmacyService.getMainStore();
         InterPharmacyTransfer transfer = inventoryService.getTransfer(transferId);
         if (transfer == null || mainStore == null
@@ -43,6 +43,10 @@ public class MainToDispensingReviewPageController {
         model.addAttribute("mainStore", mainStore);
         model.addAttribute("mainStockByItem", buildStockByItem(mainStock));
         model.addAttribute("mainStockSummary", buildStockSummary(mainStock));
+        model.addAttribute("canApproveMainToDispensingTransfer",
+                Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER));
+        model.addAttribute("canTransferMainToDispensing",
+                Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK));
     }
 
     public String post(@SpringBean("inventoryService") InventoryService inventoryService,
@@ -53,14 +57,25 @@ public class MainToDispensingReviewPageController {
                        @RequestParam(value = "expiryDate", required = false) String[] expiryDates,
                        @RequestParam(value = "rejectionReason", required = false) String rejectionReason,
                        UiUtils ui) throws ParseException {
-        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER);
         if ("reject".equalsIgnoreCase(action)) {
+            Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER);
             inventoryService.rejectTransfer(transferId, rejectionReason);
-        } else if ("transfer".equalsIgnoreCase(action) || "serve".equalsIgnoreCase(action) || "approve".equalsIgnoreCase(action)) {
+        } else if ("approve".equalsIgnoreCase(action)) {
+            Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER);
+            inventoryService.approveTransfer(transferId);
+        } else if ("transfer".equalsIgnoreCase(action) || "serve".equalsIgnoreCase(action)) {
+            Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK);
             inventoryService.serveTransfer(transferId, quantities, batchNumbers, parseDates(expiryDates));
         }
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "transfer/mainToDispensingReview",
                 java.util.Collections.<String, Object>singletonMap("transferId", transferId));
+    }
+
+    private void requireReviewAccess() {
+        if (!Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER)
+                && !Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK)) {
+            Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER);
+        }
     }
 
     private Map<Integer, BigDecimal> buildStockSummary(List<InventoryBalance> balances) {

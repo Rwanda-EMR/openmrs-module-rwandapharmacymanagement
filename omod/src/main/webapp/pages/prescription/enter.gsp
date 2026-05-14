@@ -4,8 +4,6 @@
     def prescriptionSavedFlag = false
     if (binding.hasVariable("prescriptionSaved")) {
         prescriptionSavedFlag = prescriptionSaved ? true : false
-    } else if (params?.prescriptionSaved) {
-        prescriptionSavedFlag = "1".equals(params.prescriptionSaved?.toString()) || "true".equalsIgnoreCase(params.prescriptionSaved?.toString())
     }
     def pharmacyList = candidatePharmacies ?: []
     def patientDashboardLink = patient ? ui.pageLink("coreapps", "clinicianfacing/patient", [ patientId: patient.patientId ]) : ""
@@ -212,14 +210,11 @@
                     <% def stocked = stockedProductMasterItemIds?.contains(item.productMasterItemId) %>
                     <% def stockQuantity = stockQuantityByProductMasterItemId?.get(item.productMasterItemId) ?: java.math.BigDecimal.ZERO %>
                     <% def stockQuantityLabel = stockQuantity.stripTrailingZeros().toPlainString() %>
-                    <% def billingMapped = billingMappedByProductMasterItemId?.get(item.productMasterItemId) %>
-                    <% def billingLabel = billingMapped ? 'Billing mapped' : 'Billing not mapped' %>
-                    <% def optionLabel = stocked ? "${ item.itemName } (Qty: ${ stockQuantityLabel }, ${ billingLabel })" : "${ item.itemName } - not in stock" %>
+                    <% def optionLabel = stocked ? "${ item.itemName } (Qty: ${ stockQuantityLabel })" : "${ item.itemName } - not in stock" %>
                     <option value="${ item.productMasterItemId }"
                             data-label="${ item.itemName?.replace('"', '&quot;') ?: '' }"
                             data-stocked="${ stocked ? 'true' : 'false' }"
-                            data-stock-total="${ stockQuantityLabel }"
-                            data-billing-mapped="${ billingMapped ? 'true' : 'false' }">${ optionLabel }</option>
+                            data-stock-total="${ stockQuantityLabel }">${ optionLabel }</option>
                     <% } %>
                 </select>
                 <label class="rx-check-row">
@@ -373,9 +368,8 @@
                                 <select id="rx-edit-product-${ line.requestLineId }" name="productMasterItemId">
                                     <% prescribableItems.each { item -> %>
                                     <% def editStocked = stockedProductMasterItemIds?.contains(item.productMasterItemId) %>
-                                    <% def editBillingMapped = billingMappedByProductMasterItemId?.get(item.productMasterItemId) %>
-                                    <% def editBillingLabel = editStocked ? " - ${ editBillingMapped ? 'Billing mapped' : 'Billing not mapped' }" : '' %>
-                                    <option value="${ item.productMasterItemId }" ${ line.productMasterItemId == item.productMasterItemId ? 'selected="selected"' : '' }>${ item.itemName }${ editBillingLabel }</option>
+                                    <% def editStockLabel = editStocked ? ' - in stock' : ' - not in stock' %>
+                                    <option value="${ item.productMasterItemId }" ${ line.productMasterItemId == item.productMasterItemId ? 'selected="selected"' : '' }>${ item.itemName }${ editStockLabel }</option>
                                     <% } %>
                                 </select>
                             </div>

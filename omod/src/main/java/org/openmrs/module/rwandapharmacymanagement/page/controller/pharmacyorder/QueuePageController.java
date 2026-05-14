@@ -9,6 +9,7 @@ import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.web.support.CurrentPharmacySupport;
+import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
@@ -24,13 +25,13 @@ import java.util.Set;
 
 @Controller("pharmacyOrderQueuePageController")
 public class QueuePageController {
+    private static final String FLASH_APPROVED = "rpm.pharmacyOrderQueue.approved";
 
     public void get(PageModel model,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @SpringBean("pharmacyItemRequestService") PharmacyItemRequestService pharmacyItemRequestService,
                     @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
-                    @RequestParam(value = "approved", required = false) Integer approved,
                     HttpSession session) {
         CurrentPharmacySupport.rememberSelection(pharmacyService, session, pharmacyLocationId);
         CurrentPharmacySupport.populateModel(model, pharmacyService, session);
@@ -39,7 +40,7 @@ public class QueuePageController {
         model.addAttribute("requests", activePharmacy == null ? java.util.Collections.emptyList()
                 : pharmacyItemRequestService.getPendingRequestsForPharmacy(activePharmacy));
         model.addAttribute("availableByItemId", buildAvailableByItemId(activePharmacy, inventoryService));
-        model.addAttribute("approved", approved != null && approved.intValue() == 1);
+        model.addAttribute("approved", FlashMessageSupport.consumeBoolean(session, FLASH_APPROVED));
     }
 
     public String post(@SpringBean("pharmacyService") PharmacyService pharmacyService,
@@ -54,7 +55,8 @@ public class QueuePageController {
             throw new IllegalArgumentException("No pharmacy is selected for the current session");
         }
         pharmacyItemRequestService.approveRequest(requestId, activePharmacy, lineIds, approvedQuantities);
-        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "pharmacyorder/queue") + "?approved=1";
+        FlashMessageSupport.set(session, FLASH_APPROVED, Boolean.TRUE);
+        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "pharmacyorder/queue");
     }
 
     private PharmacyLocation resolveActiveRequestPharmacy(PharmacyService pharmacyService, HttpSession session) {

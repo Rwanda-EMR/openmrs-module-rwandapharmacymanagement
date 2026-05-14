@@ -11,12 +11,14 @@ import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
+import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import javax.servlet.http.HttpSession;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -30,13 +32,14 @@ public class EnterPageController {
 
     private static final String MATERIAL_TYPE_DRUG = "ZMED";
     private static final String DEFAULT_UNIT_OF_MEASURE = "EA";
+    private static final String FLASH_ORDERED = "rpm.consumableEnter.ordered";
+    private static final String FLASH_REQUEST_COUNT = "rpm.consumableEnter.requestCount";
 
     public void get(PageModel model,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @RequestParam(value = "patientId", required = false) String patientIdOrUuid,
-                    @RequestParam(value = "ordered", required = false) Integer ordered,
-                    @RequestParam(value = "requestCount", required = false) Integer requestCount) {
+                    HttpSession session) {
         Patient patient = resolvePatient(patientIdOrUuid);
         Location currentLocation = Context.getUserContext() == null ? null : Context.getUserContext().getLocation();
 
@@ -46,7 +49,8 @@ public class EnterPageController {
                 patient != null && patient.getPatientId() != null ? String.valueOf(patient.getPatientId()) : null);
         model.addAttribute("patientUuidForSubmit", patient == null ? null : patient.getUuid());
         model.addAttribute("orderableItems", buildOrderableItems(pharmacyService, inventoryService));
-        model.addAttribute("ordered", ordered != null && ordered.intValue() == 1);
+        Integer requestCount = FlashMessageSupport.consumeInteger(session, FLASH_REQUEST_COUNT);
+        model.addAttribute("ordered", FlashMessageSupport.consumeBoolean(session, FLASH_ORDERED));
         model.addAttribute("requestCount", requestCount == null || requestCount.intValue() < 1 ? 0 : requestCount.intValue());
     }
 
@@ -56,6 +60,7 @@ public class EnterPageController {
                        @RequestParam(value = "productMasterItemId", required = false) Integer[] productMasterItemIds,
                        @RequestParam(value = "quantity", required = false) BigDecimal[] quantities,
                        @RequestParam(value = "unitOfMeasure", required = false) String[] unitOfMeasures,
+                       HttpSession session,
                        UiUtils ui) {
         Patient patient = resolvePatient(patientIdOrUuid);
         if (patient == null) {
@@ -67,8 +72,10 @@ public class EnterPageController {
         Location currentLocation = Context.getUserContext() == null ? null : Context.getUserContext().getLocation();
         List<ConsumableOrderLineCommand> commands = buildCommands(productMasterItemIds, quantities, unitOfMeasures);
         int createdRequests = consumableOrderService.createConsumableOrders(patient, currentLocation, commands).size();
+        FlashMessageSupport.set(session, FLASH_ORDERED, Boolean.TRUE);
+        FlashMessageSupport.set(session, FLASH_REQUEST_COUNT, Integer.valueOf(createdRequests));
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "consumable/enter",
-                Collections.<String, Object>singletonMap("patientId", patient.getUuid())) + "&ordered=1&requestCount=" + createdRequests;
+                Collections.<String, Object>singletonMap("patientId", patient.getUuid()));
     }
 
     private Patient resolvePatient(String patientIdOrUuid) {

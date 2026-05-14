@@ -49,9 +49,11 @@ public class EnterPageController {
                     @SpringBean("pricingService") PricingService pricingService,
                     @RequestParam(value = "patientId", required = false) String patientIdOrUuid,
                     @RequestParam(value = "patientBillId", required = false) Integer patientBillId,
-                    @RequestParam(value = "prescriptionSaved", required = false) Integer prescriptionSaved,
+                    @RequestParam(value = "billId", required = false) Integer billId,
+                    @RequestParam(value = "patient_bill_id", required = false) Integer patientBillIdSnakeCase,
                     @RequestParam(value = "requestId", required = false) Integer requestId,
                     @RequestParam(value = "historyPage", required = false) Integer historyPage) {
+        Integer resolvedPatientBillId = firstNonNull(patientBillId, billId, patientBillIdSnakeCase);
         Patient patient = resolvePatient(patientIdOrUuid);
         Visit activeVisit = resolveActiveVisit(patient);
         int pageSize = 8;
@@ -61,8 +63,6 @@ public class EnterPageController {
         Map<Integer, BigDecimal> stockQuantityByProductMasterItemId = stockQuantityByProductMasterItemId(pharmacyService,
                 inventoryService, prescribableItems);
         List<Integer> stockedProductMasterItemIds = stockedProductMasterItemIds(stockQuantityByProductMasterItemId);
-        Map<Integer, Boolean> billingMappedByProductMasterItemId = billingMappedByProductMasterItemId(inventoryService,
-                prescribableItems, stockedProductMasterItemIds);
         List<PatientDispensingRequest> historyRequests = patient == null
                 ? Collections.<PatientDispensingRequest>emptyList()
                 : dispensingService.getPatientPrescriptionHistory(patient.getPatientId(), (currentHistoryPage - 1) * pageSize, pageSize);
@@ -74,7 +74,7 @@ public class EnterPageController {
         model.addAttribute("prescribableItems", prescribableItems);
         model.addAttribute("stockedProductMasterItemIds", stockedProductMasterItemIds);
         model.addAttribute("stockQuantityByProductMasterItemId", stockQuantityByProductMasterItemId);
-        model.addAttribute("billingMappedByProductMasterItemId", billingMappedByProductMasterItemId);
+        model.addAttribute("billingMappedByProductMasterItemId", Collections.<Integer, Boolean>emptyMap());
         model.addAttribute("patientReferenceForSubmit",
                 patient != null && patient.getPatientId() != null ? String.valueOf(patient.getPatientId()) : null);
         model.addAttribute("patientUuidForSubmit", patient == null ? null : patient.getUuid());
@@ -83,8 +83,8 @@ public class EnterPageController {
         model.addAttribute("durationUnits", sortConcepts(Context.getOrderService().getDurationUnits()));
         model.addAttribute("pricingService", pricingService);
         model.addAttribute("pageTitle", "Prescription");
-        model.addAttribute("patientBillId", patientBillId);
-        model.addAttribute("prescriptionSaved", prescriptionSaved != null && prescriptionSaved.intValue() == 1);
+        model.addAttribute("patientBillId", resolvedPatientBillId);
+        model.addAttribute("prescriptionSaved", Boolean.FALSE);
         model.addAttribute("requestId", requestId);
         model.addAttribute("historyEntries", buildHistoryEntries(historyRequests, dispensingService));
         model.addAttribute("historyPage", currentHistoryPage);
@@ -98,6 +98,8 @@ public class EnterPageController {
                        @RequestParam(value = "patientId", required = false) String patientIdOrUuid,
                        @RequestParam(value = "patientUuid", required = false) String patientUuid,
                        @RequestParam(value = "patientBillId", required = false) Integer patientBillId,
+                       @RequestParam(value = "billId", required = false) Integer billId,
+                       @RequestParam(value = "patient_bill_id", required = false) Integer patientBillIdSnakeCase,
                        @RequestParam(value = "action", required = false) String action,
                        @RequestParam(value = "requestId", required = false) Integer requestId,
                        @RequestParam(value = "requestLineId", required = false) Integer requestLineId,
@@ -113,6 +115,7 @@ public class EnterPageController {
                        @RequestParam(value = "quantity", required = false) BigDecimal[] quantities,
                        @RequestParam(value = "instructions", required = false) String[] instructions,
                        UiUtils ui) {
+        Integer resolvedPatientBillId = firstNonNull(patientBillId, billId, patientBillIdSnakeCase);
         Patient patient = resolvePatient(patientIdOrUuid);
         if (patient == null) {
             patient = resolvePatient(patientUuid);
@@ -144,12 +147,19 @@ public class EnterPageController {
         List<PrescriptionLineCommand> lines = buildCommands(productMasterItemIds, doses, routes, frequencies, durations,
                 durationUnits, startDates, quantities, instructions);
         PatientDispensingRequest request = prescriptionService.createPrescription(patient, activeVisit, orderingProvider,
-                encounterLocation, lines, patientBillId);
+                encounterLocation, lines, resolvedPatientBillId);
         Map<String, Object> redirectParams = new LinkedHashMap<String, Object>();
         redirectParams.put("patientId", patient.getPatientId());
         redirectParams.put("prescriptionSaved", 1);
         redirectParams.put("requestId", request.getPatientDispensingRequestId());
         return "redirect:" + ui.pageLink("coreapps", "clinicianfacing/patient", redirectParams);
+    }
+
+    private Integer firstNonNull(Integer first, Integer second, Integer third) {
+        if (first != null) {
+            return first;
+        }
+        return second != null ? second : third;
     }
 
     private String redirectToPrescriptionPage(UiUtils ui, Patient patient, Integer historyPage) {
@@ -304,110 +314,6 @@ public class EnterPageController {
             }
         }
         return stockedIds;
-    }
-
-    private Map<Integer, Boolean> billingMappedByProductMasterItemId(InventoryService inventoryService,
-                                                                     List<ProductMasterItem> prescribableItems,
-                                                                     List<Integer> stockedProductMasterItemIds) {
-        Map<Integer, Boolean> mapped = new HashMap<Integer, Boolean>();
-        if (prescribableItems == null || stockedProductMasterItemIds == null || stockedProductMasterItemIds.isEmpty()) {
-            return mapped;
-        }
-        for (ProductMasterItem item : prescribableItems) {
-            if (item == null || item.getProductMasterItemId() == null
-                    || !stockedProductMasterItemIds.contains(item.getProductMasterItemId())) {
-                continue;
-            }
-            mapped.put(item.getProductMasterItemId(), hasActiveBillingMapping(item)
-                    || hasActiveBillingMappingOnStockedLocalItem(inventoryService, item));
-        }
-        return mapped;
-    }
-
-    private boolean hasActiveBillingMapping(ProductMasterItem item) {
-        if (item == null || item.getDrug() == null || item.getDrug().getConcept() == null) {
-            return false;
-        }
-        return hasActiveBillingMapping(item.getDrug().getConcept());
-    }
-
-    private boolean hasActiveBillingMappingOnStockedLocalItem(InventoryService inventoryService, ProductMasterItem productMasterItem) {
-        if (inventoryService == null || productMasterItem == null) {
-            return false;
-        }
-        for (InventoryBalance balance : inventoryService.getInventoryForPharmacy(null)) {
-            Item item = balance == null ? null : balance.getItem();
-            if (!matchesProductMasterItem(item, productMasterItem)) {
-                continue;
-            }
-            if (item.getConcept() != null && hasActiveBillingMapping(item.getConcept())) {
-                return true;
-            }
-            if (item.getDrug() != null && item.getDrug().getConcept() != null
-                    && hasActiveBillingMapping(item.getDrug().getConcept())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean hasActiveBillingMapping(Concept concept) {
-        if (concept == null) {
-            return false;
-        }
-        try {
-            Class<?> billingServiceClass = Context.loadClass("org.openmrs.module.mohbilling.service.BillingService");
-            Class<?> facilityServicePriceClass = Context.loadClass("org.openmrs.module.mohbilling.model.FacilityServicePrice");
-            Object billingService = Context.getService(billingServiceClass);
-            if (billingService == null) {
-                return false;
-            }
-            Object facilityService = billingServiceClass.getMethod("getFacilityServiceByConcept", Concept.class)
-                    .invoke(billingService, concept);
-            if (facilityService == null) {
-                return false;
-            }
-            Object billableServices = billingServiceClass.getMethod("getBillableServicesByFacilityService", facilityServicePriceClass)
-                    .invoke(billingService, facilityService);
-            if (!(billableServices instanceof Collection)) {
-                return false;
-            }
-            for (Object billableService : (Collection<?>) billableServices) {
-                if (billableService != null && !extractBoolean(billableService, "getRetired")) {
-                    return true;
-                }
-            }
-        }
-        catch (Exception ignored) {
-        }
-        return false;
-    }
-
-    private boolean matchesProductMasterItem(Item item, ProductMasterItem productMasterItem) {
-        if (item == null || productMasterItem == null) {
-            return false;
-        }
-        String itemCode = normalizeKey(item.getCode());
-        String productCode = normalizeKey(productMasterItem.getNpcCode());
-        if (!itemCode.isEmpty() && itemCode.equals(productCode)) {
-            return true;
-        }
-        return item.getDrug() != null && productMasterItem.getDrug() != null
-                && item.getDrug().getDrugId() != null
-                && item.getDrug().getDrugId().equals(productMasterItem.getDrug().getDrugId());
-    }
-
-    private boolean extractBoolean(Object target, String methodName) {
-        if (target == null) {
-            return false;
-        }
-        try {
-            Object value = target.getClass().getMethod(methodName).invoke(target);
-            return value instanceof Boolean && ((Boolean) value).booleanValue();
-        }
-        catch (Exception ignored) {
-            return false;
-        }
     }
 
     private ProductMasterItem matchStockedProductMasterItem(Item item,

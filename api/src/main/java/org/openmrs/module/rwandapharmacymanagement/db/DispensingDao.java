@@ -6,6 +6,8 @@ import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecordLine;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
 
+import java.util.Date;
+import java.util.Collection;
 import java.util.List;
 
 public interface DispensingDao {
@@ -23,6 +25,10 @@ public interface DispensingDao {
     long countPatientPrescriptionHistory(Integer patientId);
 
     Integer findLatestPatientBillId(Integer patientId);
+
+    Integer findLatestPatientBillId(Integer patientId, Date referenceDate);
+
+    Integer findLatestPatientBillId(Integer patientId, Date referenceDate, Collection<String> itemNames);
 
     Boolean isPatientBillPaid(Integer patientBillId);
 

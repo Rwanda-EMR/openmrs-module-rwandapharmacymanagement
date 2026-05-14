@@ -6,12 +6,14 @@ import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingReques
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestType;
+import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import javax.servlet.http.HttpSession;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,13 +22,14 @@ import java.util.Map;
 
 @Controller
 public class LinkBillPageController {
+    private static final String FLASH_LINKED_REQUEST_ID = "rpm.linkBill.linkedRequestId";
+    private static final String FLASH_ERROR_MESSAGE = "rpm.linkBill.errorMessage";
 
     public void get(PageModel model,
                     @SpringBean("dispensingService") DispensingService dispensingService,
                     @RequestParam(value = "requestId", required = false) Integer requestId,
                     @RequestParam(value = "patient", required = false) String patientSearch,
-                    @RequestParam(value = "linked", required = false) Integer linkedRequestId,
-                    @RequestParam(value = "errorMessage", required = false) String errorMessage) {
+                    HttpSession session) {
         List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
         for (PatientDispensingRequest request : dispensingService.getPendingRequests()) {
             if (!isMissingLinkedBillPrescription(request)) {
@@ -47,13 +50,14 @@ public class LinkBillPageController {
         model.addAttribute("rows", rows);
         model.addAttribute("requestId", requestId);
         model.addAttribute("patientSearch", patientSearch);
-        model.addAttribute("linkedRequestId", linkedRequestId);
-        model.addAttribute("errorMessage", errorMessage);
+        model.addAttribute("linkedRequestId", FlashMessageSupport.consumeInteger(session, FLASH_LINKED_REQUEST_ID));
+        model.addAttribute("errorMessage", FlashMessageSupport.consumeString(session, FLASH_ERROR_MESSAGE));
     }
 
     public String post(@SpringBean("dispensingService") DispensingService dispensingService,
                        @RequestParam("requestId") Integer requestId,
                        @RequestParam("patientBillId") Integer patientBillId,
+                       HttpSession session,
                        UiUtils ui) {
         try {
             PatientDispensingRequest request = dispensingService.getRequest(requestId);
@@ -70,14 +74,12 @@ public class LinkBillPageController {
             updateLineStatuses(request, Boolean.TRUE.equals(paid));
             dispensingService.saveRequest(request);
 
-            Map<String, Object> params = new LinkedHashMap<String, Object>();
-            params.put("linked", requestId);
-            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "admin/linkBill", params);
+            FlashMessageSupport.set(session, FLASH_LINKED_REQUEST_ID, requestId);
+            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "admin/linkBill");
         }
         catch (IllegalArgumentException e) {
-            Map<String, Object> params = new LinkedHashMap<String, Object>();
-            params.put("errorMessage", e.getMessage());
-            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "admin/linkBill", params);
+            FlashMessageSupport.set(session, FLASH_ERROR_MESSAGE, e.getMessage());
+            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "admin/linkBill");
         }
     }
 

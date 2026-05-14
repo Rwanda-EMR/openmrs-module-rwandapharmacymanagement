@@ -7,6 +7,7 @@ import org.openmrs.module.rwandapharmacymanagement.api.SupplierIntegrationServic
 import org.openmrs.module.rwandapharmacymanagement.integration.supplier.dto.PurchaseOrderPriceRefreshResult;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrder;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrderItem;
+import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
@@ -15,6 +16,7 @@ import org.apache.commons.logging.LogFactory;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import javax.servlet.http.HttpSession;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Date;
@@ -26,18 +28,20 @@ import java.util.Map;
 public class EditPageController {
 
     private static final Log log = LogFactory.getLog(EditPageController.class);
+    private static final String FLASH_SAVED = "rpm.purchaseOrderEdit.saved";
+    private static final String FLASH_APPROVED = "rpm.purchaseOrderEdit.approved";
+    private static final String FLASH_REJECTED = "rpm.purchaseOrderEdit.rejected";
+    private static final String FLASH_PRICE_FAILED = "rpm.purchaseOrderEdit.priceFailed";
+    private static final String FLASH_ERROR_REFERENCE = "rpm.purchaseOrderEdit.errorReference";
 
     public void get(PageModel model,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @SpringBean("supplierIntegrationService") SupplierIntegrationService supplierIntegrationService,
                     @RequestParam("purchaseOrderId") Integer purchaseOrderId,
-                    @RequestParam(value = "saved", required = false) String saved,
-                    @RequestParam(value = "approved", required = false) String approved,
-                    @RequestParam(value = "rejected", required = false) String rejected,
-                    @RequestParam(value = "priceFailed", required = false) String priceFailed,
-                    @RequestParam(value = "errorReference", required = false) String errorReference) {
+                    HttpSession session) {
         PurchaseOrder purchaseOrder = pharmacyService.getPurchaseOrder(purchaseOrderId);
         PurchaseOrderPriceRefreshResult priceRefreshResult = null;
+        String errorReference = FlashMessageSupport.consumeString(session, FLASH_ERROR_REFERENCE);
         try {
             if (shouldRefreshPricesOnView(purchaseOrder)) {
                 priceRefreshResult = supplierIntegrationService.refreshPurchaseOrderPrices(purchaseOrder);
@@ -50,10 +54,10 @@ public class EditPageController {
         }
         model.addAttribute("purchaseOrder", purchaseOrder);
         model.addAttribute("priceRefreshResult", priceRefreshResult);
-        model.addAttribute("saved", isTrueFlag(saved));
-        model.addAttribute("approved", isTrueFlag(approved));
-        model.addAttribute("rejected", isTrueFlag(rejected));
-        model.addAttribute("priceFailed", isTrueFlag(priceFailed));
+        model.addAttribute("saved", FlashMessageSupport.consumeBoolean(session, FLASH_SAVED));
+        model.addAttribute("approved", FlashMessageSupport.consumeBoolean(session, FLASH_APPROVED));
+        model.addAttribute("rejected", FlashMessageSupport.consumeBoolean(session, FLASH_REJECTED));
+        model.addAttribute("priceFailed", FlashMessageSupport.consumeBoolean(session, FLASH_PRICE_FAILED));
         model.addAttribute("errorReference", errorReference);
         model.addAttribute("canApprovePurchaseOrders",
                 Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_PURCHASE_ORDERS));
@@ -70,6 +74,7 @@ public class EditPageController {
                        @RequestParam(value = "quantities", required = false) BigDecimal[] quantities,
                        @RequestParam(value = "unitPrices", required = false) BigDecimal[] unitPrices,
                        @RequestParam(value = "removeItemIds", required = false) Integer[] removeItemIds,
+                       HttpSession session,
                        UiUtils ui) {
         PurchaseOrder purchaseOrder = pharmacyService.getPurchaseOrder(purchaseOrderId);
         if (purchaseOrder == null) {
@@ -82,7 +87,7 @@ public class EditPageController {
                 if (isRmsPurchaseOrder(purchaseOrder)) {
                     PurchaseOrderPriceRefreshResult priceRefreshResult = supplierIntegrationService.refreshPurchaseOrderPrices(purchaseOrder);
                     if (priceRefreshResult.hasBlockingIssue()) {
-                        return redirectToEdit(ui, purchaseOrderId, "priceFailed");
+                        return redirectToEdit(ui, session, purchaseOrderId, FLASH_PRICE_FAILED);
                     }
                 }
                 purchaseOrder.setApprovalStatus("APPROVED");
@@ -90,35 +95,35 @@ public class EditPageController {
                 purchaseOrder.setApprovedDate(new Date());
                 pharmacyService.savePurchaseOrder(purchaseOrder);
                 supplierIntegrationService.submitPurchaseOrder(purchaseOrder);
-                return redirectToEdit(ui, purchaseOrderId, "approved");
+                return redirectToEdit(ui, session, purchaseOrderId, FLASH_APPROVED);
             }
             if ("reject".equals(action)) {
                 purchaseOrder.setApprovalStatus("REJECTED");
                 purchaseOrder.setDispatchStatus("CANCELLED");
                 pharmacyService.savePurchaseOrder(purchaseOrder);
-                return redirectToEdit(ui, purchaseOrderId, "rejected");
+                return redirectToEdit(ui, session, purchaseOrderId, FLASH_REJECTED);
             }
             pharmacyService.savePurchaseOrder(purchaseOrder);
-            return redirectToEdit(ui, purchaseOrderId, "saved");
+            return redirectToEdit(ui, session, purchaseOrderId, FLASH_SAVED);
         }
         catch (RuntimeException e) {
             String reference = "RPM-PO-EDIT-" + System.currentTimeMillis();
             log.error("Purchase order review action failed. Reference: " + reference, e);
-            return redirectToEditError(ui, purchaseOrderId, reference);
+            return redirectToEditError(ui, session, purchaseOrderId, reference);
         }
     }
 
-    private String redirectToEdit(UiUtils ui, Integer purchaseOrderId, String flag) {
+    private String redirectToEdit(UiUtils ui, HttpSession session, Integer purchaseOrderId, String flashKey) {
+        FlashMessageSupport.set(session, flashKey, Boolean.TRUE);
         Map<String, Object> params = new LinkedHashMap<String, Object>();
         params.put("purchaseOrderId", purchaseOrderId);
-        params.put(flag, "true");
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "purchaseorder/edit", params);
     }
 
-    private String redirectToEditError(UiUtils ui, Integer purchaseOrderId, String reference) {
+    private String redirectToEditError(UiUtils ui, HttpSession session, Integer purchaseOrderId, String reference) {
+        FlashMessageSupport.set(session, FLASH_ERROR_REFERENCE, reference);
         Map<String, Object> params = new LinkedHashMap<String, Object>();
         params.put("purchaseOrderId", purchaseOrderId);
-        params.put("errorReference", reference);
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "purchaseorder/edit", params);
     }
 
@@ -197,10 +202,6 @@ public class EditPageController {
             }
         }
         return BigDecimal.ZERO;
-    }
-
-    private boolean isTrueFlag(String value) {
-        return "true".equalsIgnoreCase(value) || "1".equals(value);
     }
 
     private boolean shouldRefreshPricesOnView(PurchaseOrder purchaseOrder) {

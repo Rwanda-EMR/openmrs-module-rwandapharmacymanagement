@@ -10,6 +10,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.LabSupplyRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.LabSupplyRequestLine;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.web.support.CurrentPharmacySupport;
+import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
@@ -28,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 
 @Controller("labSupplyQueuePageController")
 public class QueuePageController {
+    private static final String FLASH_APPROVED = "rpm.labQueue.approved";
 
     public void get(PageModel model,
                     @SpringBean("labSupplyService") LabSupplyService labSupplyService,
@@ -35,7 +37,6 @@ public class QueuePageController {
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @RequestParam(value = "requestId", required = false) Integer requestId,
                     @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
-                    @RequestParam(value = "approved", required = false) Integer approved,
                     HttpSession session) {
         CurrentPharmacySupport.rememberSelection(pharmacyService, session, pharmacyLocationId);
         CurrentPharmacySupport.populateModel(model, pharmacyService, session);
@@ -49,7 +50,7 @@ public class QueuePageController {
         }
         model.addAttribute("requests", visibleRequests);
         model.addAttribute("selectedRequest", selectedRequest);
-        model.addAttribute("approved", approved != null && approved.intValue() == 1);
+        model.addAttribute("approved", FlashMessageSupport.consumeBoolean(session, FLASH_APPROVED));
         model.addAttribute("availableByItemId", buildAvailableByItemId(activePharmacy, inventoryService));
         model.addAttribute("waitTimeByRequestId", buildWaitTimeMap(visibleRequests));
     }
@@ -67,7 +68,8 @@ public class QueuePageController {
             throw new IllegalArgumentException("Selected lab request is not available to the active dispensing pharmacy");
         }
         labSupplyService.approveRequest(requestId, activePharmacy, lineIds, approvedQuantities);
-        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "lab/queue") + "?approved=1";
+        FlashMessageSupport.set(session, FLASH_APPROVED, Boolean.TRUE);
+        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "lab/queue");
     }
 
     private List<LabSupplyRequest> filterVisibleRequests(List<LabSupplyRequest> requests,

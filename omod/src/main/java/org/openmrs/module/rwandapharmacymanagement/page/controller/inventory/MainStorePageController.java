@@ -12,7 +12,9 @@ import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrderItem;
 import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
 import org.openmrs.module.rwandapharmacymanagement.model.Supplier;
 import org.openmrs.module.rwandapharmacymanagement.model.SupplierPrice;
+import org.openmrs.module.rwandapharmacymanagement.page.controller.purchaseorder.ManagementPageController;
 import org.openmrs.module.rwandapharmacymanagement.page.controller.support.PaginationSupport;
+import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
@@ -38,6 +40,7 @@ public class MainStorePageController {
 
     private static final Log log = LogFactory.getLog(MainStorePageController.class);
     private static final String CART_SESSION_KEY = "rwandaPharmacySupplierOrderCart";
+    private static final String FLASH_ERROR_REFERENCE = "rpm.mainStore.errorReference";
 
     public void get(PageModel model,
                     @SpringBean("inventoryService") InventoryService inventoryService,
@@ -45,11 +48,9 @@ public class MainStorePageController {
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @RequestParam(value = "orderItemId", required = false) Integer orderItemId,
                     @RequestParam(value = "cart", required = false) Boolean showCart,
-                    @RequestParam(value = "submitted", required = false) String submitted,
                     @RequestParam(value = "q", required = false) String query,
                     @RequestParam(value = "page", required = false) Integer page,
                     @RequestParam(value = "pageSize", required = false) Integer pageSize,
-                    @RequestParam(value = "errorReference", required = false) String errorReference,
                     HttpSession session) {
         org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation mainStore = pharmacyService.getMainStore();
         List<InventoryBalance> allStockBalances = mainStore == null
@@ -77,14 +78,14 @@ public class MainStorePageController {
         model.addAttribute("selectedSuggestedQuantity", selectedItem == null ? null : suggestedQuantity(selectedItem));
         model.addAttribute("selectedUnitPrice", selectedItem == null ? null : latestUnitPrice(pharmacyService, selectedItem.getCode(), selectedItem.getProgram()));
         model.addAttribute("cartRows", buildCartRows(cart));
-        model.addAttribute("orderSubmitted", submitted != null);
+        model.addAttribute("orderSubmitted", Boolean.FALSE);
         model.addAttribute("mainStoreName", mainStore == null ? "Main Pharmacy" : mainStore.getName());
         model.addAttribute("q", trimToEmpty(query));
         List<ProductMasterItem> productMasterItems = pharmacyService.getAllProductMasterItems();
         model.addAttribute("productMasterItems", productMasterItems);
         model.addAttribute("productMasterPrograms", productMasterPrograms(productMasterItems));
         model.addAttribute("suppliers", pharmacyService.getAllSuppliers());
-        model.addAttribute("errorReference", errorReference);
+        model.addAttribute("errorReference", FlashMessageSupport.consumeString(session, FLASH_ERROR_REFERENCE));
     }
 
     private List<String> productMasterPrograms(List<ProductMasterItem> productMasterItems) {
@@ -175,13 +176,12 @@ public class MainStorePageController {
             }
             if ("submitCart".equals(action)) {
                 initiatePurchaseOrders(session, pharmacyService, supplierId);
-                Map<String, Object> params = new LinkedHashMap<String, Object>();
-                params.put("initiated", "true");
-                return "redirect:" + ui.pageLink("rwandapharmacymanagement", "purchaseorder/management", params);
+                FlashMessageSupport.set(session, ManagementPageController.FLASH_INITIATED, Boolean.TRUE);
+                return "redirect:" + ui.pageLink("rwandapharmacymanagement", "purchaseorder/management");
             }
         }
         catch (RuntimeException e) {
-            return redirectToCartError(ui, e);
+            return redirectToCartError(ui, session, e);
         }
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "inventory/mainStore");
     }
@@ -191,12 +191,12 @@ public class MainStorePageController {
                 Collections.<String, Object>singletonMap("cart", "true"));
     }
 
-    private String redirectToCartError(UiUtils ui, RuntimeException e) {
+    private String redirectToCartError(UiUtils ui, HttpSession session, RuntimeException e) {
         String reference = "RPM-PO-CART-" + System.currentTimeMillis();
         log.error("Purchase order cart action failed. Reference: " + reference, e);
+        FlashMessageSupport.set(session, FLASH_ERROR_REFERENCE, reference);
         Map<String, Object> params = new LinkedHashMap<String, Object>();
         params.put("cart", "true");
-        params.put("errorReference", reference);
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "inventory/mainStore", params);
     }
 

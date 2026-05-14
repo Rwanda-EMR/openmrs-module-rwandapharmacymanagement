@@ -4,12 +4,14 @@ import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.model.InterPharmacyTransfer;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
+import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import javax.servlet.http.HttpSession;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -18,19 +20,20 @@ import java.util.List;
 
 @Controller("pharmacyOrderApprovePageController")
 public class ApprovePageController {
+    private static final String FLASH_APPROVED = "rpm.pharmacyOrderApprove.approved";
+    private static final String FLASH_REJECTED = "rpm.pharmacyOrderApprove.rejected";
 
     public void get(PageModel model,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
-                    @RequestParam(value = "approved", required = false) Integer approved,
-                    @RequestParam(value = "rejected", required = false) Integer rejected) {
+                    HttpSession session) {
         PharmacyLocation selectedPharmacy = pharmacyLocationId == null ? null : pharmacyService.getPharmacyLocation(pharmacyLocationId);
         model.addAttribute("pharmacies", pharmacyService.getAllPharmacyLocations());
         model.addAttribute("selectedPharmacy", selectedPharmacy);
         model.addAttribute("requests", getPendingApprovalRequests(inventoryService, selectedPharmacy));
-        model.addAttribute("approved", approved != null && approved.intValue() == 1);
-        model.addAttribute("rejected", rejected != null && rejected.intValue() == 1);
+        model.addAttribute("approved", FlashMessageSupport.consumeBoolean(session, FLASH_APPROVED));
+        model.addAttribute("rejected", FlashMessageSupport.consumeBoolean(session, FLASH_REJECTED));
     }
 
     public String post(@SpringBean("inventoryService") InventoryService inventoryService,
@@ -38,23 +41,22 @@ public class ApprovePageController {
                        @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
                        @RequestParam("action") String action,
                        @RequestParam(value = "rejectionReason", required = false) String rejectionReason,
+                       HttpSession session,
                        UiUtils ui) {
         InterPharmacyTransfer transfer = inventoryService.getTransfer(transferId);
         if (transfer == null || !"REQUESTED".equalsIgnoreCase(transfer.getTransferStatus())) {
             throw new IllegalArgumentException("Only requested pharmacy orders can be approved or rejected");
         }
-        String flag;
         if ("reject".equalsIgnoreCase(action)) {
             inventoryService.rejectTransfer(transferId, rejectionReason);
-            flag = "rejected=1";
+            FlashMessageSupport.set(session, FLASH_REJECTED, Boolean.TRUE);
         } else {
             inventoryService.approveTransfer(transferId);
-            flag = "approved=1";
+            FlashMessageSupport.set(session, FLASH_APPROVED, Boolean.TRUE);
         }
-        String redirect = ui.pageLink("rwandapharmacymanagement", "pharmacyorder/approve",
+        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "pharmacyorder/approve",
                 pharmacyLocationId == null ? java.util.Collections.<String, Object>emptyMap()
                         : java.util.Collections.<String, Object>singletonMap("pharmacyLocationId", pharmacyLocationId));
-        return "redirect:" + redirect + (redirect.contains("?") ? "&" : "?") + flag;
     }
 
     private List<InterPharmacyTransfer> getPendingApprovalRequests(InventoryService inventoryService,

@@ -50,6 +50,10 @@
         <span class="tile-icon">!</span>
         <span class="tile-label">Alerts Dashboard <% if ((queueCounts['alerts/dashboard'] ?: 0) > 0) { %><span class="tile-count-badge">${ queueCounts['alerts/dashboard'] }</span><% } %></span>
     </a>
+    <a class="tile tile-admin" href="${ ui.pageLink("rwandapharmacymanagement", "admin/missingBillingMappings") }">
+        <span class="tile-icon">?</span>
+        <span class="tile-label">Missing Billing Mappings</span>
+    </a>
     <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "report/inventoryMovement") }">
         <span class="tile-icon">↕</span>
         <span class="tile-label">Inventory Movement Report</span>

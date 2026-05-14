@@ -128,11 +128,19 @@
         <td>${ plainUserName(request.servedBy) } ${ request.servedDate ? '(' + ui.formatDatePretty(request.servedDate) + ')' : '' }</td>
         <td>
             <div class="po-action-row">
-	                <% if (canApproveMainToDispensingTransfer) { %>
-	                <a href="${ ui.pageLink('rwandapharmacymanagement', 'transfer/mainToDispensingReview', [transferId: request.interPharmacyTransferId]) }">Review</a>
-	                <% } else { %>
-	                <span style="color:#777;">Awaiting finance approval</span>
-	                <% } %>
+                <% if (request.transferStatus == 'REQUESTED' && canApproveMainToDispensingTransfer) { %>
+                <a href="${ ui.pageLink('rwandapharmacymanagement', 'transfer/mainToDispensingReview', [transferId: request.interPharmacyTransferId]) }">Review approval</a>
+                <% } else if (request.transferStatus == 'APPROVED' && canTransferMainToDispensing) { %>
+                <a href="${ ui.pageLink('rwandapharmacymanagement', 'transfer/mainToDispensingReview', [transferId: request.interPharmacyTransferId]) }">Transfer items</a>
+                <% } else if (request.transferStatus == 'REQUESTED') { %>
+                <span style="color:#777;">Awaiting finance approval</span>
+                <% } else if (request.transferStatus == 'APPROVED') { %>
+                <span style="color:#777;">Awaiting main store transfer</span>
+                <% } else if (request.transferStatus == 'SERVED') { %>
+                <span style="color:#777;">Transferred</span>
+                <% } else if (request.transferStatus == 'REJECTED') { %>
+                <span style="color:#777;">Rejected</span>
+                <% } %>
             </div>
         </td>
     </tr>

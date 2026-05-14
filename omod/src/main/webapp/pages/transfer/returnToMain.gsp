@@ -110,9 +110,11 @@
             <td>${ plainUserName(request.servedBy) } ${ request.servedDate ? '(' + ui.formatDatePretty(request.servedDate) + ')' : '' }</td>
             <td>
                 <div class="return-action-row">
-                    <% if (activePharmacy && request.transferStatus == 'REQUESTED') { %>
-                    <form method="post"><input type="hidden" name="transferId" value="${ request.interPharmacyTransferId }"/><button type="submit" name="action" value="approve">Approve transfer back</button></form>
+                    <% if (activePharmacy && canApproveReturnTransfer && request.transferStatus == 'REQUESTED') { %>
+                    <form method="post"><input type="hidden" name="transferId" value="${ request.interPharmacyTransferId }"/><button type="submit" name="action" value="approve">Approve and transfer back</button></form>
                     <form method="post"><input type="hidden" name="transferId" value="${ request.interPharmacyTransferId }"/><input type="text" name="rejectionReason" placeholder="Reason"/><button type="submit" name="action" value="reject">Reject</button></form>
+                    <% } else if (activePharmacy && request.transferStatus == 'REQUESTED') { %>
+                    <span style="color:#777;">Needs stock transfer privilege</span>
                     <% } %>
                 </div>
             </td>

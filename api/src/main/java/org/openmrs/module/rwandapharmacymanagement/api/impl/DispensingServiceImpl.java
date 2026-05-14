@@ -1,7 +1,10 @@
 package org.openmrs.module.rwandapharmacymanagement.api.impl;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.openmrs.api.impl.BaseOpenmrsService;
 import org.openmrs.api.context.Context;
+import org.openmrs.DrugOrder;
 import org.openmrs.Patient;
 import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.ClinicalSafetyService;
@@ -28,14 +31,19 @@ import java.util.Date;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 
 @Transactional
 public class DispensingServiceImpl extends BaseOpenmrsService implements DispensingService {
+
+    private final Log log = LogFactory.getLog(getClass());
 
     private DispensingDao dispensingDao;
     private InventoryDao inventoryDao;
@@ -100,9 +108,17 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
 
     @Override
     public Integer findLatestPatientBillId(Integer patientId) {
-        Patient patient = patientId == null ? null : Context.getPatientService().getPatient(patientId);
-        Integer patientBillId = findPatientBillIdFromBeneficiaryFlow(patient, null);
-        return patientBillId != null ? patientBillId : dispensingDao.findLatestPatientBillId(patientId);
+        return dispensingDao.findLatestPatientBillId(patientId);
+    }
+
+    @Override
+    public Integer findLatestPatientBillId(Integer patientId, Date referenceDate) {
+        return dispensingDao.findLatestPatientBillId(patientId, referenceDate);
+    }
+
+    @Override
+    public Integer findLatestPatientBillId(Integer patientId, Date referenceDate, Collection<String> itemNames) {
+        return dispensingDao.findLatestPatientBillId(patientId, referenceDate, itemNames);
     }
 
     @Override
@@ -123,6 +139,8 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
         if (requests == null) {
             return;
         }
+        log.info("Refreshing dispensing request payment links. pharmacyLocationId=" + pharmacyLocationId
+                + ", requestCount=" + requests.size());
         boolean strictBillMode = strictPaymentBillMode();
         for (PatientDispensingRequest request : requests) {
             if (request == null) {
@@ -157,13 +175,22 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
                 }
                 continue;
             }
-            if (patientBillId == null && !strictBillMode && request.getPatient() != null) {
-                patientBillId = findPatientBillIdFromBeneficiaryFlow(request.getPatient(), request.getDateCreated());
-                if (patientBillId == null) {
-                    patientBillId = dispensingDao.findLatestPatientBillId(request.getPatient().getPatientId());
-                }
+            if (patientBillId == null && request.getPatient() != null) {
+                Set<String> itemNames = billingLookupNames(request);
+                log.info("Trying to link dispensing request to patient bill during queue refresh. requestId="
+                        + request.getPatientDispensingRequestId() + ", patientId=" + request.getPatient().getPatientId()
+                        + ", requestDate=" + request.getDateCreated() + ", itemNames=" + itemNames);
+                patientBillId = dispensingDao.findLatestPatientBillId(request.getPatient().getPatientId(),
+                        request.getDateCreated(), itemNames);
                 if (patientBillId != null) {
                     request.setPatientBillId(patientBillId);
+                    log.info("Matched dispensing request to patient bill during queue refresh. requestId="
+                            + request.getPatientDispensingRequestId() + ", patientBillId=" + patientBillId);
+                } else {
+                    log.warn("No patient bill found during queue refresh. requestId="
+                            + request.getPatientDispensingRequestId() + ", patientId="
+                            + request.getPatient().getPatientId() + ", requestDate=" + request.getDateCreated()
+                            + ", itemNames=" + itemNames);
                 }
             }
             Boolean paid = findPaymentStateFromBillingService(patientBillId);
@@ -174,6 +201,11 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
                 if (strictBillMode) {
                     paid = Boolean.FALSE;
                 } else {
+                    if (patientBillId != null && request.getPatientBillId() != null) {
+                        dispensingDao.saveRequest(request);
+                        log.info("Saved dispensing request patient bill link during queue refresh with unknown payment status. requestId="
+                                + request.getPatientDispensingRequestId() + ", patientBillId=" + patientBillId);
+                    }
                     continue;
                 }
             }
@@ -201,6 +233,47 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
                 }
             }
             dispensingDao.saveRequest(request);
+            if (patientBillId != null) {
+                log.info("Saved dispensing request payment state during queue refresh. requestId="
+                        + request.getPatientDispensingRequestId() + ", patientBillId=" + patientBillId
+                        + ", paid=" + paid + ", requestStatus=" + request.getRequestStatus());
+            }
+        }
+    }
+
+    private Set<String> billingLookupNames(PatientDispensingRequest request) {
+        Set<String> names = new HashSet<String>();
+        if (request == null || request.getLines() == null) {
+            return names;
+        }
+        for (PatientDispensingRequestLine line : request.getLines()) {
+            if (line == null) {
+                continue;
+            }
+            if (line.getItem() != null) {
+                addBillingLookupName(names, line.getItem().getName());
+                if (line.getItem().getDrug() != null) {
+                    addBillingLookupName(names, line.getItem().getDrug().getName());
+                }
+            }
+            if (line.getOrder() instanceof DrugOrder && ((DrugOrder) line.getOrder()).getDrug() != null) {
+                addBillingLookupName(names, ((DrugOrder) line.getOrder()).getDrug().getName());
+            }
+        }
+        return names;
+    }
+
+    private void addBillingLookupName(Collection<String> names, String name) {
+        if (names == null || name == null) {
+            return;
+        }
+        String rawName = name.trim().toLowerCase(Locale.ENGLISH);
+        if (!rawName.isEmpty()) {
+            names.add(rawName);
+            String normalizedName = rawName.replaceAll("[^a-z0-9]+", " ").replaceAll("\\s+", " ").trim();
+            if (!normalizedName.isEmpty()) {
+                names.add(normalizedName);
+            }
         }
     }
 

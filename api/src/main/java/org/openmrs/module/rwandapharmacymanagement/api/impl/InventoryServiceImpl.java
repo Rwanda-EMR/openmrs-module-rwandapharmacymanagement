@@ -2,6 +2,9 @@ package org.openmrs.module.rwandapharmacymanagement.api.impl;
 
 import org.openmrs.api.impl.BaseOpenmrsService;
 import org.openmrs.api.context.Context;
+import org.openmrs.Location;
+import org.openmrs.LocationTag;
+import org.openmrs.User;
 import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
@@ -11,6 +14,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.DeliveryReceiptLine;
 import org.openmrs.module.rwandapharmacymanagement.model.InterPharmacyTransfer;
 import org.openmrs.module.rwandapharmacymanagement.model.InterPharmacyTransferLine;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
+import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrder;
 import org.openmrs.module.rwandapharmacymanagement.model.StockAdjustment;
 import org.openmrs.module.rwandapharmacymanagement.model.StockAdjustmentLine;
@@ -24,7 +28,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Transactional
 public class InventoryServiceImpl extends BaseOpenmrsService implements InventoryService {
@@ -254,6 +260,7 @@ public class InventoryServiceImpl extends BaseOpenmrsService implements Inventor
             throw new IllegalArgumentException("Transferred requests cannot be approved again");
         }
         requireMainToDispensingApprovalPrivilege(transfer);
+        requireNotOwnMainToDispensingRequest(transfer);
         applyServedLineUpdates(transfer, quantities, batchNumbers, expiryDates);
         validateRequestedQuantities(transfer);
         refreshTransferLineCosts(transfer);
@@ -302,7 +309,13 @@ public class InventoryServiceImpl extends BaseOpenmrsService implements Inventor
         if ("SERVED".equalsIgnoreCase(transfer.getTransferStatus())) {
             return transfer;
         }
-        requireMainToDispensingApprovalPrivilege(transfer);
+        if (isMainToDispensingTransfer(transfer)) {
+            if (!"APPROVED".equalsIgnoreCase(transfer.getTransferStatus())) {
+                throw new IllegalArgumentException("Main to dispensing requests must be approved before transfer");
+            }
+            requireMainToDispensingTransferPrivilege(transfer);
+            requireCurrentLocationCanTransferFromSource(transfer);
+        }
         applyServedLineUpdates(transfer, quantities, batchNumbers, expiryDates);
         validateRequestedQuantities(transfer);
         refreshTransferLineCosts(transfer);
@@ -318,6 +331,73 @@ public class InventoryServiceImpl extends BaseOpenmrsService implements Inventor
         if (isMainToDispensingTransfer(transfer)) {
             Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER);
         }
+    }
+
+    private void requireMainToDispensingTransferPrivilege(InterPharmacyTransfer transfer) {
+        if (isMainToDispensingTransfer(transfer)) {
+            Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK);
+        }
+    }
+
+    private void requireNotOwnMainToDispensingRequest(InterPharmacyTransfer transfer) {
+        if (!isMainToDispensingTransfer(transfer)) {
+            return;
+        }
+        User currentUser = Context.getAuthenticatedUser();
+        User creator = transfer.getCreator();
+        if (currentUser != null && currentUser.getUserId() != null
+                && creator != null && currentUser.getUserId().equals(creator.getUserId())) {
+            throw new IllegalArgumentException("You cannot approve your own main to dispensing request");
+        }
+    }
+
+    private void requireCurrentLocationCanTransferFromSource(InterPharmacyTransfer transfer) {
+        Location currentLocation = Context.getUserContext() == null ? null : Context.getUserContext().getLocation();
+        PharmacyLocation source = transfer == null ? null : transfer.getSourcePharmacyLocation();
+        if (!hasOpenmrsLocationBinding(source)) {
+            return;
+        }
+        if (!matchesOpenmrsLocation(source, currentLocation)) {
+            throw new IllegalArgumentException("Only users at the main pharmacy location can transfer approved main to dispensing requests");
+        }
+    }
+
+    private boolean hasOpenmrsLocationBinding(PharmacyLocation pharmacyLocation) {
+        return pharmacyLocation != null
+                && ((pharmacyLocation.getLocation() != null && pharmacyLocation.getLocation().getLocationId() != null)
+                || (pharmacyLocation.getLocationTag() != null && pharmacyLocation.getLocationTag().getLocationTagId() != null)
+                || (pharmacyLocation.getLocationTags() != null && !pharmacyLocation.getLocationTags().isEmpty()));
+    }
+
+    private boolean matchesOpenmrsLocation(PharmacyLocation pharmacyLocation, Location location) {
+        if (pharmacyLocation == null || location == null || location.getLocationId() == null) {
+            return false;
+        }
+        if (pharmacyLocation.getLocation() != null && pharmacyLocation.getLocation().getLocationId() != null
+                && pharmacyLocation.getLocation().getLocationId().equals(location.getLocationId())) {
+            return true;
+        }
+        if (location.getTags() == null || location.getTags().isEmpty()) {
+            return false;
+        }
+        Set<Integer> currentTagIds = new HashSet<Integer>();
+        for (LocationTag tag : location.getTags()) {
+            if (tag != null && tag.getLocationTagId() != null) {
+                currentTagIds.add(tag.getLocationTagId());
+            }
+        }
+        if (pharmacyLocation.getLocationTag() != null && pharmacyLocation.getLocationTag().getLocationTagId() != null
+                && currentTagIds.contains(pharmacyLocation.getLocationTag().getLocationTagId())) {
+            return true;
+        }
+        if (pharmacyLocation.getLocationTags() != null) {
+            for (LocationTag tag : pharmacyLocation.getLocationTags()) {
+                if (tag != null && tag.getLocationTagId() != null && currentTagIds.contains(tag.getLocationTagId())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean isMainToDispensingTransfer(InterPharmacyTransfer transfer) {

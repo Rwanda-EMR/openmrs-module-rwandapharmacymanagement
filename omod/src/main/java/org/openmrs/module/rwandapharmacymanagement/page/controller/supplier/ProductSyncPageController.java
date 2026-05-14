@@ -10,12 +10,14 @@ import org.openmrs.api.context.UserContext;
 import org.openmrs.module.rwandapharmacymanagement.api.IntegrationLogService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.api.SupplierIntegrationService;
+import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.page.PageModel;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import javax.servlet.http.HttpSession;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -25,19 +27,18 @@ import java.util.Map;
 
 @Controller
 public class ProductSyncPageController {
+    private static final String FLASH_ERROR_MESSAGE = "rpm.productSync.errorMessage";
 
     public void get(PageModel model,
                     @SpringBean("integrationLogService") IntegrationLogService integrationLogService,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
-                    @RequestParam(value = "itemsUpdated", required = false) String itemsUpdated,
-                    @RequestParam(value = "pricesUpdated", required = false) String pricesUpdated,
-                    @RequestParam(value = "errorMessage", required = false) String errorMessage,
                     @RequestParam(value = "page", required = false) Integer page,
                     @RequestParam(value = "npcCode", required = false) String npcCode,
                     @RequestParam(value = "itemName", required = false) String itemName,
                     @RequestParam(value = "conceptName", required = false) String conceptName,
                     @RequestParam(value = "program", required = false) String program,
-                    @RequestParam(value = "materialType", required = false) String materialType) {
+                    @RequestParam(value = "materialType", required = false) String materialType,
+                    HttpSession session) {
         refreshSessionLocation();
         model.addAttribute("integrationLogs", integrationLogService.getRecentLogs());
         int pageSize = 25;
@@ -88,8 +89,9 @@ public class ProductSyncPageController {
                 && pharmacyService.getSupplierSetting().getBaseUrl() != null
                 && !pharmacyService.getSupplierSetting().getBaseUrl().trim().isEmpty();
         model.addAttribute("supplierConfigured", configured);
-        model.addAttribute("itemsUpdated", itemsUpdated != null);
-        model.addAttribute("pricesUpdated", pricesUpdated != null);
+        model.addAttribute("itemsUpdated", Boolean.FALSE);
+        model.addAttribute("pricesUpdated", Boolean.FALSE);
+        String errorMessage = FlashMessageSupport.consumeString(session, FLASH_ERROR_MESSAGE);
         if (!configured && errorMessage == null) {
             errorMessage = "Configure and enable supplier settings before syncing supplier items or prices.";
         }
@@ -98,21 +100,19 @@ public class ProductSyncPageController {
 
     public String post(@SpringBean("supplierIntegrationService") SupplierIntegrationService supplierIntegrationService,
                        @RequestParam(value = "action", required = false) String action,
+                       HttpSession session,
                        UiUtils ui) {
         try {
             if ("updatePrices".equals(action)) {
                 supplierIntegrationService.syncPrices();
-                return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/productSync",
-                        java.util.Collections.<String, Object>singletonMap("pricesUpdated", "true"));
+                return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/productSync");
             }
             supplierIntegrationService.syncProductMaster();
-            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/productSync",
-                    java.util.Collections.<String, Object>singletonMap("itemsUpdated", "true"));
+            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/productSync");
         }
         catch (Exception e) {
-            java.util.Map<String, Object> params = new java.util.LinkedHashMap<String, Object>();
-            params.put("errorMessage", e.getMessage());
-            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/productSync", params);
+            FlashMessageSupport.set(session, FLASH_ERROR_MESSAGE, e.getMessage());
+            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/productSync");
         }
     }
 

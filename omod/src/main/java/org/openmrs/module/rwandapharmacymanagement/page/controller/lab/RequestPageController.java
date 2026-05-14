@@ -14,12 +14,14 @@ import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.web.support.CurrentPharmacySupport;
+import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import javax.servlet.http.HttpSession;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -34,13 +36,14 @@ import java.util.Set;
 public class RequestPageController {
 
     private static final int HISTORY_PAGE_SIZE = 10;
+    private static final String FLASH_REQUESTED = "rpm.labRequest.requested";
 
     public void get(PageModel model,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @SpringBean("labSupplyService") LabSupplyService labSupplyService,
-                    @RequestParam(value = "requested", required = false) Integer requested,
-                    @RequestParam(value = "historyPage", required = false) Integer historyPage) {
+                    @RequestParam(value = "historyPage", required = false) Integer historyPage,
+                    HttpSession session) {
         Location currentLocation = Context.getUserContext() == null ? null : Context.getUserContext().getLocation();
         User currentUser = Context.getAuthenticatedUser();
         List<Map<String, Object>> availableItems = buildAvailableItems(currentLocation, pharmacyService, inventoryService);
@@ -59,17 +62,19 @@ public class RequestPageController {
         model.addAttribute("historyPageSize", HISTORY_PAGE_SIZE);
         model.addAttribute("historyTotalCount", requestHistoryTotalCount);
         model.addAttribute("historyTotalPages", requestHistoryTotalPages);
-        model.addAttribute("requested", requested != null && requested.intValue() == 1);
+        model.addAttribute("requested", FlashMessageSupport.consumeBoolean(session, FLASH_REQUESTED));
     }
 
     public String post(@SpringBean("labSupplyService") LabSupplyService labSupplyService,
                        @RequestParam(value = "itemId", required = false) Integer[] itemIds,
                        @RequestParam(value = "labServiceConceptId", required = false) Integer[] labServiceConceptIds,
                        @RequestParam(value = "quantity", required = false) BigDecimal[] quantities,
+                       HttpSession session,
                        UiUtils ui) {
         Location currentLocation = Context.getUserContext() == null ? null : Context.getUserContext().getLocation();
         labSupplyService.createRequest(currentLocation, buildCommands(itemIds, labServiceConceptIds, quantities));
-        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "lab/request") + "?requested=1";
+        FlashMessageSupport.set(session, FLASH_REQUESTED, Boolean.TRUE);
+        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "lab/request");
     }
 
     private List<LabSupplyRequestLineCommand> buildCommands(Integer[] itemIds, Integer[] labServiceConceptIds, BigDecimal[] quantities) {

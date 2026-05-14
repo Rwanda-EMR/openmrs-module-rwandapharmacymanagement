@@ -33,7 +33,6 @@
                     [path: "inventory/dispensingStore", label: "Dispensing pharmacies"],
                     [path: "inventory/receiptHistory", label: "Receipt history"],
                     [path: "inventory/valuation", label: "Stock valuation"],
-                    [path: "pharmacyorder/request", label: "Pharmacy item request"],
 	                    [path: "pharmacyorder/approve", label: "Pharmacy transfer approval"],
 		                    [path: "transfer/mainToDispensing", label: "Main to dispensing"],
 	                    [path: "transfer/returnToMain", label: "Return to main pharmacy"],
@@ -55,6 +54,7 @@
             [title: "Control", links: [
                     [path: "alerts/dashboard", label: "Alerts"],
                     [path: "admin/linkBill", label: "Link prescription bills"],
+                    [path: "admin/missingBillingMappings", label: "Missing billing mappings"],
                     [path: "safety/rules", label: "Safety rules"],
                     [path: "integration/logs", label: "Integration logs"]
             ]],
@@ -554,7 +554,7 @@
                 %>
                 <a class="lnav-link" href="${ ui.pageLink("rwandapharmacymanagement", link.path) }">
                     <span>${ link.label }</span>
-                    <% if (monitoredCountLinks.contains(link.path)) { %><span class="nav-count-badge">${ linkCount }</span><% } %>
+                    <% if (monitoredCountLinks.contains(link.path) && linkCount > 0) { %><span class="nav-count-badge">${ linkCount }</span><% } %>
                 </a>
                 <% } %>
             </div>
