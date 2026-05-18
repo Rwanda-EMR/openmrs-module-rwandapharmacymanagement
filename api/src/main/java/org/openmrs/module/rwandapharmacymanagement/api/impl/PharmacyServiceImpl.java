@@ -6,6 +6,7 @@ import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.db.PharmacyDao;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.ItemCategory;
+import org.openmrs.module.rwandapharmacymanagement.model.ItemProductMasterMapping;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrder;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrderItem;
@@ -18,6 +19,8 @@ import org.openmrs.module.rwandapharmacymanagement.model.SupplierSetting;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Date;
+import java.util.Locale;
 
 @Transactional
 public class PharmacyServiceImpl extends BaseOpenmrsService implements PharmacyService {
@@ -54,6 +57,11 @@ public class PharmacyServiceImpl extends BaseOpenmrsService implements PharmacyS
     }
 
     @Override
+    public Item getItemByExactName(String name) {
+        return pharmacyDao.getItemByExactName(name);
+    }
+
+    @Override
     public List<Item> getItemsByCodes(List<String> codes) {
         return pharmacyDao.getItemsByCodes(codes);
     }
@@ -65,7 +73,44 @@ public class PharmacyServiceImpl extends BaseOpenmrsService implements PharmacyS
 
     @Override
     public Item saveItem(Item item) {
+        preventDuplicateNewItem(item);
         return pharmacyDao.saveItem(item);
+    }
+
+    @Override
+    public ItemProductMasterMapping getItemProductMasterMapping(Integer productMasterItemId) {
+        return pharmacyDao.getItemProductMasterMapping(productMasterItemId);
+    }
+
+    @Override
+    public ItemProductMasterMapping saveItemProductMasterMapping(ItemProductMasterMapping mapping) {
+        return pharmacyDao.saveItemProductMasterMapping(mapping);
+    }
+
+    @Override
+    public ItemProductMasterMapping mapProductMasterItemToItem(ProductMasterItem productMasterItem, Item item) {
+        if (productMasterItem == null || productMasterItem.getProductMasterItemId() == null || item == null || item.getItemId() == null) {
+            throw new IllegalArgumentException("Both product master item and pharmacy item are required for mapping");
+        }
+        ItemProductMasterMapping mapping = pharmacyDao.getItemProductMasterMapping(productMasterItem.getProductMasterItemId());
+        if (mapping == null) {
+            mapping = new ItemProductMasterMapping();
+            mapping.setProductMasterItem(productMasterItem);
+            mapping.setCreator(org.openmrs.api.context.Context.getAuthenticatedUser());
+            mapping.setDateCreated(new Date());
+        }
+        mapping.setItem(item);
+        mapping.setActive(Boolean.TRUE);
+        return pharmacyDao.saveItemProductMasterMapping(mapping);
+    }
+
+    @Override
+    public Item getMappedItemForProductMasterItem(ProductMasterItem productMasterItem) {
+        if (productMasterItem == null || productMasterItem.getProductMasterItemId() == null) {
+            return null;
+        }
+        ItemProductMasterMapping mapping = pharmacyDao.getItemProductMasterMapping(productMasterItem.getProductMasterItemId());
+        return mapping == null ? null : mapping.getItem();
     }
 
     @Override
@@ -298,5 +343,45 @@ public class PharmacyServiceImpl extends BaseOpenmrsService implements PharmacyS
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private void preventDuplicateNewItem(Item item) {
+        if (item == null || item.getItemId() != null) {
+            return;
+        }
+        Item existingByName = getItemByExactName(item.getName());
+        if (existingByName != null) {
+            throw new IllegalArgumentException("An active pharmacy item already exists with this name: " + item.getName());
+        }
+        String code = safe(item.getCode()).trim();
+        if (!code.isEmpty()) {
+            Item existingByCode = getItemByCode(code);
+            if (existingByCode != null) {
+                throw new IllegalArgumentException("An active pharmacy item already exists with this code: " + code);
+            }
+        }
+        Integer drugId = item.getDrug() == null ? null : item.getDrug().getDrugId();
+        Integer conceptId = item.getConcept() == null ? null : item.getConcept().getConceptId();
+        if (drugId == null && conceptId == null) {
+            return;
+        }
+        for (Item existing : getAllItems()) {
+            if (existing == null) {
+                continue;
+            }
+            Integer existingDrugId = existing.getDrug() == null ? null : existing.getDrug().getDrugId();
+            Integer existingConceptId = existing.getConcept() == null ? null : existing.getConcept().getConceptId();
+            if (drugId != null && drugId.equals(existingDrugId)) {
+                throw new IllegalArgumentException("An active pharmacy item already exists for this OpenMRS drug: " + existing.getName());
+            }
+            if (drugId == null && conceptId != null && conceptId.equals(existingConceptId)
+                    && normalized(item.getName()).equals(normalized(existing.getName()))) {
+                throw new IllegalArgumentException("An active pharmacy item already exists for this concept and name: " + existing.getName());
+            }
+        }
+    }
+
+    private String normalized(String value) {
+        return safe(value).trim().replaceAll("\\s+", " ").toLowerCase(Locale.ENGLISH);
     }
 }

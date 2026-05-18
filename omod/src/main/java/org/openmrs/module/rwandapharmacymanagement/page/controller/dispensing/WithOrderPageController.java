@@ -387,7 +387,7 @@ public class WithOrderPageController {
             }
             activePharmaciesById.put(pharmacyLocation.getPharmacyLocationId(), pharmacyLocation);
         }
-        Map<Integer, AlternativeSource> bestSourceByItemId = new HashMap<Integer, AlternativeSource>();
+        Map<Integer, Map<Integer, AlternativeSource>> sourcesByItemId = new HashMap<Integer, Map<Integer, AlternativeSource>>();
         List<InventoryBalance> allBalances = inventoryService.getInventoryForPharmacy(null);
         for (InventoryBalance balance : allBalances) {
             if (balance == null || balance.getItem() == null || balance.getItem().getItemId() == null
@@ -404,10 +404,17 @@ public class WithOrderPageController {
                 continue;
             }
             Integer itemId = balance.getItem().getItemId();
-            AlternativeSource existing = bestSourceByItemId.get(itemId);
-            if (existing == null || balance.getQuantityOnHand().compareTo(existing.availableQuantity) > 0) {
-                bestSourceByItemId.put(itemId, new AlternativeSource(sourcePharmacy, balance.getQuantityOnHand()));
+            Map<Integer, AlternativeSource> sourcesByPharmacyId = sourcesByItemId.get(itemId);
+            if (sourcesByPharmacyId == null) {
+                sourcesByPharmacyId = new LinkedHashMap<Integer, AlternativeSource>();
+                sourcesByItemId.put(itemId, sourcesByPharmacyId);
             }
+            AlternativeSource source = sourcesByPharmacyId.get(pharmacyLocationId);
+            if (source == null) {
+                source = new AlternativeSource(sourcePharmacy, BigDecimal.ZERO);
+                sourcesByPharmacyId.put(pharmacyLocationId, source);
+            }
+            source.availableQuantity = source.availableQuantity.add(balance.getQuantityOnHand());
         }
         for (PatientDispensingRequestLine line : request.getLines()) {
             if (line == null || line.getPatientDispensingRequestLineId() == null || line.getItem() == null
@@ -419,10 +426,10 @@ public class WithOrderPageController {
             if (localQuantity.compareTo(line.getRequestedQuantity()) >= 0) {
                 continue;
             }
-            AlternativeSource source = bestSourceByItemId.get(line.getItem().getItemId());
-            if (source != null && source.pharmacyLocation != null) {
-                hintsByLineId.put(line.getPatientDispensingRequestLineId(),
-                        source.pharmacyLocation.getName() + " (" + stripTrailingZeros(source.availableQuantity) + " available)");
+            Map<Integer, AlternativeSource> sourcesByPharmacyId = sourcesByItemId.get(line.getItem().getItemId());
+            String sourceSummary = sourceSummary(sourcesByPharmacyId);
+            if (!sourceSummary.isEmpty()) {
+                hintsByLineId.put(line.getPatientDispensingRequestLineId(), sourceSummary);
             }
         }
         return hintsByLineId;
@@ -431,6 +438,27 @@ public class WithOrderPageController {
     private boolean isEligibleSourcePharmacy(PharmacyLocation pharmacyLocation) {
         return pharmacyLocation.getLocationType() == PharmacyLocationType.MAIN_PHARMACY
                 || pharmacyLocation.getLocationType() == PharmacyLocationType.DISPENSING_PHARMACY;
+    }
+
+    private String sourceSummary(Map<Integer, AlternativeSource> sourcesByPharmacyId) {
+        if (sourcesByPharmacyId == null || sourcesByPharmacyId.isEmpty()) {
+            return "";
+        }
+        StringBuilder summary = new StringBuilder();
+        for (AlternativeSource source : sourcesByPharmacyId.values()) {
+            if (source == null || source.pharmacyLocation == null || source.availableQuantity == null
+                    || source.availableQuantity.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            if (summary.length() > 0) {
+                summary.append(", ");
+            }
+            summary.append(source.pharmacyLocation.getName())
+                    .append(" (")
+                    .append(stripTrailingZeros(source.availableQuantity))
+                    .append(" available)");
+        }
+        return summary.toString();
     }
 
     private String stripTrailingZeros(BigDecimal value) {
@@ -443,7 +471,7 @@ public class WithOrderPageController {
 
     private static class AlternativeSource {
         private final PharmacyLocation pharmacyLocation;
-        private final BigDecimal availableQuantity;
+        private BigDecimal availableQuantity;
 
         private AlternativeSource(PharmacyLocation pharmacyLocation, BigDecimal availableQuantity) {
             this.pharmacyLocation = pharmacyLocation;

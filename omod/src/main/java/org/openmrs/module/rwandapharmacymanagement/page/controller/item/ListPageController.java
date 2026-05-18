@@ -75,21 +75,36 @@ public class ListPageController {
             }
         }
         String itemCode = npcBacked ? normalizedNpcCode : nextLocalCode();
-        Item item = new Item();
-        item.setName(name);
-        item.setCode(itemCode);
-        item.setProgram(normalizedProgram);
-        item.setDrug(drug);
-        item.setConcept(concept);
-        item.setSupplierManaged(Boolean.valueOf(npcBacked));
-        item.setStockable(Boolean.TRUE);
-        item.setDispensable(Boolean.TRUE);
-        item.setLowStockThreshold(lowStockThreshold);
-        item.setRequiresBatch(Boolean.TRUE.equals(requiresBatch));
-        item.setRequiresExpiry(Boolean.TRUE.equals(requiresExpiry));
-        item.setCreator(Context.getAuthenticatedUser());
-        item.setDateCreated(new Date());
-        pharmacyService.saveItem(item);
+        Item item = pharmacyService.getItemByExactName(name);
+        if (item != null) {
+            if (!npcBacked) {
+                throw new IllegalArgumentException("An active pharmacy item already exists with this name: " + name);
+            }
+            String existingCode = safe(item.getCode()).trim();
+            if (!existingCode.isEmpty() && !existingCode.equalsIgnoreCase(normalizedNpcCode)) {
+                throw new IllegalArgumentException("An active pharmacy item already exists with this name but a different NPC code: " + name);
+            }
+        }
+        if (item == null && npcBacked) {
+            item = pharmacyService.getItemByCode(normalizedNpcCode);
+        }
+        if (item == null) {
+            item = new Item();
+            item.setName(name);
+            item.setCode(itemCode);
+            item.setProgram("");
+            item.setDrug(drug);
+            item.setConcept(concept);
+            item.setSupplierManaged(Boolean.valueOf(npcBacked));
+            item.setStockable(Boolean.TRUE);
+            item.setDispensable(Boolean.TRUE);
+            item.setLowStockThreshold(lowStockThreshold);
+            item.setRequiresBatch(Boolean.TRUE.equals(requiresBatch));
+            item.setRequiresExpiry(Boolean.TRUE.equals(requiresExpiry));
+            item.setCreator(Context.getAuthenticatedUser());
+            item.setDateCreated(new Date());
+            pharmacyService.saveItem(item);
+        }
         ProductMasterItem productMasterItem = npcBacked
                 ? pharmacyService.getProductMasterItemByNpcCodeAndProgram(normalizedNpcCode, normalizedProgram)
                 : null;
@@ -105,6 +120,7 @@ public class ListPageController {
         productMasterItem.setDrug(drug);
         productMasterItem.setActive(Boolean.TRUE);
         pharmacyService.saveProductMasterItem(productMasterItem);
+        pharmacyService.mapProductMasterItemToItem(productMasterItem, item);
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "item/list");
     }
 

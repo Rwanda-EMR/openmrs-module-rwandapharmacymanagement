@@ -14,6 +14,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.Supplier;
 import org.openmrs.module.rwandapharmacymanagement.model.SupplierPrice;
 import org.openmrs.module.rwandapharmacymanagement.page.controller.purchaseorder.ManagementPageController;
 import org.openmrs.module.rwandapharmacymanagement.page.controller.support.PaginationSupport;
+import org.openmrs.module.rwandapharmacymanagement.web.support.DeliveryReceiptSupport;
 import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
@@ -245,12 +246,22 @@ public class MainStorePageController {
         if (productMasterItem == null) {
             return;
         }
+        Item mappedItem = pharmacyService.getMappedItemForProductMasterItem(productMasterItem);
+        if (mappedItem == null) {
+            mappedItem = DeliveryReceiptSupport.resolveOrCreateMappedItem(pharmacyService, productMasterItem);
+        }
+        if (mappedItem == null) {
+            throw new IllegalArgumentException("Unable to resolve a pharmacy item for product master item: "
+                    + productMasterItem.getItemName() + " (" + productMasterItem.getNpcCode() + ", "
+                    + normalizeProgram(productMasterItem.getProgram()) + ")");
+        }
         String key = cartKeyForProductMaster(productMasterItemId);
         LinkedHashMap<String, CartLine> cart = getCart(session);
         CartLine line = cart.get(key);
         if (line == null) {
             line = new CartLine();
             line.setCartKey(key);
+            line.setItemId(mappedItem.getItemId());
             line.setProductMasterItemId(productMasterItemId);
             line.setItemName(productMasterItem.getItemName());
             line.setItemCode(productMasterItem.getNpcCode());
@@ -343,6 +354,9 @@ public class MainStorePageController {
             for (CartLine cartLine : entry.getValue()) {
                 PurchaseOrderItem item = new PurchaseOrderItem();
                 item.setPurchaseOrder(purchaseOrder);
+                if (cartLine.getProductMasterItemId() != null) {
+                    item.setProductMasterItem(pharmacyService.getProductMasterItem(cartLine.getProductMasterItemId()));
+                }
                 item.setOrderNumber(orderNumber);
                 item.setProgram(entry.getKey());
                 item.setItemName(cartLine.getItemName());

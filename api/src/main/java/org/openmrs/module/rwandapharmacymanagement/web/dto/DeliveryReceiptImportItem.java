@@ -5,6 +5,8 @@ import java.math.BigDecimal;
 public class DeliveryReceiptImportItem {
 
     private String npcCode;
+    private Integer productMasterItemId;
+    private String program;
     private String description;
     private BigDecimal deliveryQuantity;
     private String units;
@@ -22,6 +24,22 @@ public class DeliveryReceiptImportItem {
 
     public void setNpcCode(String npcCode) {
         this.npcCode = npcCode;
+    }
+
+    public Integer getProductMasterItemId() {
+        return productMasterItemId;
+    }
+
+    public void setProductMasterItemId(Integer productMasterItemId) {
+        this.productMasterItemId = productMasterItemId;
+    }
+
+    public String getProgram() {
+        return program;
+    }
+
+    public void setProgram(String program) {
+        this.program = program;
     }
 
     public String getDescription() {

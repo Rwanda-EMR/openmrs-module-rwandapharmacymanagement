@@ -690,6 +690,9 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
             }
             DeliveryReceiptImportItem item = new DeliveryReceiptImportItem();
             item.setNpcCode(resolvedItemCode);
+            item.setProductMasterItemId(matchingOrderItem == null || matchingOrderItem.getProductMasterItem() == null
+                    ? null : matchingOrderItem.getProductMasterItem().getProductMasterItemId());
+            item.setProgram(matchingOrderItem == null ? null : matchingOrderItem.getProgram());
             item.setDescription(firstNonBlank(trimToNull(responseItem.getDescription()),
                     matchingOrderItem == null ? null : trimToNull(matchingOrderItem.getItemName())));
             item.setDeliveryQuantity(parseDecimal(responseItem.getDeliveryQuantity()));
@@ -850,6 +853,9 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
                     linkedConcept,
                     linkedDrug,
                     program);
+            if (productMasterItem != null && item != null) {
+                pharmacyService.mapProductMasterItemToItem(productMasterItem, item);
+            }
             supplierPrice.setItem(item);
             supplierPrice.setSupplierProductCode(npcCode);
             supplierPrice.setProgram(program);
@@ -929,6 +935,7 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
                 Item ensuredLocalItem = ensureLocalItem(npcCode, productMasterItem.getItemName(), concept, drug, programName);
                 productMasterItem.setActive(Boolean.TRUE);
                 pharmacyService.saveProductMasterItem(productMasterItem);
+                pharmacyService.mapProductMasterItemToItem(productMasterItem, ensuredLocalItem);
                 productMasterByCode.put(productKey, productMasterItem);
 
                 mapping.setItem(ensuredLocalItem);
@@ -984,8 +991,10 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
     }
 
     private Item ensureLocalItem(String itemCode, String itemName, Concept concept, Drug drug, String program) {
-        String normalizedProgram = normalized(program);
-        Item existingItem = pharmacyService.getItemByCodeAndProgram(itemCode, normalizedProgram);
+        Item existingItem = pharmacyService.getItemByExactName(normalized(itemName));
+        if (existingItem == null) {
+            existingItem = pharmacyService.getItemByCode(normalized(itemCode));
+        }
         if (existingItem != null) {
             existingItem.setDrug(drug);
             if (concept != null) {
@@ -994,7 +1003,6 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
             if (existingItem.getName() == null || existingItem.getName().trim().isEmpty()) {
                 existingItem.setName(normalized(itemName));
             }
-            existingItem.setProgram(normalizedProgram);
             existingItem.setSupplierManaged(Boolean.TRUE);
             pharmacyService.saveItem(existingItem);
             return existingItem;
@@ -1002,7 +1010,7 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
         Item item = new Item();
         item.setCode(normalized(itemCode));
         item.setName(normalized(itemName));
-        item.setProgram(normalizedProgram);
+        item.setProgram("");
         item.setDrug(drug);
         item.setConcept(concept);
         item.setDispensable(Boolean.TRUE);

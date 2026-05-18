@@ -9,6 +9,7 @@
         </id>
         <many-to-one name="deliveryReceipt" class="org.openmrs.module.rwandapharmacymanagement.model.DeliveryReceipt" column="delivery_receipt_id"/>
         <many-to-one name="item" class="org.openmrs.module.rwandapharmacymanagement.model.Item" column="item_id"/>
+        <many-to-one name="productMasterItem" class="org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem" column="product_master_item_id"/>
         <property name="batchNumber" column="batch_number" type="string"/>
         <property name="expiryDate" column="expiry_date"/>
         <property name="orderedQuantity" column="ordered_quantity" type="big_decimal"/>

@@ -8,6 +8,7 @@ public class DeliveryReceiptLine extends BaseTrackedEntity {
     private Integer deliveryReceiptLineId;
     private DeliveryReceipt deliveryReceipt;
     private Item item;
+    private ProductMasterItem productMasterItem;
     private String batchNumber;
     private Date expiryDate;
     private BigDecimal orderedQuantity;
@@ -41,6 +42,14 @@ public class DeliveryReceiptLine extends BaseTrackedEntity {
 
     public void setItem(Item item) {
         this.item = item;
+    }
+
+    public ProductMasterItem getProductMasterItem() {
+        return productMasterItem;
+    }
+
+    public void setProductMasterItem(ProductMasterItem productMasterItem) {
+        this.productMasterItem = productMasterItem;
     }
 
     public String getBatchNumber() {

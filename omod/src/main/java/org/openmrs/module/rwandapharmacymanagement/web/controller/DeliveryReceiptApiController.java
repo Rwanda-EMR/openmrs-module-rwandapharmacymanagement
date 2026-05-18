@@ -10,6 +10,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.DeliveryReceiptLine;
 import org.openmrs.module.rwandapharmacymanagement.model.IntegrationLog;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
+import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrder;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrderItem;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.IntegrationStatus;
@@ -109,7 +110,7 @@ public class DeliveryReceiptApiController {
         receipt.setPurchaseOrder(purchaseOrder);
         receipt.setReceivedIntoLocation(pharmacyLocation);
         receipt.setStatus("RECEIVED");
-        receipt.setLines(buildLines(request.getItems()));
+        receipt.setLines(buildLines(request.getItems(), purchaseOrder));
         if (request.getDeliveryDate() != null && !request.getDeliveryDate().trim().isEmpty()) {
             Date dateCreated = parseFlexibleDate(request.getDeliveryDate());
             receipt.setDateCreated(dateCreated);
@@ -117,7 +118,7 @@ public class DeliveryReceiptApiController {
         return receipt;
     }
 
-    private List<DeliveryReceiptLine> buildLines(List<DeliveryReceiptImportItem> items) throws ParseException {
+    private List<DeliveryReceiptLine> buildLines(List<DeliveryReceiptImportItem> items, PurchaseOrder purchaseOrder) throws ParseException {
         if (items == null || items.isEmpty()) {
             throw new IllegalArgumentException("At least one item is required");
         }
@@ -127,7 +128,10 @@ public class DeliveryReceiptApiController {
             if (npcCode.isEmpty()) {
                 throw new IllegalArgumentException("npcCode is required for every item");
             }
-            Item item = DeliveryReceiptSupport.resolveOrCreateItemByCode(pharmacyService, npcCode);
+            ProductMasterItem productMasterItem = resolveProductMasterItem(importedItem, purchaseOrder);
+            Item item = productMasterItem == null
+                    ? DeliveryReceiptSupport.resolveOrCreateItemByCode(pharmacyService, npcCode, importedItem.getDescription(), importedItem.getProgram())
+                    : DeliveryReceiptSupport.resolveOrCreateMappedItem(pharmacyService, productMasterItem);
             if (item == null) {
                 throw new IllegalArgumentException("No local or product master item found for npcCode: " + npcCode);
             }
@@ -142,6 +146,7 @@ public class DeliveryReceiptApiController {
             }
             DeliveryReceiptLine line = new DeliveryReceiptLine();
             line.setItem(item);
+            line.setProductMasterItem(productMasterItem);
             line.setBatchNumber(safe(importedItem.getBatch()));
             line.setOrderedQuantity(quantity);
             line.setReceivedQuantity(quantity);
@@ -163,6 +168,49 @@ public class DeliveryReceiptApiController {
             lines.add(line);
         }
         return lines;
+    }
+
+    private ProductMasterItem resolveProductMasterItem(DeliveryReceiptImportItem importedItem, PurchaseOrder purchaseOrder) {
+        if (importedItem == null) {
+            return null;
+        }
+        if (importedItem.getProductMasterItemId() != null) {
+            ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(importedItem.getProductMasterItemId());
+            if (productMasterItem != null) {
+                return productMasterItem;
+            }
+        }
+        PurchaseOrderItem matchingOrderItem = findMatchingPurchaseOrderItem(purchaseOrder, importedItem);
+        if (matchingOrderItem != null && matchingOrderItem.getProductMasterItem() != null) {
+            return matchingOrderItem.getProductMasterItem();
+        }
+        String npcCode = safe(importedItem.getNpcCode());
+        String program = safe(importedItem.getProgram());
+        return program.isEmpty()
+                ? pharmacyService.getProductMasterItemByNpcCode(npcCode)
+                : pharmacyService.getProductMasterItemByNpcCodeAndProgram(npcCode, program);
+    }
+
+    private PurchaseOrderItem findMatchingPurchaseOrderItem(PurchaseOrder purchaseOrder, DeliveryReceiptImportItem importedItem) {
+        if (purchaseOrder == null || purchaseOrder.getItems() == null || importedItem == null) {
+            return null;
+        }
+        String npcCode = safe(importedItem.getNpcCode());
+        String program = safe(importedItem.getProgram());
+        String description = safe(importedItem.getDescription());
+        for (PurchaseOrderItem purchaseOrderItem : purchaseOrder.getItems()) {
+            if (purchaseOrderItem == null) {
+                continue;
+            }
+            if (!npcCode.isEmpty() && npcCode.equalsIgnoreCase(safe(purchaseOrderItem.getItemCode()))
+                    && (program.isEmpty() || program.equalsIgnoreCase(safe(purchaseOrderItem.getProgram())))) {
+                return purchaseOrderItem;
+            }
+            if (!description.isEmpty() && description.equalsIgnoreCase(safe(purchaseOrderItem.getItemName()))) {
+                return purchaseOrderItem;
+            }
+        }
+        return null;
     }
 
     private PharmacyLocation resolveMainStore() {

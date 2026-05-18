@@ -3,6 +3,7 @@ package org.openmrs.module.rwandapharmacymanagement.api;
 import org.openmrs.api.OpenmrsService;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.ItemCategory;
+import org.openmrs.module.rwandapharmacymanagement.model.ItemProductMasterMapping;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrder;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrderItem;
@@ -25,11 +26,21 @@ public interface PharmacyService extends OpenmrsService {
 
     Item getItemByCodeAndProgram(String code, String program);
 
+    Item getItemByExactName(String name);
+
     List<Item> getItemsByCodes(List<String> codes);
 
     List<Item> searchItems(String searchTerm, Integer limit);
 
     Item saveItem(Item item);
+
+    ItemProductMasterMapping getItemProductMasterMapping(Integer productMasterItemId);
+
+    ItemProductMasterMapping saveItemProductMasterMapping(ItemProductMasterMapping mapping);
+
+    ItemProductMasterMapping mapProductMasterItemToItem(ProductMasterItem productMasterItem, Item item);
+
+    Item getMappedItemForProductMasterItem(ProductMasterItem productMasterItem);
 
     List<ItemCategory> getAllItemCategories();
 

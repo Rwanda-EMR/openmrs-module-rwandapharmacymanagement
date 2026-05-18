@@ -6,6 +6,7 @@ public class PurchaseOrderItem extends BaseTrackedEntity {
 
     private Integer purchaseOrderItemId;
     private PurchaseOrder purchaseOrder;
+    private ProductMasterItem productMasterItem;
     private String orderNumber;
     private String program;
     private String itemName;
@@ -28,6 +29,14 @@ public class PurchaseOrderItem extends BaseTrackedEntity {
 
     public void setPurchaseOrder(PurchaseOrder purchaseOrder) {
         this.purchaseOrder = purchaseOrder;
+    }
+
+    public ProductMasterItem getProductMasterItem() {
+        return productMasterItem;
+    }
+
+    public void setProductMasterItem(ProductMasterItem productMasterItem) {
+        this.productMasterItem = productMasterItem;
     }
 
     public String getOrderNumber() {

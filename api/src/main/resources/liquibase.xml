@@ -96,4 +96,8 @@
         <sqlFile path="sql/migrations/rpm-performance-indexes.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
+    <changeSet id="rpm-item-product-master-mapping" author="codex">
+        <sqlFile path="sql/migrations/rpm-item-product-master-mapping.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>

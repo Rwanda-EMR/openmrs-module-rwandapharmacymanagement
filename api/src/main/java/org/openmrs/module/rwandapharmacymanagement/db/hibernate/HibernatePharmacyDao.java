@@ -8,6 +8,7 @@ import org.hibernate.criterion.Restrictions;
 import org.hibernate.criterion.Disjunction;
 import org.openmrs.module.rwandapharmacymanagement.db.PharmacyDao;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
+import org.openmrs.module.rwandapharmacymanagement.model.ItemProductMasterMapping;
 import org.openmrs.module.rwandapharmacymanagement.model.ItemCategory;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrder;
@@ -68,6 +69,18 @@ public class HibernatePharmacyDao implements PharmacyDao {
     }
 
     @Override
+    public Item getItemByExactName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            return null;
+        }
+        return (Item) sessionFactory.getCurrentSession().createCriteria(Item.class)
+                .add(Restrictions.eq("name", name.trim()).ignoreCase())
+                .add(notVoided())
+                .setMaxResults(1)
+                .uniqueResult();
+    }
+
+    @Override
     public List<Item> getItemsByCodes(List<String> codes) {
         if (codes == null || codes.isEmpty()) {
             return Collections.emptyList();
@@ -98,6 +111,27 @@ public class HibernatePharmacyDao implements PharmacyDao {
     public Item saveItem(Item item) {
         sessionFactory.getCurrentSession().saveOrUpdate(item);
         return item;
+    }
+
+    @Override
+    public ItemProductMasterMapping getItemProductMasterMapping(Integer productMasterItemId) {
+        if (productMasterItemId == null) {
+            return null;
+        }
+        return (ItemProductMasterMapping) sessionFactory.getCurrentSession()
+                .createCriteria(ItemProductMasterMapping.class)
+                .createAlias("productMasterItem", "productMasterItem")
+                .add(Restrictions.eq("productMasterItem.productMasterItemId", productMasterItemId))
+                .add(notVoided())
+                .add(activeOrUnset())
+                .setMaxResults(1)
+                .uniqueResult();
+    }
+
+    @Override
+    public ItemProductMasterMapping saveItemProductMasterMapping(ItemProductMasterMapping mapping) {
+        sessionFactory.getCurrentSession().saveOrUpdate(mapping);
+        return mapping;
     }
 
     @Override

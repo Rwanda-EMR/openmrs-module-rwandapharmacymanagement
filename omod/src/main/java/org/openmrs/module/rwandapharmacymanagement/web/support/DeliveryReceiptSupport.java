@@ -30,38 +30,12 @@ public final class DeliveryReceiptSupport {
     public static Item resolveOrCreateItemByCode(PharmacyService pharmacyService, String itemCode, String itemName, String program) {
         String normalizedCode = normalized(itemCode);
         String normalizedProgram = normalized(program);
-        Item existingItem = pharmacyService.getItemByCodeAndProgram(normalizedCode, normalizedProgram);
-        if (existingItem == null && normalizedProgram.isEmpty()) {
-            existingItem = pharmacyService.getItemByCode(normalizedCode);
-        }
-        if (existingItem != null) {
-            if ((existingItem.getName() == null || existingItem.getName().trim().isEmpty()) && normalized(itemName).length() > 0) {
-                existingItem.setName(normalized(itemName));
-                existingItem.setProgram(normalizedProgram);
-                return pharmacyService.saveItem(existingItem);
-            }
-            return existingItem;
-        }
         ProductMasterItem productMasterItem = pharmacyService.getProductMasterItemByNpcCodeAndProgram(normalizedCode, normalizedProgram);
         if (productMasterItem == null && normalizedProgram.isEmpty()) {
             productMasterItem = pharmacyService.getProductMasterItemByNpcCode(normalizedCode);
         }
         if (productMasterItem != null) {
-            Item item = new Item();
-            item.setCode(normalizedCode);
-            item.setName(normalized(productMasterItem.getItemName()));
-            item.setProgram(normalized(productMasterItem.getProgram()));
-            item.setSupplierManaged(Boolean.TRUE);
-            item.setStockable(Boolean.TRUE);
-            item.setDispensable(Boolean.TRUE);
-            item.setRequiresBatch(Boolean.FALSE);
-            item.setRequiresExpiry(Boolean.FALSE);
-            Drug drug = productMasterItem.getDrug();
-            item.setDrug(drug);
-            item.setConcept(drug != null ? drug.getConcept() : findOrCreateConcept(normalized(productMasterItem.getItemName())));
-            item.setCreator(Context.getAuthenticatedUser());
-            item.setDateCreated(new Date());
-            return pharmacyService.saveItem(item);
+            return resolveOrCreateMappedItem(pharmacyService, productMasterItem);
         }
 
         String normalizedName = normalized(itemName);
@@ -75,7 +49,7 @@ public final class DeliveryReceiptSupport {
         Item item = new Item();
         item.setCode(normalizedCode);
         item.setName(normalizedName);
-        item.setProgram(normalizedProgram);
+        item.setProgram("");
         item.setSupplierManaged(Boolean.TRUE);
         item.setStockable(Boolean.TRUE);
         item.setDispensable(Boolean.TRUE);
@@ -85,6 +59,44 @@ public final class DeliveryReceiptSupport {
         item.setCreator(Context.getAuthenticatedUser());
         item.setDateCreated(new Date());
         return pharmacyService.saveItem(item);
+    }
+
+    public static Item resolveOrCreateMappedItem(PharmacyService pharmacyService, ProductMasterItem productMasterItem) {
+        if (productMasterItem == null) {
+            return null;
+        }
+        Item mappedItem = pharmacyService.getMappedItemForProductMasterItem(productMasterItem);
+        if (mappedItem != null) {
+            return mappedItem;
+        }
+        String itemName = normalized(productMasterItem.getItemName());
+        Item existingByName = findExistingItemByExactName(pharmacyService, itemName);
+        if (existingByName != null) {
+            pharmacyService.mapProductMasterItemToItem(productMasterItem, existingByName);
+            return existingByName;
+        }
+        Item existingByCode = pharmacyService.getItemByCode(normalized(productMasterItem.getNpcCode()));
+        if (existingByCode != null) {
+            pharmacyService.mapProductMasterItemToItem(productMasterItem, existingByCode);
+            return existingByCode;
+        }
+        Item item = new Item();
+        item.setCode(normalized(productMasterItem.getNpcCode()));
+        item.setName(itemName);
+        item.setProgram("");
+        item.setSupplierManaged(Boolean.TRUE);
+        item.setStockable(Boolean.TRUE);
+        item.setDispensable(Boolean.TRUE);
+        item.setRequiresBatch(Boolean.FALSE);
+        item.setRequiresExpiry(Boolean.FALSE);
+        Drug drug = productMasterItem.getDrug();
+        item.setDrug(drug);
+        item.setConcept(drug != null ? drug.getConcept() : findOrCreateConcept(itemName));
+        item.setCreator(Context.getAuthenticatedUser());
+        item.setDateCreated(new Date());
+        Item savedItem = pharmacyService.saveItem(item);
+        pharmacyService.mapProductMasterItemToItem(productMasterItem, savedItem);
+        return savedItem;
     }
 
     private static Concept findOrCreateConcept(String conceptName) {

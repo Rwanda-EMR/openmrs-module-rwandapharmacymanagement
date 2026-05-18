@@ -8,6 +8,7 @@
             <generator class="native"/>
         </id>
         <many-to-one name="purchaseOrder" class="org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrder" column="purchase_order_id"/>
+        <many-to-one name="productMasterItem" class="org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem" column="product_master_item_id"/>
         <property name="orderNumber" column="order_number" type="string"/>
         <property name="program" column="program" type="string"/>
         <property name="itemName" column="item_name" type="string"/>
