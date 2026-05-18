@@ -193,9 +193,9 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
                             + ", itemNames=" + itemNames);
                 }
             }
-            Boolean paid = findPaymentStateFromBillingService(patientBillId);
+            Boolean paid = dispensingDao.isPatientBillPaid(patientBillId);
             if (paid == null) {
-                paid = dispensingDao.isPatientBillPaid(patientBillId);
+                paid = findPaymentStateFromBillingService(patientBillId);
             }
             if (paid == null) {
                 if (strictBillMode) {

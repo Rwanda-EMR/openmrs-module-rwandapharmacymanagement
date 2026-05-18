@@ -14,6 +14,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingReques
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestType;
 
+import java.math.BigDecimal;
 import java.util.Date;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -397,27 +398,119 @@ public class HibernateDispensingDao implements DispensingDao {
             return null;
         }
         try {
-            String paidColumn = resolveExistingBillingColumn("is_paid", "paid");
             String billIdColumn = resolveExistingBillingColumn("patient_bill_id", "bill_id", "id");
-            if (paidColumn == null || billIdColumn == null) {
+            if (billIdColumn == null) {
                 return null;
             }
-            Object result = sessionFactory.getCurrentSession()
-                    .createSQLQuery("select " + paidColumn + " from moh_bill_patient_bill where " + billIdColumn + " = :patientBillId")
-                    .setParameter("patientBillId", patientBillId)
-                    .setMaxResults(1)
-                    .uniqueResult();
-            if (result instanceof Boolean) {
-                return (Boolean) result;
+            Boolean paidByPayments = isPatientBillPaidByPayments(patientBillId, billIdColumn);
+            if (paidByPayments != null) {
+                return paidByPayments;
             }
-            if (result instanceof Number) {
-                return ((Number) result).intValue() != 0;
+            Boolean paidByStatus = isPatientBillPaidByStatus(patientBillId, billIdColumn);
+            if (paidByStatus != null) {
+                return paidByStatus;
             }
-            return result == null ? null : Boolean.valueOf(result.toString());
+            return isPatientBillPaidByFlag(patientBillId, billIdColumn);
         }
         catch (RuntimeException ignored) {
             return null;
         }
+    }
+
+    private Boolean isPatientBillPaidByPayments(Integer patientBillId, String billIdColumn) {
+        String paymentTable = resolveExistingTable("moh_bill_payment", "moh_bill_bill_payment", "moh_bill_billpayment");
+        String billAmountColumn = resolveExistingBillingColumn("amount", "bill_amount", "total_amount");
+        if (paymentTable == null || billAmountColumn == null) {
+            return null;
+        }
+        String paymentBillColumn = resolveExistingColumn(paymentTable, "patient_bill_id", "patient_bill", "bill_id");
+        String paymentAmountColumn = resolveExistingColumn(paymentTable, "amount_paid", "amountPaid", "amount");
+        if (paymentBillColumn == null || paymentAmountColumn == null) {
+            return null;
+        }
+        Object billAmountResult = sessionFactory.getCurrentSession()
+                .createSQLQuery("select " + billAmountColumn + " from moh_bill_patient_bill where " + billIdColumn + " = :patientBillId")
+                .setParameter("patientBillId", patientBillId)
+                .setMaxResults(1)
+                .uniqueResult();
+        BigDecimal billAmount = bigDecimalValue(billAmountResult);
+        if (billAmount == null) {
+            return null;
+        }
+        if (billAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return Boolean.TRUE;
+        }
+        String voidedColumn = resolveExistingColumn(paymentTable, "voided", "is_voided");
+        String voidedClause = voidedColumn == null ? "" : " and (" + voidedColumn + " = 0 or " + voidedColumn + " is null)";
+        Object paidAmountResult = sessionFactory.getCurrentSession()
+                .createSQLQuery("select coalesce(sum(" + paymentAmountColumn + "), 0) from " + paymentTable
+                        + " where " + paymentBillColumn + " = :patientBillId" + voidedClause)
+                .setParameter("patientBillId", patientBillId)
+                .uniqueResult();
+        BigDecimal paidAmount = bigDecimalValue(paidAmountResult);
+        return paidAmount != null && paidAmount.compareTo(billAmount) >= 0;
+    }
+
+    private Boolean isPatientBillPaidByStatus(Integer patientBillId, String billIdColumn) {
+        String statusColumn = resolveExistingBillingColumn("status", "bill_status");
+        if (statusColumn == null) {
+            return null;
+        }
+        Object result = sessionFactory.getCurrentSession()
+                .createSQLQuery("select " + statusColumn + " from moh_bill_patient_bill where " + billIdColumn + " = :patientBillId")
+                .setParameter("patientBillId", patientBillId)
+                .setMaxResults(1)
+                .uniqueResult();
+        if (result == null) {
+            return null;
+        }
+        String status = result.toString().trim().toUpperCase(java.util.Locale.ENGLISH).replace('_', ' ');
+        if ("FULLY PAID".equals(status) || "PAID".equals(status) || "COMPLETED".equals(status)) {
+            return Boolean.TRUE;
+        }
+        if ("PARTLY PAID".equals(status) || "PARTIALLY PAID".equals(status) || "UNPAID".equals(status)
+                || "CANCELLED".equals(status) || "VOIDED".equals(status)) {
+            return Boolean.FALSE;
+        }
+        return null;
+    }
+
+    private Boolean isPatientBillPaidByFlag(Integer patientBillId, String billIdColumn) {
+        String paidColumn = resolveExistingBillingColumn("is_paid", "paid");
+        if (paidColumn == null) {
+            return null;
+        }
+        Object result = sessionFactory.getCurrentSession()
+                .createSQLQuery("select " + paidColumn + " from moh_bill_patient_bill where " + billIdColumn + " = :patientBillId")
+                .setParameter("patientBillId", patientBillId)
+                .setMaxResults(1)
+                .uniqueResult();
+        return booleanValue(result);
+    }
+
+    private BigDecimal bigDecimalValue(Object result) {
+        if (result == null) {
+            return null;
+        }
+        if (result instanceof BigDecimal) {
+            return (BigDecimal) result;
+        }
+        try {
+            return new BigDecimal(result.toString());
+        }
+        catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Boolean booleanValue(Object result) {
+        if (result instanceof Boolean) {
+            return (Boolean) result;
+        }
+        if (result instanceof Number) {
+            return ((Number) result).intValue() != 0;
+        }
+        return result == null ? null : Boolean.valueOf(result.toString());
     }
 
     @Override
