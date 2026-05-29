@@ -56,6 +56,7 @@
                     [path: "admin/linkBill", label: "Link prescription bills"],
                     [path: "admin/missingBillingMappings", label: "Missing billing mappings"],
                     [path: "safety/rules", label: "Safety rules"],
+                    [path: "integration/pendingHie", label: "Pending HIE queue"],
                     [path: "integration/logs", label: "Integration logs"]
             ]],
             [title: "Reports", links: [

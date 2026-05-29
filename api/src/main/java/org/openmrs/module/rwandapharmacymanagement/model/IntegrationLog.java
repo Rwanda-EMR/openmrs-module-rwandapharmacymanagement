@@ -15,6 +15,8 @@ public class IntegrationLog extends BaseTrackedEntity {
     private String responsePayload;
     private String summary;
     private Long durationMs;
+    private Integer retryCount;
+    private Date lastAttemptDate;
 
     public Integer getIntegrationLogId() {
         return integrationLogId;
@@ -78,6 +80,22 @@ public class IntegrationLog extends BaseTrackedEntity {
 
     public void setDurationMs(Long durationMs) {
         this.durationMs = durationMs;
+    }
+
+    public Integer getRetryCount() {
+        return retryCount;
+    }
+
+    public void setRetryCount(Integer retryCount) {
+        this.retryCount = retryCount;
+    }
+
+    public Date getLastAttemptDate() {
+        return lastAttemptDate;
+    }
+
+    public void setLastAttemptDate(Date lastAttemptDate) {
+        this.lastAttemptDate = lastAttemptDate;
     }
 
     @Override

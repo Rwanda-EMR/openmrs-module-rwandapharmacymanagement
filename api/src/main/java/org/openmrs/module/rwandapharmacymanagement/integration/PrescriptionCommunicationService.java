@@ -121,9 +121,9 @@ public class PrescriptionCommunicationService {
                         + line.getDispenseRecordLineId() + ", endpoint="
                         + buildEndpoint(administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_DISPENSE_PATH, "/MedicationDispense"))
                         + ", payload=" + truncate(payload), e);
-                log(IntegrationType.HIE_MEDICATION_DISPENSE, IntegrationStatus.FAILED,
+                log(IntegrationType.HIE_MEDICATION_DISPENSE, IntegrationStatus.RETRY_PENDING,
                         buildEndpoint(administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_DISPENSE_PATH, "/MedicationDispense")),
-                        payload, truncate(e.getMessage()), "Failed to send medication dispense to HIE", start);
+                        payload, truncate(e.getMessage()), "Queued medication dispense for HIE retry", start);
             }
         }
     }
@@ -139,6 +139,7 @@ public class PrescriptionCommunicationService {
             return;
         }
         if (!sendEncounter(request)) {
+            queueMedicationRequestsForRetry(request, lines);
             return;
         }
         for (PatientDispensingRequestLine line : lines) {
@@ -148,12 +149,7 @@ public class PrescriptionCommunicationService {
             long start = System.currentTimeMillis();
             String payload = "";
             try {
-                payload = hieMedicationPayloadBuilder.buildMedicationRequest(request, line,
-                        administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_PATIENT_IDENTIFIER_TYPE_UUID, ""),
-                        administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_CODE_SYSTEM, ""),
-                        facilityId("unknown"),
-                        administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_GROUP_IDENTIFIER_SYSTEM,
-                                "http://openmrs.org/rwanda-pharmacy-management/prescription-order-number"));
+                payload = buildMedicationRequestPayload(request, line);
                 String response = hieMedicationApiClient.post(
                         administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_BASE_URL, ""),
                         administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_REQUEST_PATH, "/MedicationRequest"),
@@ -177,11 +173,42 @@ public class PrescriptionCommunicationService {
                         + line.getPatientDispensingRequestLineId() + ", endpoint="
                         + buildEndpoint(administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_REQUEST_PATH, "/MedicationRequest"))
                         + ", payload=" + truncate(payload), e);
-                log(IntegrationType.HIE_MEDICATION_REQUEST, IntegrationStatus.FAILED,
+                log(IntegrationType.HIE_MEDICATION_REQUEST, IntegrationStatus.RETRY_PENDING,
                         buildEndpoint(administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_REQUEST_PATH, "/MedicationRequest")),
-                        payload, truncate(e.getMessage()), "Failed to send medication request to HIE", start);
+                        payload, truncate(e.getMessage()), "Queued medication request for HIE retry", start);
             }
         }
+    }
+
+    private void queueMedicationRequestsForRetry(PatientDispensingRequest request, List<PatientDispensingRequestLine> lines) {
+        for (PatientDispensingRequestLine line : lines) {
+            if (line == null) {
+                continue;
+            }
+            long start = System.currentTimeMillis();
+            try {
+                String payload = buildMedicationRequestPayload(request, line);
+                log(IntegrationType.HIE_MEDICATION_REQUEST, IntegrationStatus.RETRY_PENDING,
+                        buildEndpoint(administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_REQUEST_PATH, "/MedicationRequest")),
+                        payload, "", "Queued medication request for HIE retry after encounter failure", start);
+            }
+            catch (Exception e) {
+                log.error("Unable to queue MedicationRequest after Encounter failure. requestId="
+                        + safeRequestId(request) + ", lineId=" + line.getPatientDispensingRequestLineId(), e);
+            }
+        }
+    }
+
+    private String buildMedicationRequestPayload(PatientDispensingRequest request,
+                                                 PatientDispensingRequestLine line) throws java.io.IOException {
+        return hieMedicationPayloadBuilder.buildMedicationRequest(request, line,
+                administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_PATIENT_IDENTIFIER_TYPE_UUID, ""),
+                administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_CODE_SYSTEM, ""),
+                facilityId("unknown"),
+                resolveHospitalName(),
+                administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_SOURCE_SYSTEM, "eBuzima"),
+                administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_GROUP_IDENTIFIER_SYSTEM,
+                        "http://openmrs.org/rwanda-pharmacy-management/prescription-order-number"));
     }
 
     private void sendPrescriptionSavedSms(PatientDispensingRequest request) {
@@ -205,6 +232,7 @@ public class PrescriptionCommunicationService {
                 facilityId("unknown"),
                 resolveHospitalName());
         String configuredSender = administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_SENDER, "");
+        String smsRetryPayload = buildSmsRetryPayload(configuredSender, phoneNumber, message);
         log.info("SMS send prepared. requestId=" + safeRequestId(request)
                 + ", senderGlobalProperty=" + truncate(configuredSender)
                 + ", phoneNumber=" + phoneNumber
@@ -228,18 +256,25 @@ public class PrescriptionCommunicationService {
                     + ", message=" + truncate(message) + ", response=" + truncate(response));
             log(IntegrationType.SMS_NOTIFICATION, IntegrationStatus.SUCCESS,
                     smsPostUrl(),
-                    smsRequestSummary(phoneNumber, configuredSender, message), truncate(response), "Prescription SMS sent", start);
+                    smsRetryPayload, truncate(response), "Prescription SMS sent", start);
         }
         catch (Exception e) {
             log.error("SMS send failed. requestId=" + safeRequestId(request) + ", phoneNumber="
                     + phoneNumber + ", postUrl="
                     + smsPostUrl()
                     + ", message=" + truncate(message), e);
-            log(IntegrationType.SMS_NOTIFICATION, IntegrationStatus.FAILED,
+            log(IntegrationType.SMS_NOTIFICATION, IntegrationStatus.RETRY_PENDING,
                     smsPostUrl(),
-                    smsRequestSummary(phoneNumber, configuredSender, message), truncate(e.getMessage()),
-                    "Failed to send prescription SMS", start);
+                    smsRetryPayload, truncate(e.getMessage()),
+                    "Queued prescription SMS for retry", start);
         }
+    }
+
+    private String buildSmsRetryPayload(String sender, String phoneNumber, String message) {
+        return smsGatewayClient.buildRetryPayload(smsPostUrl(), sender, phoneNumber, message,
+                administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_CODING, "0"),
+                administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_DLR_URL, ""),
+                administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_DLR_LEVEL, "2"));
     }
 
     private boolean sendEncounter(PatientDispensingRequest request) {
@@ -279,9 +314,9 @@ public class PrescriptionCommunicationService {
                     + ", encounterId=" + (request.getEncounter() == null ? "unknown" : request.getEncounter().getEncounterId())
                     + ", endpoint=" + buildEndpoint(administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_ENCOUNTER_PATH, "/Encounter"))
                     + ", payload=" + truncate(payload), e);
-            log(IntegrationType.HIE_ENCOUNTER, IntegrationStatus.FAILED,
+            log(IntegrationType.HIE_ENCOUNTER, IntegrationStatus.RETRY_PENDING,
                     buildEndpoint(administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_ENCOUNTER_PATH, "/Encounter")),
-                    payload, truncate(e.getMessage()), "Failed to send encounter to HIE", start);
+                    payload, truncate(e.getMessage()), "Queued encounter for HIE retry", start);
             return false;
         }
     }
@@ -298,17 +333,25 @@ public class PrescriptionCommunicationService {
 
     private void log(IntegrationType type, IntegrationStatus status, String endpoint,
                      String requestPayload, String responsePayload, String summary, long start) {
-        IntegrationLog log = new IntegrationLog();
+        String truncatedPayload = truncate(requestPayload);
+        IntegrationLog log = status == IntegrationStatus.RETRY_PENDING
+                ? integrationLogService.getPendingLog(type, truncatedPayload) : null;
+        if (log == null) {
+            log = new IntegrationLog();
+            log.setDateCreated(new Date());
+        }
         log.setIntegrationType(type);
         log.setStatus(status);
         log.setEndpoint(endpoint);
-        log.setRequestPayload(truncate(requestPayload));
+        log.setRequestPayload(truncatedPayload);
         log.setResponsePayload(truncate(responsePayload));
         log.setSummary(summary);
         log.setDurationMs(Math.max(0L, System.currentTimeMillis() - start));
+        if (status == IntegrationStatus.RETRY_PENDING && log.getRetryCount() == null) {
+            log.setRetryCount(Integer.valueOf(0));
+        }
         User currentUser = Context.getAuthenticatedUser();
         log.setCreator(currentUser);
-        log.setDateCreated(new Date());
         integrationLogService.saveLog(log);
     }
 

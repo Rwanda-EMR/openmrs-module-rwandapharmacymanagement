@@ -100,4 +100,12 @@
         <sqlFile path="sql/migrations/rpm-item-product-master-mapping.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
+    <changeSet id="rpm-request-line-uuid" author="codex">
+        <sqlFile path="sql/migrations/rpm-request-line-uuid.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-hie-retry-log-metadata" author="codex">
+        <sqlFile path="sql/migrations/rpm-hie-retry-log-metadata.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>

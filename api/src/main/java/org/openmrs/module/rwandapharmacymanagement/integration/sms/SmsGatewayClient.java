@@ -14,6 +14,14 @@ import java.util.Map;
 
 public class SmsGatewayClient {
 
+    public static final String FIELD_POST_URL = "postUrl";
+    public static final String FIELD_SENDER = "sender";
+    public static final String FIELD_RECIPIENT = "recipient";
+    public static final String FIELD_CONTENT = "content";
+    public static final String FIELD_CODING = "coding";
+    public static final String FIELD_DLR_URL = "dlrUrl";
+    public static final String FIELD_DLR_LEVEL = "dlrLevel";
+
     public String send(String postUrl, String username, String password, String sender, String recipient,
                        String content, String coding, String dlrUrl, String dlrLevel,
                        Integer connectionTimeout, Integer readTimeout) throws IOException {
@@ -32,6 +40,33 @@ public class SmsGatewayClient {
             parameters.put("dlr-url", dlrUrl);
         }
         return executeRequest(postUrl, formEncode(parameters), connectionTimeout, readTimeout);
+    }
+
+    public String retry(String payload, String username, String password,
+                        Integer connectionTimeout, Integer readTimeout) throws IOException {
+        Map<String, String> parameters = parseJsonPayload(payload);
+        return send(parameters.get(FIELD_POST_URL), username, password,
+                parameters.get(FIELD_SENDER),
+                parameters.get(FIELD_RECIPIENT),
+                parameters.get(FIELD_CONTENT),
+                parameters.get(FIELD_CODING),
+                parameters.get(FIELD_DLR_URL),
+                parameters.get(FIELD_DLR_LEVEL),
+                connectionTimeout,
+                readTimeout);
+    }
+
+    public String buildRetryPayload(String postUrl, String sender, String recipient, String content,
+                                    String coding, String dlrUrl, String dlrLevel) {
+        Map<String, String> parameters = new LinkedHashMap<String, String>();
+        parameters.put(FIELD_POST_URL, postUrl);
+        parameters.put(FIELD_SENDER, sender);
+        parameters.put(FIELD_RECIPIENT, recipient);
+        parameters.put(FIELD_CONTENT, content);
+        parameters.put(FIELD_CODING, isBlank(coding) ? "0" : coding);
+        parameters.put(FIELD_DLR_URL, dlrUrl);
+        parameters.put(FIELD_DLR_LEVEL, isBlank(dlrLevel) ? "2" : dlrLevel);
+        return toJson(parameters);
     }
 
     private String executeRequest(String url, String payload,
@@ -67,6 +102,103 @@ public class SmsGatewayClient {
             builder.append(encode(entry.getKey())).append("=").append(encode(entry.getValue()));
         }
         return builder.toString();
+    }
+
+    private Map<String, String> parseJsonPayload(String payload) throws IOException {
+        Map<String, String> values = new LinkedHashMap<String, String>();
+        String trimmed = payload == null ? "" : payload.trim();
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+            throw new IOException("SMS retry payload is not JSON");
+        }
+        String body = trimmed.substring(1, trimmed.length() - 1).trim();
+        int index = 0;
+        while (index < body.length()) {
+            while (index < body.length() && Character.isWhitespace(body.charAt(index))) {
+                index++;
+            }
+            if (index >= body.length()) {
+                break;
+            }
+            ParsedString key = parseJsonString(body, index);
+            index = key.nextIndex;
+            while (index < body.length() && (Character.isWhitespace(body.charAt(index)) || body.charAt(index) == ':')) {
+                index++;
+            }
+            ParsedString value = parseJsonString(body, index);
+            values.put(key.value, value.value);
+            index = value.nextIndex;
+            while (index < body.length() && (Character.isWhitespace(body.charAt(index)) || body.charAt(index) == ',')) {
+                index++;
+            }
+        }
+        return values;
+    }
+
+    private ParsedString parseJsonString(String text, int start) throws IOException {
+        if (start >= text.length() || text.charAt(start) != '"') {
+            throw new IOException("Invalid SMS retry payload JSON string");
+        }
+        StringBuilder builder = new StringBuilder();
+        int index = start + 1;
+        while (index < text.length()) {
+            char current = text.charAt(index);
+            if (current == '"') {
+                return new ParsedString(builder.toString(), index + 1);
+            }
+            if (current == '\\') {
+                index++;
+                if (index >= text.length()) {
+                    throw new IOException("Invalid SMS retry payload escape");
+                }
+                char escaped = text.charAt(index);
+                if (escaped == 'n') {
+                    builder.append('\n');
+                } else if (escaped == 'r') {
+                    builder.append('\r');
+                } else if (escaped == 't') {
+                    builder.append('\t');
+                } else {
+                    builder.append(escaped);
+                }
+            } else {
+                builder.append(current);
+            }
+            index++;
+        }
+        throw new IOException("Unterminated SMS retry payload JSON string");
+    }
+
+    private String toJson(Map<String, String> parameters) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("{");
+        for (Map.Entry<String, String> entry : parameters.entrySet()) {
+            if (builder.length() > 1) {
+                builder.append(",");
+            }
+            builder.append("\"").append(jsonEscape(entry.getKey())).append("\":");
+            builder.append("\"").append(jsonEscape(entry.getValue())).append("\"");
+        }
+        builder.append("}");
+        return builder.toString();
+    }
+
+    private String jsonEscape(String value) {
+        String safeValue = value == null ? "" : value;
+        return safeValue.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
+    }
+
+    private static class ParsedString {
+        private final String value;
+        private final int nextIndex;
+
+        private ParsedString(String value, int nextIndex) {
+            this.value = value;
+            this.nextIndex = nextIndex;
+        }
     }
 
     private String encode(String value) throws IOException {

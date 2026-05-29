@@ -186,12 +186,16 @@ public class MetadataSetup implements Setup {
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_ENCOUNTER_SERVICE_TYPE_DISPLAY, "Pharmacy");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_GROUP_IDENTIFIER_SYSTEM,
                 "http://openmrs.org/rwanda-pharmacy-management/prescription-order-number");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_SOURCE_SYSTEM, "eBuzima");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_REQUEST_PATH, "/MedicationRequest");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_DISPENSE_PATH, "/MedicationDispense");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_PATIENT_IDENTIFIER_TYPE_UUID, "");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_CODE_SYSTEM, "http://openmrs.org/rwanda-pharmacy-management/item-code");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_CONNECT_TIMEOUT, "10000");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_READ_TIMEOUT, "30000");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_RETRY_SCHEDULER_ENABLED, "true");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_RETRY_SCHEDULER_INTERVAL_SECONDS, "1800");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_RETRY_BATCH_SIZE, "50");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_ENABLED, "false");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_AUTH_URL, "");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_USERNAME, "");
@@ -206,6 +210,9 @@ public class MetadataSetup implements Setup {
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_READ_TIMEOUT, "30000");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_AUTH_PAYLOAD_TEMPLATE, "{\"username\":\"{{username}}\",\"password\":\"{{password}}\"}");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_POST_PAYLOAD_TEMPLATE, "{\"sender\":\"{{sender}}\",\"recipient\":\"{{phoneNumber}}\",\"message\":\"{{message}}\"}");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_RETRY_SCHEDULER_ENABLED, "true");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_RETRY_SCHEDULER_INTERVAL_SECONDS, "1800");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_RETRY_BATCH_SIZE, "50");
     }
 
     private void saveGlobalProperty(AdministrationService administrationService, String property, String defaultValue) {

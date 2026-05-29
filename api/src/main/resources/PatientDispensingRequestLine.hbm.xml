@@ -25,5 +25,6 @@
         <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
         <property name="dateVoided" column="date_voided"/>
         <property name="voidReason" column="void_reason" type="string"/>
+        <property name="uuid" column="uuid" type="string"/>
     </class>
 </hibernate-mapping>

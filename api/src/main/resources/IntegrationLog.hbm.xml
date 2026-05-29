@@ -24,6 +24,8 @@
         <property name="responsePayload" column="response_payload" type="text" length="16777215"/>
         <property name="summary" column="summary" type="string"/>
         <property name="durationMs" column="duration_ms" type="long"/>
+        <property name="retryCount" column="retry_count" type="integer"/>
+        <property name="lastAttemptDate" column="last_attempt_date"/>
         <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
         <property name="dateCreated" column="date_created"/>
         <property name="voided" column="voided" type="boolean"/>

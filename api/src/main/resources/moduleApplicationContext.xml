@@ -34,7 +34,17 @@
     <bean id="supplierApiClient" class="org.openmrs.module.rwandapharmacymanagement.integration.supplier.SupplierApiClient"/>
     <bean id="hieMedicationApiClient" class="org.openmrs.module.rwandapharmacymanagement.integration.hie.HieMedicationApiClient"/>
     <bean id="hieMedicationPayloadBuilder" class="org.openmrs.module.rwandapharmacymanagement.integration.hie.HieMedicationPayloadBuilder"/>
+    <bean id="hieRetryService" class="org.openmrs.module.rwandapharmacymanagement.integration.hie.HieRetryService">
+        <property name="administrationService" ref="adminService"/>
+        <property name="integrationLogService" ref="integrationLogService"/>
+        <property name="hieMedicationApiClient" ref="hieMedicationApiClient"/>
+    </bean>
     <bean id="smsGatewayClient" class="org.openmrs.module.rwandapharmacymanagement.integration.sms.SmsGatewayClient"/>
+    <bean id="smsRetryService" class="org.openmrs.module.rwandapharmacymanagement.integration.sms.SmsRetryService">
+        <property name="administrationService" ref="adminService"/>
+        <property name="integrationLogService" ref="integrationLogService"/>
+        <property name="smsGatewayClient" ref="smsGatewayClient"/>
+    </bean>
     <bean id="prescriptionCommunicationService" class="org.openmrs.module.rwandapharmacymanagement.integration.PrescriptionCommunicationService">
         <property name="administrationService" ref="adminService"/>
         <property name="integrationLogService" ref="integrationLogService"/>

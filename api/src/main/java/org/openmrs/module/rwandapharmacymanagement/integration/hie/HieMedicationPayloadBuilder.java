@@ -1,10 +1,12 @@
 package org.openmrs.module.rwandapharmacymanagement.integration.hie;
 
 import org.codehaus.jackson.map.ObjectMapper;
+import org.openmrs.Concept;
 import org.openmrs.DrugOrder;
 import org.openmrs.Encounter;
 import org.openmrs.EncounterType;
 import org.openmrs.Location;
+import org.openmrs.Obs;
 import org.openmrs.OrderFrequency;
 import org.openmrs.Patient;
 import org.openmrs.PatientIdentifier;
@@ -14,6 +16,7 @@ import org.openmrs.Provider;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecord;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecordLine;
+import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
 
@@ -37,7 +40,7 @@ public class HieMedicationPayloadBuilder {
                                  String patientIdentifierTypeUuid,
                                  String serviceTypeCode,
                                  String serviceTypeDisplay) throws java.io.IOException {
-        Encounter encounter = request == null ? null : request.getEncounter();
+        Encounter encounter = resolveManagedEncounter(request == null ? null : request.getEncounter());
         if (encounter == null) {
             return "";
         }
@@ -71,37 +74,42 @@ public class HieMedicationPayloadBuilder {
                                          String patientIdentifierTypeUuid,
                                          String medicationCodeSystem,
                                          String facilityId,
+                                         String requestingFacilityDisplay,
+                                         String sourceSystem,
                                          String groupIdentifierSystem) throws java.io.IOException {
         Map<String, Object> payload = new LinkedHashMap<String, Object>();
         payload.put("resourceType", "MedicationRequest");
         payload.put("id", medicationRequestId(line));
+        payload.put("identifier", identifier(line));
         payload.put("status", "active");
         payload.put("intent", "order");
         payload.put("groupIdentifier", groupIdentifier(request, line, facilityId, groupIdentifierSystem));
         Map<String, Object> insurance = insuranceReference(request);
         if (insurance != null) {
-            payload.put("insurance", insurance);
+            payload.put("insurance", Collections.singletonList(insurance));
         }
         payload.put("medicationCodeableConcept", medicationConcept(line == null ? null : line.getItem() == null ? null : line.getItem().getCode(),
                 line == null ? null : line.getItem() == null ? null : line.getItem().getName(), medicationCodeSystem));
-        payload.put("subject", reference("Patient/" + resolvePatientReference(request == null ? null : request.getPatient(), patientIdentifierTypeUuid)));
+        payload.put("subject", medicationRequestSubjectReference(request == null ? null : request.getPatient(), patientIdentifierTypeUuid));
         Map<String, Object> encounter = encounterReference(request == null ? null : request.getEncounter());
         if (encounter != null) {
             payload.put("encounter", encounter);
         }
         if (request != null && request.getOrderingProvider() != null) {
-            payload.put("requester", reference("Practitioner/" + providerReference(request.getOrderingProvider())));
+            payload.put("requester", practitionerReference(request.getOrderingProvider()));
         }
         payload.put("authoredOn", isoDateTime(request == null ? null : request.getDateCreated()));
         List<Map<String, Object>> dosageInstructions = dosageInstruction(line == null ? null : line.getOrder());
         if (!dosageInstructions.isEmpty()) {
             payload.put("dosageInstruction", dosageInstructions);
         }
-        if (request != null && request.getRequestingLocation() != null) {
-            Map<String, Object> extension = new LinkedHashMap<String, Object>();
-            extension.put("url", "http://example.org/fhir/StructureDefinition/location");
-            extension.put("valueReference", reference("Location/" + locationReference(request.getRequestingLocation())));
-            payload.put("extension", Collections.singletonList(extension));
+        Map<String, Object> dispenseRequest = dispenseRequest(line);
+        if (!dispenseRequest.isEmpty()) {
+            payload.put("dispenseRequest", dispenseRequest);
+        }
+        List<Map<String, Object>> extensions = medicationRequestExtensions(request, facilityId, requestingFacilityDisplay, sourceSystem);
+        if (!extensions.isEmpty()) {
+            payload.put("extension", extensions);
         }
         return objectMapper.writeValueAsString(payload);
     }
@@ -167,19 +175,20 @@ public class HieMedicationPayloadBuilder {
     }
 
     public String resolvePatientPhoneNumber(Patient patient, String personAttributeTypeUuid) {
-        if (patient == null || isBlank(personAttributeTypeUuid)) {
+        Patient managedPatient = resolveManagedPatient(patient);
+        if (managedPatient == null || isBlank(personAttributeTypeUuid)) {
             return null;
         }
         org.openmrs.PersonAttributeType attributeType = Context.getPersonService().getPersonAttributeTypeByUuid(personAttributeTypeUuid);
         if (attributeType == null) {
             return null;
         }
-        PersonAttribute attribute = patient.getAttribute(attributeType);
+        PersonAttribute attribute = managedPatient.getAttribute(attributeType);
         return attribute == null || attribute.getValue() == null ? null : attribute.getValue().toString();
     }
 
     public String medicationRequestId(PatientDispensingRequestLine line) {
-        return "rpm-medreq-" + (line == null || line.getPatientDispensingRequestLineId() == null ? "unknown" : line.getPatientDispensingRequestLineId());
+        return line == null ? "unknown" : blankToDefault(line.getUuid(), "unknown");
     }
 
     private String medicationDispenseId(DispenseRecordLine line) {
@@ -208,6 +217,17 @@ public class HieMedicationPayloadBuilder {
         return groupIdentifier;
     }
 
+    private List<Map<String, Object>> identifier(PatientDispensingRequestLine line) {
+        Map<String, Object> identifier = new LinkedHashMap<String, Object>();
+        identifier.put("value", blankToDefault(npcCode(line), "unknown"));
+        return Collections.singletonList(identifier);
+    }
+
+    private String npcCode(PatientDispensingRequestLine line) {
+        Item item = line == null ? null : line.getItem();
+        return item == null ? null : item.getCode();
+    }
+
     private Map<String, Object> insuranceReference(PatientDispensingRequest request) {
         Object insurancePolicy = resolveInsurancePolicy(request);
         if (insurancePolicy == null) {
@@ -227,8 +247,64 @@ public class HieMedicationPayloadBuilder {
         return insuranceReference;
     }
 
+    private String insuranceName(PatientDispensingRequest request) {
+        Object insurancePolicy = resolveInsurancePolicy(request);
+        Object insurance = insurancePolicy == null ? null : invokeNoArg(insurancePolicy, "getInsurance");
+        return extractString(insurance, "getName");
+    }
+
+    private Map<String, Object> dispenseRequest(PatientDispensingRequestLine line) {
+        Map<String, Object> dispenseRequest = new LinkedHashMap<String, Object>();
+        if (line == null || line.getRequestedQuantity() == null) {
+            return dispenseRequest;
+        }
+        Map<String, Object> quantity = new LinkedHashMap<String, Object>();
+        quantity.put("value", line.getRequestedQuantity());
+        quantity.put("unit", "units");
+        dispenseRequest.put("quantity", quantity);
+        return dispenseRequest;
+    }
+
+    private List<Map<String, Object>> medicationRequestExtensions(PatientDispensingRequest request,
+                                                                 String facilityId,
+                                                                 String requestingFacilityDisplay,
+                                                                 String sourceSystem) {
+        List<Map<String, Object>> extensions = new ArrayList<Map<String, Object>>();
+        addStringExtension(extensions, "http://example.org/fhir/StructureDefinition/source-system",
+                blankToDefault(sourceSystem, "eBuzima"));
+        addRequestingFacilityExtension(extensions, blankToDefault(requestingFacilityDisplay, facilityId));
+        addStringExtension(extensions, "http://example.org/fhir/StructureDefinition/insurance-name", insuranceName(request));
+        return extensions;
+    }
+
+    private void addRequestingFacilityExtension(List<Map<String, Object>> extensions, String display) {
+        if (isBlank(display)) {
+            return;
+        }
+        Map<String, Object> valueReference = new LinkedHashMap<String, Object>();
+        valueReference.put("display", display);
+        Map<String, Object> extension = new LinkedHashMap<String, Object>();
+        extension.put("url", "http://hie.moh.gov.rw/fhir/StructureDefinition/requesting-facility");
+        extension.put("valueReference", valueReference);
+        extensions.add(extension);
+    }
+
+    private void addStringExtension(List<Map<String, Object>> extensions, String url, String value) {
+        if (isBlank(value)) {
+            return;
+        }
+        Map<String, Object> extension = new LinkedHashMap<String, Object>();
+        extension.put("url", url);
+        extension.put("valueString", value);
+        extensions.add(extension);
+    }
+
     private Object resolveInsurancePolicy(PatientDispensingRequest request) {
         Object policy = resolveInsurancePolicyFromPatientBill(request);
+        if (policy != null) {
+            return policy;
+        }
+        policy = resolveInsurancePolicyFromLatestRegistration(request == null ? null : request.getPatient());
         if (policy != null) {
             return policy;
         }
@@ -262,6 +338,89 @@ public class HieMedicationPayloadBuilder {
         }
     }
 
+    private Object resolveInsurancePolicyFromLatestRegistration(Patient patient) {
+        if (patient == null) {
+            return null;
+        }
+        String conceptRef = Context.getAdministrationService().getGlobalProperty("registration.insuranceNumberConcept");
+        if (isBlank(conceptRef)) {
+            return null;
+        }
+        try {
+            Concept insuranceNumberConcept = resolveConcept(conceptRef);
+            if (insuranceNumberConcept == null) {
+                return null;
+            }
+            List<Obs> observations = Context.getObsService().getObservationsByPersonAndConcept(patient, insuranceNumberConcept);
+            Obs latestInsuranceObs = latestNonVoidedObservation(observations);
+            String insuranceCardNumber = latestInsuranceObs == null ? null : latestInsuranceObs.getValueText();
+            if (isBlank(insuranceCardNumber)) {
+                return null;
+            }
+            Class<?> billingServiceClass = Context.loadClass("org.openmrs.module.mohbilling.service.BillingService");
+            Object billingService = Context.getService(billingServiceClass);
+            if (billingService == null) {
+                return null;
+            }
+            return billingServiceClass.getMethod("getInsurancePolicyByCardNo", String.class)
+                    .invoke(billingService, insuranceCardNumber);
+        }
+        catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Concept resolveConcept(String conceptRef) {
+        if (isBlank(conceptRef)) {
+            return null;
+        }
+        String ref = conceptRef.trim();
+        Concept concept = Context.getConceptService().getConceptByUuid(ref);
+        if (concept != null) {
+            return concept;
+        }
+        try {
+            concept = Context.getConceptService().getConcept(Integer.valueOf(ref));
+            if (concept != null) {
+                return concept;
+            }
+        }
+        catch (NumberFormatException ignored) {
+        }
+        return Context.getConceptService().getConceptByName(ref);
+    }
+
+    private Obs latestNonVoidedObservation(List<Obs> observations) {
+        if (observations == null || observations.isEmpty()) {
+            return null;
+        }
+        Obs latest = null;
+        for (Obs observation : observations) {
+            if (observation == null || Boolean.TRUE.equals(observation.getVoided())) {
+                continue;
+            }
+            if (latest == null || compareObservationDate(observation, latest) > 0) {
+                latest = observation;
+            }
+        }
+        return latest;
+    }
+
+    private int compareObservationDate(Obs left, Obs right) {
+        Date leftDate = left.getObsDatetime() == null ? left.getDateCreated() : left.getObsDatetime();
+        Date rightDate = right.getObsDatetime() == null ? right.getDateCreated() : right.getObsDatetime();
+        if (leftDate == null && rightDate == null) {
+            return 0;
+        }
+        if (leftDate == null) {
+            return -1;
+        }
+        if (rightDate == null) {
+            return 1;
+        }
+        return leftDate.compareTo(rightDate);
+    }
+
     private Object resolveInsurancePolicyFromPatient(Patient patient) {
         if (patient == null) {
             return null;
@@ -292,29 +451,40 @@ public class HieMedicationPayloadBuilder {
     }
 
     private Map<String, Object> encounterReference(Encounter encounter) {
-        if (encounter == null) {
+        Encounter managedEncounter = resolveManagedEncounter(encounter);
+        if (managedEncounter == null) {
             return null;
         }
         Map<String, Object> reference = new LinkedHashMap<String, Object>();
-        reference.put("reference", "Encounter/" + blankToDefault(encounter.getUuid(), String.valueOf(encounter.getEncounterId())));
+        reference.put("reference", "Encounter/" + blankToDefault(managedEncounter.getUuid(), String.valueOf(managedEncounter.getEncounterId())));
         reference.put("type", "Encounter");
         Map<String, Object> identifier = new LinkedHashMap<String, Object>();
-        identifier.put("value", blankToDefault(encounter.getUuid(), String.valueOf(encounter.getEncounterId())));
+        identifier.put("value", blankToDefault(managedEncounter.getUuid(), String.valueOf(managedEncounter.getEncounterId())));
         reference.put("identifier", identifier);
-        reference.put("display", encounter.getEncounterType() == null ? "Encounter" : encounter.getEncounterType().getName());
+        reference.put("display", managedEncounter.getEncounterType() == null ? "Encounter" : managedEncounter.getEncounterType().getName());
         return reference;
     }
 
     private Map<String, Object> patientReference(Patient patient, String patientIdentifierTypeUuid) {
-        String referenceValue = resolvePatientReference(patient, patientIdentifierTypeUuid);
+        Patient managedPatient = resolveManagedPatient(patient);
+        String referenceValue = resolvePatientReference(managedPatient, patientIdentifierTypeUuid);
         Map<String, Object> subject = new LinkedHashMap<String, Object>();
         subject.put("reference", "Patient/" + referenceValue);
         subject.put("type", "Patient");
         Map<String, Object> identifier = new LinkedHashMap<String, Object>();
         identifier.put("value", referenceValue);
         subject.put("identifier", identifier);
-        if (patient != null) {
-            subject.put("display", patient.getPersonName() == null ? patient.getFamilyName() : patient.getPersonName().getFullName());
+        if (managedPatient != null) {
+            subject.put("display", patientDisplay(managedPatient));
+        }
+        return subject;
+    }
+
+    private Map<String, Object> medicationRequestSubjectReference(Patient patient, String patientIdentifierTypeUuid) {
+        Patient managedPatient = resolveManagedPatient(patient);
+        Map<String, Object> subject = reference("Patient/" + resolvePatientReference(managedPatient, patientIdentifierTypeUuid));
+        if (managedPatient != null) {
+            subject.put("display", patientDisplay(managedPatient));
         }
         return subject;
     }
@@ -448,16 +618,17 @@ public class HieMedicationPayloadBuilder {
     }
 
     private List<Map<String, Object>> dosageInstruction(DrugOrder order) {
-        if (order == null) {
+        DrugOrder managedOrder = resolveManagedDrugOrder(order);
+        if (managedOrder == null) {
             return Collections.emptyList();
         }
         Map<String, Object> instruction = new LinkedHashMap<String, Object>();
-        instruction.put("text", blankToDefault(order.getDosingInstructions(), order.getInstructions()));
-        Map<String, Object> timing = timing(order.getFrequency());
+        instruction.put("text", blankToDefault(managedOrder.getDosingInstructions(), managedOrder.getInstructions()));
+        Map<String, Object> timing = timing(managedOrder.getFrequency());
         if (!timing.isEmpty()) {
             instruction.put("timing", timing);
         }
-        String routeDisplay = order.getRoute() == null ? null : order.getRoute().getDisplayString();
+        String routeDisplay = managedOrder.getRoute() == null ? null : managedOrder.getRoute().getDisplayString();
         if (!isBlank(routeDisplay)) {
             Map<String, Object> coding = new LinkedHashMap<String, Object>();
             coding.put("system", "http://terminology.hl7.org/CodeSystem/route-codes");
@@ -467,11 +638,11 @@ public class HieMedicationPayloadBuilder {
             route.put("coding", Collections.singletonList(coding));
             instruction.put("route", route);
         }
-        if (order.getDose() != null) {
+        if (managedOrder.getDose() != null) {
             Map<String, Object> doseQuantity = new LinkedHashMap<String, Object>();
-            doseQuantity.put("value", order.getDose());
-            if (order.getDoseUnits() != null) {
-                String units = order.getDoseUnits().getDisplayString();
+            doseQuantity.put("value", managedOrder.getDose());
+            if (managedOrder.getDoseUnits() != null) {
+                String units = managedOrder.getDoseUnits().getDisplayString();
                 doseQuantity.put("unit", units);
                 doseQuantity.put("system", "http://unitsofmeasure.org");
                 doseQuantity.put("code", units);
@@ -541,30 +712,107 @@ public class HieMedicationPayloadBuilder {
         for (PatientDispensingRequestLine requestLine : request.getLines()) {
             if (requestLine != null && requestLine.getItem() != null && requestLine.getOrder() != null
                     && itemId != null && itemId.equals(requestLine.getItem().getItemId())) {
-                return requestLine.getOrder();
+                return resolveManagedDrugOrder(requestLine.getOrder());
             }
         }
         return null;
     }
 
+    private DrugOrder resolveManagedDrugOrder(DrugOrder order) {
+        if (order == null) {
+            return null;
+        }
+        try {
+            if (order.getOrderId() != null) {
+                org.openmrs.Order managedOrder = Context.getOrderService().getOrder(order.getOrderId());
+                if (managedOrder instanceof DrugOrder) {
+                    return (DrugOrder) managedOrder;
+                }
+            }
+            if (!isBlank(order.getUuid())) {
+                org.openmrs.Order managedOrder = Context.getOrderService().getOrderByUuid(order.getUuid());
+                if (managedOrder instanceof DrugOrder) {
+                    return (DrugOrder) managedOrder;
+                }
+            }
+        }
+        catch (Exception ignored) {
+        }
+        return order;
+    }
+
     private String resolvePatientReference(Patient patient, String patientIdentifierTypeUuid) {
-        if (patient == null) {
+        Patient managedPatient = resolveManagedPatient(patient);
+        if (managedPatient == null) {
             return "unknown";
         }
         if (!isBlank(patientIdentifierTypeUuid)) {
             PatientIdentifierType identifierType = Context.getPatientService().getPatientIdentifierTypeByUuid(patientIdentifierTypeUuid);
             if (identifierType != null) {
-                PatientIdentifier identifier = patient.getPatientIdentifier(identifierType);
+                PatientIdentifier identifier = managedPatient.getPatientIdentifier(identifierType);
                 if (identifier != null && !isBlank(identifier.getIdentifier())) {
                     return identifier.getIdentifier();
                 }
             }
         }
-        PatientIdentifier identifier = patient.getPatientIdentifier();
+        PatientIdentifier identifier = managedPatient.getPatientIdentifier();
         if (identifier != null && !isBlank(identifier.getIdentifier())) {
             return identifier.getIdentifier();
         }
-        return blankToDefault(patient.getUuid(), String.valueOf(patient.getPatientId()));
+        return blankToDefault(managedPatient.getUuid(), String.valueOf(managedPatient.getPatientId()));
+    }
+
+    private Patient resolveManagedPatient(Patient patient) {
+        if (patient == null) {
+            return null;
+        }
+        try {
+            if (patient.getPatientId() != null) {
+                Patient managedPatient = Context.getPatientService().getPatient(patient.getPatientId());
+                if (managedPatient != null) {
+                    return managedPatient;
+                }
+            }
+            if (!isBlank(patient.getUuid())) {
+                Patient managedPatient = Context.getPatientService().getPatientByUuid(patient.getUuid());
+                if (managedPatient != null) {
+                    return managedPatient;
+                }
+            }
+        }
+        catch (Exception ignored) {
+        }
+        return patient;
+    }
+
+    private Encounter resolveManagedEncounter(Encounter encounter) {
+        if (encounter == null) {
+            return null;
+        }
+        try {
+            if (encounter.getEncounterId() != null) {
+                Encounter managedEncounter = Context.getEncounterService().getEncounter(encounter.getEncounterId());
+                if (managedEncounter != null) {
+                    return managedEncounter;
+                }
+            }
+            if (!isBlank(encounter.getUuid())) {
+                Encounter managedEncounter = Context.getEncounterService().getEncounterByUuid(encounter.getUuid());
+                if (managedEncounter != null) {
+                    return managedEncounter;
+                }
+            }
+        }
+        catch (Exception ignored) {
+        }
+        return encounter;
+    }
+
+    private String patientDisplay(Patient patient) {
+        if (patient == null) {
+            return "";
+        }
+        return patient.getPersonName() == null ? patient.getFamilyName() : patient.getPersonName().getFullName();
     }
 
     private Map<String, Object> reference(String value) {
@@ -578,6 +826,13 @@ public class HieMedicationPayloadBuilder {
         actor.put("reference", "Practitioner/" + providerReference(provider));
         actor.put("display", provider == null ? "" : provider.getName());
         return actor;
+    }
+
+    private Map<String, Object> practitionerReference(Provider provider) {
+        Map<String, Object> requester = new LinkedHashMap<String, Object>();
+        requester.put("reference", "Practitioner/" + providerReference(provider));
+        requester.put("display", provider == null ? "" : provider.getName());
+        return requester;
     }
 
     private String providerReference(Provider provider) {
@@ -620,13 +875,14 @@ public class HieMedicationPayloadBuilder {
     }
 
     private String resolvePatientLastName(Patient patient) {
-        if (patient == null) {
+        Patient managedPatient = resolveManagedPatient(patient);
+        if (managedPatient == null) {
             return "unknown";
         }
-        if (patient.getPersonName() != null && !isBlank(patient.getPersonName().getFamilyName())) {
-            return patient.getPersonName().getFamilyName();
+        if (managedPatient.getPersonName() != null && !isBlank(managedPatient.getPersonName().getFamilyName())) {
+            return managedPatient.getPersonName().getFamilyName();
         }
-        return isBlank(patient.getFamilyName()) ? "unknown" : patient.getFamilyName();
+        return isBlank(managedPatient.getFamilyName()) ? "unknown" : managedPatient.getFamilyName();
     }
 
     private Object invokeNoArg(Object target, String methodName) {

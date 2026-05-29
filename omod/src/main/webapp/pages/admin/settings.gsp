@@ -27,6 +27,28 @@
         <input type="text" name="smsPhonePersonAttributeTypeUuid" value="${ smsPhonePersonAttributeTypeUuid ?: '' }" size="80"/>
         <br/><span style="color:#666;font-size:12px;">SMS is sent as Intouch form parameters: from, to, content, username, password, coding, dlr-url, dlr-level.</span>
     </p>
+    <h3>HIE Retry Queue Settings</h3>
+    <p><label><input type="checkbox" name="hieRetrySchedulerEnabled" value="true" ${ hieRetrySchedulerEnabled != 'false' ? 'checked="checked"' : '' }/> Enable scheduled HIE retry</label></p>
+    <p>
+        <label>Retry Interval Seconds</label><br/>
+        <input type="number" name="hieRetrySchedulerIntervalSeconds" value="${ hieRetrySchedulerIntervalSeconds ?: '1800' }" min="60"/>
+        <br/><span style="color:#666;font-size:12px;">1800 seconds is 30 minutes. 3600 seconds is 60 minutes. Restart the module/server for scheduler timing changes to be reloaded.</span>
+    </p>
+    <p>
+        <label>Retry Batch Size</label><br/>
+        <input type="number" name="hieRetryBatchSize" value="${ hieRetryBatchSize ?: '50' }" min="1"/>
+    </p>
+    <h3>SMS Retry Queue Settings</h3>
+    <p><label><input type="checkbox" name="smsRetrySchedulerEnabled" value="true" ${ smsRetrySchedulerEnabled != 'false' ? 'checked="checked"' : '' }/> Enable scheduled SMS retry</label></p>
+    <p>
+        <label>Retry Interval Seconds</label><br/>
+        <input type="number" name="smsRetrySchedulerIntervalSeconds" value="${ smsRetrySchedulerIntervalSeconds ?: '1800' }" min="60"/>
+        <br/><span style="color:#666;font-size:12px;">1800 seconds is 30 minutes. 3600 seconds is 60 minutes. Restart the module/server for scheduler timing changes to be reloaded.</span>
+    </p>
+    <p>
+        <label>Retry Batch Size</label><br/>
+        <input type="number" name="smsRetryBatchSize" value="${ smsRetryBatchSize ?: '50' }" min="1"/>
+    </p>
     <p>
         <label>Prescription Frequency Concept Set</label><br/>
         <input type="text" name="prescriptionFrequencyConceptSet" value="${ prescriptionFrequencyConceptSet ?: '' }" placeholder="Concept UUID, ID, or exact name"/>
