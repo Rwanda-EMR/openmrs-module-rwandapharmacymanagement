@@ -1,5 +1,11 @@
 <%
     ui.decorateWith("rwandapharmacymanagement", "simplePage")
+    def exportParams = [itemId: selectedItemId, startDate: startDate, endDate: endDate]
+    if (selectedPharmacyLocationId) {
+        exportParams.pharmacyLocationId = selectedPharmacyLocationId
+    }
+    def exportExcelUrl = ui.pageLink("rwandapharmacymanagement", "report/itemMovementExport", exportParams + [format: "excel"])
+    def exportPdfUrl = ui.pageLink("rwandapharmacymanagement", "report/itemMovementExport", exportParams + [format: "pdf"])
 %>
 <h2>Item Movement Report</h2>
 
@@ -37,9 +43,9 @@
 
 <% if (selectedItem) { %>
 <p>
-    <a href="/${ contextPath }/module/rwandapharmacymanagement/reports/itemMovementExport?format=excel&itemId=${ selectedItemId }&startDate=${ startDate }&endDate=${ endDate }${ selectedPharmacyLocationId ? '&pharmacyLocationId=' + selectedPharmacyLocationId : '' }">Export Excel</a>
+    <a href="${ exportExcelUrl }">Export Excel</a>
     |
-    <a href="/${ contextPath }/module/rwandapharmacymanagement/reports/itemMovementExport?format=pdf&itemId=${ selectedItemId }&startDate=${ startDate }&endDate=${ endDate }${ selectedPharmacyLocationId ? '&pharmacyLocationId=' + selectedPharmacyLocationId : '' }">Export PDF</a>
+    <a href="${ exportPdfUrl }">Export PDF</a>
 </p>
 <% } %>
 

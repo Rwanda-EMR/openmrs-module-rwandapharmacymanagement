@@ -1,5 +1,11 @@
 <%
     ui.decorateWith("rwandapharmacymanagement", "simplePage")
+    def exportParams = [startDate: startDate, endDate: endDate]
+    if (selectedPharmacyLocationId) {
+        exportParams.pharmacyLocationId = selectedPharmacyLocationId
+    }
+    def exportExcelUrl = ui.pageLink("rwandapharmacymanagement", "report/dispensingReportExport", exportParams + [format: "excel"])
+    def exportPdfUrl = ui.pageLink("rwandapharmacymanagement", "report/dispensingReportExport", exportParams + [format: "pdf"])
 %>
 <h2>Dispensing Report</h2>
 
@@ -25,9 +31,9 @@
 </form>
 
 <p>
-    <a href="/${ contextPath }/module/rwandapharmacymanagement/report/dispensingReportExport.page?format=excel&startDate=${ startDate }&endDate=${ endDate }${ selectedPharmacyLocationId ? '&pharmacyLocationId=' + selectedPharmacyLocationId : '' }">Export Excel</a>
+    <a href="${ exportExcelUrl }">Export Excel</a>
     |
-    <a href="/${ contextPath }/module/rwandapharmacymanagement/report/dispensingReportExport.page?format=pdf&startDate=${ startDate }&endDate=${ endDate }${ selectedPharmacyLocationId ? '&pharmacyLocationId=' + selectedPharmacyLocationId : '' }">Export PDF</a>
+    <a href="${ exportPdfUrl }">Export PDF</a>
 </p>
 
 <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0;">

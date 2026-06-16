@@ -1,5 +1,14 @@
 <%
     ui.decorateWith("rwandapharmacymanagement", "simplePage")
+    def exportParams = [:]
+    if (selectedMaterialType) {
+        exportParams.materialType = selectedMaterialType
+    }
+    if (selectedProgram) {
+        exportParams.program = selectedProgram
+    }
+    def exportExcelUrl = ui.pageLink("rwandapharmacymanagement", "report/overallStockExport", exportParams + [format: "excel"])
+    def exportPdfUrl = ui.pageLink("rwandapharmacymanagement", "report/overallStockExport", exportParams + [format: "pdf"])
 %>
 <h2>Overall Hospital Pharmacy Report</h2>
 <form method="get" style="margin-bottom:12px;">
@@ -20,9 +29,9 @@
     <button type="submit">Filter</button>
 </form>
 <p>
-    <a href="${ ui.pageLink('rwandapharmacymanagement', 'report/overallStockExport', [format: 'excel', materialType: selectedMaterialType, program: selectedProgram]) }">Export Excel</a>
+    <a href="${ exportExcelUrl }">Export Excel</a>
     |
-    <a href="${ ui.pageLink('rwandapharmacymanagement', 'report/overallStockExport', [format: 'pdf', materialType: selectedMaterialType, program: selectedProgram]) }">Export PDF</a>
+    <a href="${ exportPdfUrl }">Export PDF</a>
 </p>
 <p><strong>Total quantity:</strong> ${ totalQuantity }</p>
 <p><strong>Total cost value:</strong> ${ totalCostValue }</p>

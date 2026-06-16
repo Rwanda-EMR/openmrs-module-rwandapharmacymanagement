@@ -7,8 +7,6 @@ import org.openmrs.module.rwandapharmacymanagement.reporting.StockReportExcelRen
 import org.openmrs.module.rwandapharmacymanagement.reporting.StockReportPdfRenderer;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import javax.servlet.http.HttpServletResponse;
@@ -23,10 +21,8 @@ import java.util.Date;
 import java.util.List;
 
 @Controller
-@RequestMapping("/module/rwandapharmacymanagement/reports/itemMovementExport")
 public class ItemMovementExportPageController {
 
-    @RequestMapping(method = RequestMethod.GET)
     public void get(@SpringBean("inventoryService") InventoryService inventoryService,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @RequestParam("format") String format,

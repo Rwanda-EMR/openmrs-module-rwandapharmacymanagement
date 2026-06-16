@@ -4,6 +4,7 @@ import com.itextpdf.text.BaseColor;
 import com.itextpdf.text.Document;
 import com.itextpdf.text.DocumentException;
 import com.itextpdf.text.Font;
+import com.itextpdf.text.Rectangle;
 import com.itextpdf.text.PageSize;
 import com.itextpdf.text.Paragraph;
 import com.itextpdf.text.Phrase;
@@ -26,23 +27,32 @@ public final class StockReportPdfRenderer {
     public static byte[] render(String title, List<String> headers, List<List<String>> rows) {
         try {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            Document document = new Document(PageSize.A4.rotate(), 24, 24, 24, 24);
+            int columnCount = headers == null ? 0 : headers.size();
+            Rectangle pageSize = columnCount > 10 ? PageSize.A3.rotate() : PageSize.A4.rotate();
+            Font bodyFont = columnCount > 10 ? new Font(Font.FontFamily.HELVETICA, 7, Font.NORMAL) : BODY_FONT;
+            Font headerFont = columnCount > 10 ? new Font(Font.FontFamily.HELVETICA, 7, Font.BOLD, BaseColor.WHITE) : HEADER_FONT;
+            Document document = new Document(pageSize, 18, 18, 18, 18);
             PdfWriter.getInstance(document, outputStream);
             document.open();
             document.add(new Paragraph(title, TITLE_FONT));
             document.add(new Paragraph(" "));
-            PdfPTable table = new PdfPTable(headers.size());
+            PdfPTable table = new PdfPTable(columnCount);
             table.setWidthPercentage(100);
+            table.setSplitLate(false);
+            table.setSplitRows(true);
             for (String header : headers) {
-                PdfPCell cell = new PdfPCell(new Phrase(header, HEADER_FONT));
+                PdfPCell cell = new PdfPCell(new Phrase(header, headerFont));
                 cell.setBackgroundColor(new BaseColor(31, 95, 153));
-                cell.setPadding(6f);
+                cell.setPadding(4f);
+                cell.setNoWrap(false);
                 table.addCell(cell);
             }
             for (List<String> row : rows) {
-                for (String value : row) {
-                    PdfPCell cell = new PdfPCell(new Phrase(value == null ? "" : value, BODY_FONT));
-                    cell.setPadding(5f);
+                for (int i = 0; i < columnCount; i++) {
+                    String value = row == null || row.size() <= i ? "" : row.get(i);
+                    PdfPCell cell = new PdfPCell(new Phrase(value == null ? "" : value, bodyFont));
+                    cell.setPadding(3f);
+                    cell.setNoWrap(false);
                     table.addCell(cell);
                 }
             }

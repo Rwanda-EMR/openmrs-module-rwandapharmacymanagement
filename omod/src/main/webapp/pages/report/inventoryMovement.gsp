@@ -1,5 +1,17 @@
 <%
     ui.decorateWith("rwandapharmacymanagement", "simplePage")
+    def exportParams = [startDate: startDate, endDate: endDate, mode: mode]
+    if (selectedPharmacyLocationId) {
+        exportParams.pharmacyLocationId = selectedPharmacyLocationId
+    }
+    if (selectedMaterialType) {
+        exportParams.materialType = selectedMaterialType
+    }
+    if (selectedProgram) {
+        exportParams.program = selectedProgram
+    }
+    def exportExcelUrl = ui.pageLink("rwandapharmacymanagement", "report/inventoryMovementExport", exportParams + [format: "excel"])
+    def exportPdfUrl = ui.pageLink("rwandapharmacymanagement", "report/inventoryMovementExport", exportParams + [format: "pdf"])
 %>
 <h2>Inventory Movement Report</h2>
 <form method="get" style="margin-bottom:12px;display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
@@ -49,9 +61,9 @@
 </form>
 
 <p>
-    <a href="${ ui.pageLink('rwandapharmacymanagement', 'report/inventoryMovementExport', [format: 'excel', startDate: startDate, endDate: endDate, pharmacyLocationId: selectedPharmacyLocationId, materialType: selectedMaterialType, program: selectedProgram, mode: mode]) }">Export Excel</a>
+    <a href="${ exportExcelUrl }">Export Excel</a>
     |
-    <a href="${ ui.pageLink('rwandapharmacymanagement', 'report/inventoryMovementExport', [format: 'pdf', startDate: startDate, endDate: endDate, pharmacyLocationId: selectedPharmacyLocationId, materialType: selectedMaterialType, program: selectedProgram, mode: mode]) }">Export PDF</a>
+    <a href="${ exportPdfUrl }">Export PDF</a>
 </p>
 
 <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0;">

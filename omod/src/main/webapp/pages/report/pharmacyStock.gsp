@@ -1,5 +1,17 @@
 <%
     ui.decorateWith("rwandapharmacymanagement", "simplePage")
+    def exportParams = [:]
+    if (selectedPharmacy) {
+        exportParams.pharmacyLocationId = selectedPharmacy.pharmacyLocationId
+    }
+    if (selectedMaterialType) {
+        exportParams.materialType = selectedMaterialType
+    }
+    if (selectedProgram) {
+        exportParams.program = selectedProgram
+    }
+    def exportExcelUrl = ui.pageLink("rwandapharmacymanagement", "report/pharmacyStockExport", exportParams + [format: "excel"])
+    def exportPdfUrl = ui.pageLink("rwandapharmacymanagement", "report/pharmacyStockExport", exportParams + [format: "pdf"])
 %>
 <h2>Individual Pharmacy Report</h2>
 <form method="get" style="margin-bottom:12px;">
@@ -26,9 +38,9 @@
     <button type="submit">Load report</button>
 </form>
 <p>
-    <a href="${ ui.pageLink('rwandapharmacymanagement', 'report/pharmacyStockExport', [format: 'excel', pharmacyLocationId: selectedPharmacy?.pharmacyLocationId, materialType: selectedMaterialType, program: selectedProgram]) }">Export Excel</a>
+    <a href="${ exportExcelUrl }">Export Excel</a>
     |
-    <a href="${ ui.pageLink('rwandapharmacymanagement', 'report/pharmacyStockExport', [format: 'pdf', pharmacyLocationId: selectedPharmacy?.pharmacyLocationId, materialType: selectedMaterialType, program: selectedProgram]) }">Export PDF</a>
+    <a href="${ exportPdfUrl }">Export PDF</a>
 </p>
 <p><strong>Pharmacy:</strong> ${ selectedPharmacy?.name ?: '' }</p>
 <p><strong>Total quantity:</strong> ${ totalQuantity }</p>
