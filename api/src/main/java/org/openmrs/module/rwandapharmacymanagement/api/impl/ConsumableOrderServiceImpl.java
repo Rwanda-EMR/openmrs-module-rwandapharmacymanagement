@@ -38,6 +38,7 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
 
     private PharmacyService pharmacyService;
     private DispensingService dispensingService;
+    private InventoryService inventoryService;
 
     public void setPharmacyService(PharmacyService pharmacyService) {
         this.pharmacyService = pharmacyService;
@@ -45,6 +46,10 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
 
     public void setDispensingService(DispensingService dispensingService) {
         this.dispensingService = dispensingService;
+    }
+
+    public void setInventoryService(InventoryService inventoryService) {
+        this.inventoryService = inventoryService;
     }
 
     @Override
@@ -146,7 +151,8 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
             preparedLine.item = item;
             preparedLine.quantity = quantity;
             preparedLine.unitOfMeasure = normalizeUnitOfMeasure(command.getUnitOfMeasure());
-            preparedLine.billingMapped = hasBillingMapping(preparedLine);
+            preparedLine.availableInHospitalStock = isAvailableInHospitalStock(item);
+            preparedLine.billingMapped = preparedLine.availableInHospitalStock && hasBillingMapping(preparedLine);
             preparedLines.add(preparedLine);
         }
         return preparedLines;
@@ -259,6 +265,29 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
         catch (Exception ignored) {
             return false;
         }
+    }
+
+    private boolean isAvailableInHospitalStock(Item item) {
+        if (inventoryService == null || item == null || item.getItemId() == null) {
+            return false;
+        }
+        List<InventoryBalance> balances = inventoryService.getInventoryForPharmacy(null);
+        if (balances == null) {
+            return false;
+        }
+        for (InventoryBalance balance : balances) {
+            if (balance == null || balance.getItem() == null || balance.getItem().getItemId() == null
+                    || balance.getPharmacyLocation() == null
+                    || !Boolean.TRUE.equals(balance.getPharmacyLocation().getActive())
+                    || balance.getQuantityOnHand() == null
+                    || balance.getQuantityOnHand().compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            if (item.getItemId().equals(balance.getItem().getItemId())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Object resolveBillableService(Class<?> billingServiceClass, Object billingService, PreparedLine line) throws Exception {
@@ -419,6 +448,7 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
         private Item item;
         private BigDecimal quantity;
         private String unitOfMeasure;
+        private boolean availableInHospitalStock;
         private boolean billingMapped;
     }
 

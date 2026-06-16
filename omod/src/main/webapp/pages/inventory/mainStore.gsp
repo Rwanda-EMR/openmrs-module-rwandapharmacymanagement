@@ -1,6 +1,7 @@
 <%
     ui.decorateWith("rwandapharmacymanagement", "simplePage")
     def today = new Date()
+    def canAdjustStock = context.hasPrivilege("Task: rwandapharmacymanagement.adjustStock")
     def stockParams = { extra ->
         def params = [page: stockPage, pageSize: stockPageSize]
         if (q) {
@@ -469,7 +470,7 @@
         <div class="stock-panel-actions">
             <a class="stock-btn stock-btn-primary" href="${ ui.pageLink("rwandapharmacymanagement", "inventory/mainStore", [cart: 'true']) }">Order cart<% if (cartCount) { %><span class="stock-cart-badge">${ cartCount }</span><% } %></a>
             <a class="stock-btn stock-btn-success" href="${ ui.pageLink("rwandapharmacymanagement", "supplier/deliveryReceive") }">Receive delivery</a>
-            <a class="stock-btn" href="${ ui.pageLink("rwandapharmacymanagement", "admin/reconciliation") }">Reconcile</a>
+            <% if (canAdjustStock) { %><a class="stock-btn" href="${ ui.pageLink("rwandapharmacymanagement", "admin/reconciliation", [pharmacyLocationId: mainStore?.pharmacyLocationId]) }">Reconcile</a><% } %>
         </div>
     </div>
     <form class="stock-search-form" method="get">
@@ -517,7 +518,7 @@
             <td><span class="status-pill ${ statusClass }">${ statusText }</span></td>
             <td>
                 <div class="row-actions">
-                    <a class="stock-btn" href="${ ui.pageLink("rwandapharmacymanagement", "admin/reconciliation") }">Adjust</a>
+                    <% if (canAdjustStock) { %><a class="stock-btn" href="${ ui.pageLink("rwandapharmacymanagement", "admin/reconciliation", [pharmacyLocationId: mainStore?.pharmacyLocationId]) }">Adjust</a><% } %>
                     <% if (cartItemKeyByItemId?.containsKey(item?.itemId)) { def matchingRow = cartRows.find { row -> row.itemId == item?.itemId } %>
                     <a class="stock-btn stock-btn-added" href="${ ui.pageLink("rwandapharmacymanagement", "inventory/mainStore", [cart: 'true']) }">&#10003; In cart (${ matchingRow?.quantity ?: '' })</a>
                     <% } else { %>

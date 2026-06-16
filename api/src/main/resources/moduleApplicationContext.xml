@@ -96,6 +96,7 @@
     <bean id="prescriptionServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.PrescriptionServiceImpl">
         <property name="pharmacyService" ref="pharmacyService"/>
         <property name="dispensingService" ref="dispensingService"/>
+        <property name="inventoryService" ref="inventoryService"/>
         <property name="prescriptionCommunicationService" ref="prescriptionCommunicationService"/>
         <property name="transactionManager" ref="transactionManager"/>
     </bean>
@@ -103,6 +104,7 @@
     <bean id="consumableOrderServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.ConsumableOrderServiceImpl">
         <property name="pharmacyService" ref="pharmacyService"/>
         <property name="dispensingService" ref="dispensingService"/>
+        <property name="inventoryService" ref="inventoryService"/>
     </bean>
 
     <bean id="labSupplyServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.LabSupplyServiceImpl">

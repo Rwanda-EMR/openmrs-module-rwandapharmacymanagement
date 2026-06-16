@@ -7,6 +7,10 @@
     def remainingMap = binding.hasVariable("remainingQuantityByRequestLineId") && remainingQuantityByRequestLineId ? remainingQuantityByRequestLineId : [:]
     def viewOnlyMode = binding.hasVariable("viewOnly") && viewOnly ? true : false
     def consumableRequest = selectedRequest?.requestType?.toString() == 'CONSUMABLE'
+    def userName = { user -> user?.personName?.toString() ?: user?.username ?: '' }
+    def requesterName = { request ->
+        request?.orderingProvider?.name ?: userName(request?.creator)
+    }
 %>
 <style type="text/css">
     .serve-page { display:grid; gap:14px; }
@@ -83,7 +87,7 @@
                             <option value="">Select request to serve</option>
                             <% requests.each { request -> %>
                             <option value="${ request.patientDispensingRequestId }" ${ selectedRequest?.patientDispensingRequestId == request.patientDispensingRequestId ? 'selected="selected"' : '' }>
-                                ${ patientIdMap[request.patientDispensingRequestId] ?: '' } - ${ request.patient?.personName ?: '' }
+                                ${ patientIdMap[request.patientDispensingRequestId] ?: '' } - ${ request.patient?.personName ?: '' }${ requesterName(request) ? ' - requested by ' + requesterName(request) : '' }
                             </option>
                             <% } %>
                         </select>
@@ -115,10 +119,15 @@
                     <div class="serve-meta-label">Payment</div>
                     <div class="serve-meta-value"><span class="serve-pill" style="${ selectedRequest?.paymentConfirmed ? '' : 'background:#f59e0b;' }">${ selectedRequest?.paymentConfirmed ? 'Paid' : 'Not paid' }</span></div>
                 </div>
+                <div class="serve-meta-card">
+                    <div class="serve-meta-label">Requested by</div>
+                    <div class="serve-meta-value">${ requesterName(selectedRequest) ?: '' }</div>
+                </div>
             </div>
 
             <form method="post" id="serve-request-form" style="margin-top:14px;">
                 <input type="hidden" name="requestId" value="${ selectedRequest.patientDispensingRequestId }"/>
+                <% if (viewOnlyMode) { %><input type="hidden" name="viewOnly" value="true"/><% } %>
                 <% selectedRequest.lines?.each { line ->
                     def details = prescriptionMap[line.patientDispensingRequestLineId] ?: [:]
                     def options = batchMap[line.patientDispensingRequestLineId] ?: []
@@ -157,7 +166,7 @@
                         <div class="serve-complete">${ lineUnavailable ? 'This item was marked as not available in all pharmacies and has been closed from the queue.' : 'This item has already been fully served and cannot be dispensed again.' }</div>
                         <% } else if (!options) { %>
                         <div class="serve-empty">No available stock batches were found for this ${ consumableRequest ? 'item' : 'drug' } at ${ activePharmacy.name }.</div>
-                        <% if (sourceHint) { %><div class="serve-source-hint">Request this item from <strong>${ sourceHint }</strong>.</div><% } else if (!viewOnlyMode) { %>
+                        <% if (sourceHint) { %><div class="serve-source-hint">Request this item from <strong>${ sourceHint }</strong>.</div><% } else { %>
                         <div class="serve-source-hint" style="border-color:#f0ad4e;background:#fff8e8;color:#8a6d3b;">
                             This drug is not available in any pharmacy. If it cannot be obtained now, you can close it from the queue.
                         </div>
@@ -205,7 +214,7 @@
                         <div class="serve-muted" style="margin-top:8px;">Batches are listed in FIFO order based on expiry date. Adjust quantities if you need to split dispensing across more than one batch.</div>
                         <% if (sourceHint) { %><div class="serve-source-hint">Current pharmacy cannot fully serve this line. Request the remaining stock from <strong>${ sourceHint }</strong>.</div><% } %>
                         <% } %>
-                        <% if (!viewOnlyMode && !lineServed) { %>
+                        <% if (!lineServed) { %>
                         <div style="margin-top:8px;">
                             <button type="submit"
                                     class="serve-btn serve-btn-secondary"

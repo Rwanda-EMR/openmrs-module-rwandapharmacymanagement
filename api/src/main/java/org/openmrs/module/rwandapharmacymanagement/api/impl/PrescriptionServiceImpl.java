@@ -24,10 +24,12 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.DispensingService;
+import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.api.PrescriptionService;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.PrescriptionLineCommand;
 import org.openmrs.module.rwandapharmacymanagement.integration.PrescriptionCommunicationService;
+import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
 import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
@@ -72,6 +74,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
     });
     private PharmacyService pharmacyService;
     private DispensingService dispensingService;
+    private InventoryService inventoryService;
     private PrescriptionCommunicationService prescriptionCommunicationService;
     private PlatformTransactionManager transactionManager;
 
@@ -81,6 +84,10 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
 
     public void setDispensingService(DispensingService dispensingService) {
         this.dispensingService = dispensingService;
+    }
+
+    public void setInventoryService(InventoryService inventoryService) {
+        this.inventoryService = inventoryService;
     }
 
     public void setPrescriptionCommunicationService(PrescriptionCommunicationService prescriptionCommunicationService) {
@@ -127,6 +134,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
 
         List<PatientDispensingRequestLine> requestLines = new ArrayList<PatientDispensingRequestLine>();
         Order firstSavedOrder = null;
+        boolean hasBillableLine = false;
         int sortWeight = 1;
         for (PrescriptionLineCommand line : lines) {
             if (line == null || line.getProductMasterItemId() == null) {
@@ -148,7 +156,9 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             requestLine.setOrder(order);
             requestLine.setItem(localItem);
             requestLine.setRequestedQuantity(requestedQuantity);
-            requestLine.setLineStatus(RequestStatus.PENDING_PAYMENT);
+            boolean billableLine = isAvailableInHospitalStock(localItem);
+            hasBillableLine = hasBillableLine || billableLine;
+            requestLine.setLineStatus(billableLine ? RequestStatus.PENDING_PAYMENT : RequestStatus.PENDING_DISPENSE);
             requestLines.add(requestLine);
         }
 
@@ -158,13 +168,18 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
 
         savedEncounter = Context.getEncounterService().saveEncounter(savedEncounter);
 
-        Integer resolvedPatientBillId = resolvePatientBillId(patient, patientBillId, requestLines, encounterDatetime);
-        Boolean paymentConfirmed = resolvedPatientBillId == null ? Boolean.FALSE : dispensingService.isPatientBillPaid(resolvedPatientBillId);
+        Integer resolvedPatientBillId = hasBillableLine
+                ? resolvePatientBillId(patient, patientBillId, requestLines, encounterDatetime) : null;
+        Boolean paymentConfirmed = hasBillableLine && resolvedPatientBillId != null
+                ? dispensingService.isPatientBillPaid(resolvedPatientBillId) : Boolean.valueOf(!hasBillableLine);
+        request.setBillable(Boolean.valueOf(hasBillableLine));
         request.setPatientBillId(resolvedPatientBillId);
         request.setPaymentConfirmed(Boolean.TRUE.equals(paymentConfirmed));
         request.setRequestStatus(Boolean.TRUE.equals(paymentConfirmed) ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
         for (PatientDispensingRequestLine requestLine : requestLines) {
-            requestLine.setLineStatus(Boolean.TRUE.equals(paymentConfirmed) ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
+            if (requestLine.getLineStatus() == RequestStatus.PENDING_PAYMENT) {
+                requestLine.setLineStatus(Boolean.TRUE.equals(paymentConfirmed) ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
+            }
         }
 
         request.setOrder(firstSavedOrder);
@@ -217,6 +232,13 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
 
         requestLine.setItem(localItem);
         requestLine.setRequestedQuantity(requestedQuantity);
+        if (!isAvailableInHospitalStock(localItem)) {
+            requestLine.setLineStatus(RequestStatus.PENDING_DISPENSE);
+        } else if (!Boolean.TRUE.equals(request.getPaymentConfirmed())) {
+            requestLine.setLineStatus(RequestStatus.PENDING_PAYMENT);
+        } else if (!isFinalStatus(requestLine.getLineStatus())) {
+            requestLine.setLineStatus(RequestStatus.PENDING_DISPENSE);
+        }
         dispensingService.saveRequest(request);
         notifyPrescriptionLineUpdatedAfterCommit(request, requestLine);
         return request;
@@ -320,6 +342,15 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
                 requestDate = persistedRequest.getEncounter().getEncounterDatetime();
             }
             Set<String> itemNames = billingLookupNames(persistedRequest);
+            if (itemNames.isEmpty()) {
+                persistedRequest.setBillable(Boolean.FALSE);
+                persistedRequest.setPaymentConfirmed(Boolean.TRUE);
+                persistedRequest.setRequestStatus(RequestStatus.PENDING_DISPENSE);
+                PatientDispensingRequest savedRequest = dispensingService.saveRequest(persistedRequest);
+                log.info("Prescription request has no available billable lines. requestId="
+                        + savedRequest.getPatientDispensingRequestId());
+                return savedRequest;
+            }
             Integer patientBillId = null;
             boolean strictBillMode = strictPaymentBillMode();
             if (persistedRequest.getPatient().getPatientId() != null) {
@@ -344,7 +375,8 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             persistedRequest.setRequestStatus(Boolean.TRUE.equals(paid) ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
             if (persistedRequest.getLines() != null) {
                 for (PatientDispensingRequestLine line : persistedRequest.getLines()) {
-                    if (line == null || isFinalStatus(line.getLineStatus())) {
+                    if (line == null || isFinalStatus(line.getLineStatus())
+                            || line.getLineStatus() != RequestStatus.PENDING_PAYMENT) {
                         continue;
                     }
                     line.setLineStatus(Boolean.TRUE.equals(paid) ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
@@ -792,6 +824,9 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             if (requestLine == null) {
                 continue;
             }
+            if (requestLine.getLineStatus() != RequestStatus.PENDING_PAYMENT) {
+                continue;
+            }
             names.addAll(requestLineNames(requestLine, requestLine.getOrder()));
             if (requestLine.getItem() != null) {
                 addRawName(names, requestLine.getItem().getName());
@@ -1160,6 +1195,29 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         return quantity.stripTrailingZeros();
     }
 
+    private boolean isAvailableInHospitalStock(org.openmrs.module.rwandapharmacymanagement.model.Item item) {
+        if (inventoryService == null || item == null || item.getItemId() == null) {
+            return false;
+        }
+        List<InventoryBalance> balances = inventoryService.getInventoryForPharmacy(null);
+        if (balances == null) {
+            return false;
+        }
+        for (InventoryBalance balance : balances) {
+            if (balance == null || balance.getItem() == null || balance.getItem().getItemId() == null
+                    || balance.getPharmacyLocation() == null
+                    || !Boolean.TRUE.equals(balance.getPharmacyLocation().getActive())
+                    || balance.getQuantityOnHand() == null
+                    || balance.getQuantityOnHand().compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            if (item.getItemId().equals(balance.getItem().getItemId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void validateProductMasterDrug(ProductMasterItem productMasterItem) {
         if (productMasterItem == null) {
             throw new IllegalArgumentException("Selected product master drug was not found");
@@ -1308,7 +1366,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
     }
 
     private OrderFrequency resolveFrequency(String frequencyName) {
-        String desired = safe(frequencyName).toLowerCase();
+        String desired = normalizeFrequencyName(frequencyName);
         if (desired.isEmpty()) {
             return null;
         }
@@ -1317,17 +1375,52 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             return null;
         }
         for (OrderFrequency frequency : frequencies) {
-            if (frequency != null && frequency.getName() != null && desired.equals(frequency.getName().trim().toLowerCase())) {
+            if (frequencyNameMatches(frequency, desired, true)) {
                 return frequency;
             }
         }
         for (OrderFrequency frequency : frequencies) {
-            if (frequency != null && frequency.getName() != null
-                    && frequency.getName().trim().toLowerCase().contains(desired)) {
+            if (frequencyNameMatches(frequency, desired, false)) {
                 return frequency;
             }
         }
         return null;
+    }
+
+    private boolean frequencyNameMatches(OrderFrequency frequency, String desired, boolean exact) {
+        if (frequency == null || desired == null || desired.isEmpty()) {
+            return false;
+        }
+        List<String> candidates = new ArrayList<String>();
+        candidates.add(frequency.getName());
+        if (frequency.getConcept() != null) {
+            candidates.add(frequency.getConcept().getDisplayString());
+            candidates.add(frequency.getConcept().getName() == null ? null : frequency.getConcept().getName().getName());
+            candidates.add(frequency.getConcept().getConceptId() == null ? null : String.valueOf(frequency.getConcept().getConceptId()));
+            if (frequency.getConcept().getNames() != null) {
+                for (ConceptName conceptName : frequency.getConcept().getNames()) {
+                    candidates.add(conceptName == null ? null : conceptName.getName());
+                }
+            }
+        }
+        for (String candidate : candidates) {
+            String normalized = normalizeFrequencyName(candidate);
+            if (normalized.isEmpty()) {
+                continue;
+            }
+            if (exact ? normalized.equals(desired) : (normalized.contains(desired) || desired.contains(normalized))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String normalizeFrequencyName(String value) {
+        return safe(value)
+                .replaceAll("\\(\\s*\\d+\\s*\\)", "")
+                .replaceAll("\\s+", " ")
+                .trim()
+                .toLowerCase(Locale.ENGLISH);
     }
 
     private Concept resolveRoute(String routeName) {

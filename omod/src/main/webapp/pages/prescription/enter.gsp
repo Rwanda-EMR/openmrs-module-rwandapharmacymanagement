@@ -473,6 +473,7 @@
 <script type="text/javascript">
     var prescriptionDraft = [];
     var pendingVoidRequest = null;
+    var rxQuantityManuallyEdited = false;
 
     function byId(id) { return document.getElementById(id); }
 
@@ -480,33 +481,48 @@
         return value ? value.toString().trim() : '';
     }
 
+    function normalizeFrequencyLabel(label) {
+        return normalizeText(label)
+            .replace(new RegExp('\\(\\s*\\d+\\s*\\)', 'g'), '')
+            .replace(new RegExp('\\s+', 'g'), ' ')
+            .trim()
+            .toLowerCase();
+    }
+
     function parseNumericToken(label) {
-        var text = normalizeText(label).toLowerCase();
+        var text = normalizeFrequencyLabel(label);
         var numberWords = {
             'once': 1, 'one': 1, 'twice': 2, 'two': 2, 'thrice': 3, 'three': 3,
             'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9,
             'ten': 10, 'eleven': 11, 'twelve': 12
         };
+        for (var key in numberWords) {
+            if (numberWords.hasOwnProperty(key) && text.match(new RegExp('\\b' + key + '\\b'))) {
+                return numberWords[key];
+            }
+        }
         var digitMatch = text.match(new RegExp('\\b(\\d+)\\b'));
         if (digitMatch) {
             return parseInt(digitMatch[1], 10);
-        }
-        for (var key in numberWords) {
-            if (numberWords.hasOwnProperty(key) && text.indexOf(key) >= 0) {
-                return numberWords[key];
-            }
         }
         return 0;
     }
 
     function parseFrequency(label) {
-        var text = normalizeText(label).toLowerCase();
+        var text = normalizeFrequencyLabel(label);
         if (!text) {
             return null;
         }
+        if (text.indexOf('per need') >= 0 || text.indexOf('as needed') >= 0 || text === 'prn') {
+            return null;
+        }
+        if (text.indexOf('every other day') >= 0 || text.indexOf('alternate day') >= 0) {
+            return { count: 0.5, period: 'day' };
+        }
         var count = parseNumericToken(text);
         if (!count) {
-            if (text.indexOf('daily') >= 0 || text.indexOf('per day') >= 0 || text.indexOf('a day') >= 0) {
+            if (text.indexOf('daily') >= 0 || text.indexOf('per day') >= 0 || text.indexOf('a day') >= 0
+                    || text.indexOf('morning') >= 0 || text.indexOf('evening') >= 0 || text.indexOf('night') >= 0) {
                 count = 1;
             } else if (text.indexOf('weekly') >= 0 || text.indexOf('a week') >= 0 || text.indexOf('per week') >= 0) {
                 count = 1;
@@ -550,6 +566,10 @@
     }
 
     function autoCalculateQuantity() {
+        var quantityInput = byId('rx-quantity');
+        if (!quantityInput || rxQuantityManuallyEdited) {
+            return;
+        }
         var dose = parseFloat(byId('rx-dose').value || '0');
         var duration = byId('rx-duration').value;
         var durationUnit = byId('rx-duration-unit').value;
@@ -561,7 +581,7 @@
         if (!(periods > 0)) {
             return;
         }
-        byId('rx-quantity').value = Math.ceil(dose * frequency.count * periods);
+        quantityInput.value = Math.ceil(dose * frequency.count * periods);
     }
 
     function autoCalculateEditQuantity(lineId) {
@@ -571,6 +591,9 @@
         var frequencyInput = byId('rx-edit-frequency-' + lineId);
         var quantityInput = byId('rx-edit-quantity-' + lineId);
         if (!doseInput || !durationInput || !durationUnitInput || !frequencyInput || !quantityInput) {
+            return;
+        }
+        if (quantityInput.getAttribute('data-manual-quantity') === 'true') {
             return;
         }
         var dose = parseFloat(doseInput.value || '0');
@@ -622,7 +645,6 @@
         }
         row.classList.toggle('is-hidden');
         if (!row.classList.contains('is-hidden')) {
-            autoCalculateEditQuantity(lineId);
             if (typeof initializeOpenmrsDateFields === 'function') {
                 initializeOpenmrsDateFields(row);
             }
@@ -711,11 +733,11 @@
             byId('rx-start-date-display').value = '';
         }
         byId('rx-quantity').value = '';
+        rxQuantityManuallyEdited = false;
         byId('rx-instructions').value = '';
     }
 
     function addToPrescription() {
-        autoCalculateQuantity();
         var line = collectDraftLine();
         if (!line) {
             return;
@@ -817,6 +839,16 @@
     byId('rx-dose').oninput = autoCalculateQuantity;
     byId('rx-duration').oninput = autoCalculateQuantity;
     byId('rx-duration-unit').onchange = autoCalculateQuantity;
+    byId('rx-quantity').oninput = function () {
+        rxQuantityManuallyEdited = normalizeText(this.value) !== '';
+    };
+    var editQuantityInputs = document.querySelectorAll('input[id^="rx-edit-quantity-"]');
+    for (var i = 0; i < editQuantityInputs.length; i++) {
+        editQuantityInputs[i].setAttribute('data-manual-quantity', 'true');
+        editQuantityInputs[i].oninput = function () {
+            this.setAttribute('data-manual-quantity', normalizeText(this.value) !== '' ? 'true' : 'false');
+        };
+    }
     byId('rx-submit-form').onsubmit = function () {
         if (!prescriptionDraft.length) {
             alert('Add at least one drug to the prescribed items list before submitting.');

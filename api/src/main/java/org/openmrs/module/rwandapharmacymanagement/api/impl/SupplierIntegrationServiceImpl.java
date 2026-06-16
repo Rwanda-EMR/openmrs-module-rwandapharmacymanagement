@@ -844,17 +844,19 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
             if (productMasterItem == null) {
                 productMasterItem = pharmacyService.getProductMasterItemByNpcCode(npcCode);
             }
-            Drug linkedDrug = productMasterItem == null ? null : productMasterItem.getDrug();
-            Concept linkedConcept = linkedDrug == null ? resolveConceptForItem(
-                    productMasterItem == null ? normalized(record.getMaterialDescription()) : productMasterItem.getItemName(),
-                    productMasterItem == null ? null : productMasterItem.getMaterialType()) : linkedDrug.getConcept();
-            Item item = ensureLocalItem(npcCode,
-                    productMasterItem == null ? normalized(record.getMaterialDescription()) : productMasterItem.getItemName(),
-                    linkedConcept,
-                    linkedDrug,
-                    program);
-            if (productMasterItem != null && item != null) {
+            Item item = null;
+            if (productMasterItem != null) {
+                Drug linkedDrug = productMasterItem.getDrug();
+                Concept linkedConcept = linkedDrug == null
+                        ? resolveConceptForItem(productMasterItem.getItemName(), productMasterItem.getMaterialType())
+                        : linkedDrug.getConcept();
+                item = ensureLocalItem(npcCode, productMasterItem.getItemName(), linkedConcept, linkedDrug, program);
                 pharmacyService.mapProductMasterItemToItem(productMasterItem, item);
+            } else {
+                item = pharmacyService.getItemByCodeAndProgram(npcCode, program);
+                if (item == null) {
+                    item = pharmacyService.getItemByCode(npcCode);
+                }
             }
             supplierPrice.setItem(item);
             supplierPrice.setSupplierProductCode(npcCode);
@@ -927,20 +929,48 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
                 productMasterItem.setNpcCode(npcCode);
                 productMasterItem.setProgram(programName);
                 productMasterItem.setMaterialType(normalized(itemDto.getMaterialType()));
-                Concept concept = resolveConceptForItem(productMasterItem.getItemName(), productMasterItem.getMaterialType());
-                Drug drug = isDrugMaterialType(productMasterItem.getMaterialType())
-                        ? findOrCreateDrug(productMasterItem.getItemName())
-                        : null;
-                productMasterItem.setDrug(drug);
-                Item ensuredLocalItem = ensureLocalItem(npcCode, productMasterItem.getItemName(), concept, drug, programName);
                 productMasterItem.setActive(Boolean.TRUE);
                 pharmacyService.saveProductMasterItem(productMasterItem);
-                pharmacyService.mapProductMasterItemToItem(productMasterItem, ensuredLocalItem);
                 productMasterByCode.put(productKey, productMasterItem);
 
-                mapping.setItem(ensuredLocalItem);
-                pharmacyService.saveSupplierProductMapping(mapping);
+                try {
+                    linkProductMasterItemToLocalItem(productMasterItem, mapping, programName);
+                }
+                catch (Exception e) {
+                    saveProductMasterMappingFailure(productMasterItem, mapping, e);
+                }
             }
+        }
+    }
+
+    private void linkProductMasterItemToLocalItem(ProductMasterItem productMasterItem, SupplierProductMapping mapping,
+                                                  String programName) {
+        Concept concept = resolveConceptForItem(productMasterItem.getItemName(), productMasterItem.getMaterialType());
+        Drug drug = isDrugMaterialType(productMasterItem.getMaterialType())
+                ? findOrCreateDrug(productMasterItem.getItemName())
+                : null;
+        productMasterItem.setDrug(drug);
+        pharmacyService.saveProductMasterItem(productMasterItem);
+
+        Item ensuredLocalItem = ensureLocalItem(productMasterItem.getNpcCode(), productMasterItem.getItemName(),
+                concept, drug, programName);
+        pharmacyService.mapProductMasterItemToItem(productMasterItem, ensuredLocalItem);
+
+        mapping.setItem(ensuredLocalItem);
+        pharmacyService.saveSupplierProductMapping(mapping);
+    }
+
+    private void saveProductMasterMappingFailure(ProductMasterItem productMasterItem, SupplierProductMapping mapping,
+                                                 Exception exception) {
+        IntegrationLog log = createLog(IntegrationType.PRODUCT_MASTER_SYNC, IntegrationStatus.FAILED,
+                "Product master item saved, but local item mapping failed for "
+                        + safe(productMasterItem == null ? null : productMasterItem.getNpcCode()));
+        log.setEndpoint("/api/integration/product-master");
+        log.setRequestPayload(truncate(String.valueOf(productMasterItem)));
+        log.setResponsePayload(truncate(rootCause(exception).getMessage()));
+        integrationLogService.saveLog(log);
+        if (mapping != null) {
+            pharmacyService.saveSupplierProductMapping(mapping);
         }
     }
 
@@ -995,6 +1025,9 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
         if (existingItem == null) {
             existingItem = pharmacyService.getItemByCode(normalized(itemCode));
         }
+        if (existingItem == null) {
+            existingItem = findExistingItemForRmsProduct(itemName, concept, drug);
+        }
         if (existingItem != null) {
             existingItem.setDrug(drug);
             if (concept != null) {
@@ -1021,6 +1054,30 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
         item.setCreator(Context.getAuthenticatedUser());
         item.setDateCreated(new Date());
         return pharmacyService.saveItem(item);
+    }
+
+    private Item findExistingItemForRmsProduct(String itemName, Concept concept, Drug drug) {
+        String normalizedItemName = normalized(itemName);
+        Integer drugId = drug == null ? null : drug.getDrugId();
+        Integer conceptId = concept == null ? null : concept.getConceptId();
+        if (drugId == null && conceptId == null) {
+            return null;
+        }
+        for (Item item : pharmacyService.getAllItems()) {
+            if (item == null) {
+                continue;
+            }
+            Integer existingDrugId = item.getDrug() == null ? null : item.getDrug().getDrugId();
+            if (drugId != null && drugId.equals(existingDrugId)) {
+                return item;
+            }
+            Integer existingConceptId = item.getConcept() == null ? null : item.getConcept().getConceptId();
+            if (drugId == null && conceptId != null && conceptId.equals(existingConceptId)
+                    && normalizedItemName.equals(normalized(item.getName()))) {
+                return item;
+            }
+        }
+        return null;
     }
 
     private Concept findOrCreateConcept(String conceptName) {
@@ -1159,12 +1216,17 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
     private void sendPurchaseOrderEmail(PurchaseOrder purchaseOrder, SupplierOrder supplierOrder, Supplier supplier) throws Exception {
         final String smtpUsername = administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_USERNAME, "");
         final String smtpPassword = administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_PASSWORD, "");
+        String smtpHost = administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_HOST, "");
         Properties properties = new Properties();
         properties.setProperty("mail.transport.protocol", "smtp");
-        properties.setProperty("mail.smtp.host", administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_HOST, ""));
+        properties.setProperty("mail.smtp.host", smtpHost);
         properties.setProperty("mail.smtp.port", administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_PORT, "587"));
         properties.setProperty("mail.smtp.auth", administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_AUTH, "true"));
         properties.setProperty("mail.smtp.starttls.enable", administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_STARTTLS, "true"));
+        properties.setProperty("mail.smtp.ssl.trust", smtpHost);
+        properties.setProperty("mail.smtp.connectiontimeout", "15000");
+        properties.setProperty("mail.smtp.timeout", "30000");
+        properties.setProperty("mail.smtp.writetimeout", "30000");
         Session session = Session.getInstance(properties, new javax.mail.Authenticator() {
             @Override
             protected PasswordAuthentication getPasswordAuthentication() {

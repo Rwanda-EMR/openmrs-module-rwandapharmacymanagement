@@ -28,7 +28,7 @@ public class MetadataSetup implements Setup {
             "Task: rwandapharmacymanagement.viewStock",
             RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK,
             RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER,
-            "Task: rwandapharmacymanagement.adjustStock",
+            RwandaPharmacyManagementConfig.PRIVILEGE_ADJUST_STOCK,
             "Task: rwandapharmacymanagement.viewPatientQueue",
             "Task: rwandapharmacymanagement.dispenseWithOrder",
             "Task: rwandapharmacymanagement.dispenseWithoutOrder",
@@ -79,14 +79,14 @@ public class MetadataSetup implements Setup {
                 "Task: rwandapharmacymanagement.viewStock",
                 "Task: rwandapharmacymanagement.receiveDeliveries",
                 RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK,
-                "Task: rwandapharmacymanagement.adjustStock",
+                RwandaPharmacyManagementConfig.PRIVILEGE_ADJUST_STOCK,
                 RwandaPharmacyManagementConfig.PRIVILEGE_SUBMIT_SUPPLIER_ORDERS);
         saveRole(userService, "Rwanda Pharmacy Main Store Manager",
                 RwandaPharmacyManagementConfig.PRIVILEGE_DASHBOARD,
                 "Task: rwandapharmacymanagement.viewStock",
                 "Task: rwandapharmacymanagement.receiveDeliveries",
                 RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK,
-                "Task: rwandapharmacymanagement.adjustStock",
+                RwandaPharmacyManagementConfig.PRIVILEGE_ADJUST_STOCK,
                 RwandaPharmacyManagementConfig.PRIVILEGE_SUBMIT_SUPPLIER_ORDERS);
         saveRole(userService, "Rwanda Pharmacy Dispensing Store Manager",
                 RwandaPharmacyManagementConfig.PRIVILEGE_DASHBOARD,
@@ -95,7 +95,7 @@ public class MetadataSetup implements Setup {
                 "Task: rwandapharmacymanagement.dispenseWithOrder",
                 "Task: rwandapharmacymanagement.dispenseWithoutOrder",
                 RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK,
-                "Task: rwandapharmacymanagement.adjustStock");
+                RwandaPharmacyManagementConfig.PRIVILEGE_ADJUST_STOCK);
         saveRole(userService, "Rwanda Pharmacy Purchase Order Officer",
                 RwandaPharmacyManagementConfig.PRIVILEGE_DASHBOARD,
                 "Task: rwandapharmacymanagement.viewStock",
@@ -131,7 +131,7 @@ public class MetadataSetup implements Setup {
                 "Task: rwandapharmacymanagement.viewStock",
                 RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK,
                 RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER,
-                "Task: rwandapharmacymanagement.adjustStock",
+                RwandaPharmacyManagementConfig.PRIVILEGE_ADJUST_STOCK,
                 "Task: rwandapharmacymanagement.viewPatientQueue",
                 "Task: rwandapharmacymanagement.dispenseWithOrder",
                 "Task: rwandapharmacymanagement.dispenseWithoutOrder",

@@ -29,14 +29,21 @@ import java.util.Map;
 @Controller
 public class ReconciliationPageController {
 
+    private static final String PRIVILEGE_ADJUST_STOCK = "Task: rwandapharmacymanagement.adjustStock";
+
     public void get(PageModel model,
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
                     HttpSession session) {
-        CurrentPharmacySupport.rememberSelection(pharmacyService, session, pharmacyLocationId);
+        Context.requirePrivilege(PRIVILEGE_ADJUST_STOCK);
+        rememberDispensingSelection(pharmacyService, session, pharmacyLocationId);
         CurrentPharmacySupport.populateModel(model, pharmacyService, session);
-        PharmacyLocation activePharmacy = (PharmacyLocation) model.getAttribute("activePharmacy");
+        PharmacyLocation activePharmacy = resolveReconciliationPharmacy(pharmacyService, session, pharmacyLocationId);
+        model.addAttribute("activePharmacy", activePharmacy);
+        if (activePharmacy != null) {
+            model.addAttribute("pharmacySelectionRequired", Boolean.FALSE);
+        }
         List<InventoryBalance> stockBalances = activePharmacy == null ? Collections.<InventoryBalance>emptyList()
                 : inventoryService.getInventoryForPharmacy(activePharmacy.getPharmacyLocationId());
         model.addAttribute("stockBalances", stockBalances);
@@ -49,10 +56,12 @@ public class ReconciliationPageController {
                        @RequestParam(value = "quantity", required = false) BigDecimal[] quantities,
                        @RequestParam(value = "batchNumber", required = false) String[] batchNumbers,
                        @RequestParam(value = "expiryDate", required = false) String[] expiryDates,
+                       @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
                        @RequestParam(value = "comments", required = false) String comments,
                        HttpSession session,
                        UiUtils ui) throws ParseException {
-        PharmacyLocation activePharmacy = CurrentPharmacySupport.requireCurrentPharmacy(pharmacyService, session);
+        Context.requirePrivilege(PRIVILEGE_ADJUST_STOCK);
+        PharmacyLocation activePharmacy = requireReconciliationPharmacy(pharmacyService, session, pharmacyLocationId);
         StockAdjustment adjustment = new StockAdjustment();
         adjustment.setPharmacyLocation(activePharmacy);
         adjustment.setComments(comments);
@@ -60,7 +69,40 @@ public class ReconciliationPageController {
         adjustment.setDateCreated(new java.util.Date());
         adjustment.setLines(buildLines(pharmacyService, adjustment, itemIds, quantities, batchNumbers, expiryDates));
         inventoryService.saveStockAdjustment(adjustment);
-        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "admin/reconciliation");
+        Map<String, Object> redirectParams = new LinkedHashMap<String, Object>();
+        redirectParams.put("pharmacyLocationId", activePharmacy.getPharmacyLocationId());
+        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "admin/reconciliation", redirectParams);
+    }
+
+    private PharmacyLocation resolveReconciliationPharmacy(PharmacyService pharmacyService, HttpSession session, Integer pharmacyLocationId) {
+        if (pharmacyLocationId != null) {
+            PharmacyLocation pharmacyLocation = pharmacyService.getPharmacyLocation(pharmacyLocationId);
+            return isUsablePharmacy(pharmacyLocation) ? pharmacyLocation : null;
+        }
+        return CurrentPharmacySupport.resolveCurrentPharmacy(pharmacyService, session);
+    }
+
+    private PharmacyLocation requireReconciliationPharmacy(PharmacyService pharmacyService, HttpSession session, Integer pharmacyLocationId) {
+        PharmacyLocation pharmacyLocation = resolveReconciliationPharmacy(pharmacyService, session, pharmacyLocationId);
+        if (pharmacyLocation != null) {
+            return pharmacyLocation;
+        }
+        return CurrentPharmacySupport.requireCurrentPharmacy(pharmacyService, session);
+    }
+
+    private boolean isUsablePharmacy(PharmacyLocation pharmacyLocation) {
+        return pharmacyLocation != null && pharmacyLocation.getPharmacyLocationId() != null
+                && Boolean.TRUE.equals(pharmacyLocation.getActive());
+    }
+
+    private void rememberDispensingSelection(PharmacyService pharmacyService, HttpSession session, Integer pharmacyLocationId) {
+        if (pharmacyLocationId == null) {
+            return;
+        }
+        PharmacyLocation pharmacyLocation = pharmacyService.getPharmacyLocation(pharmacyLocationId);
+        if (pharmacyLocation != null && !Boolean.TRUE.equals(pharmacyLocation.getMainStore())) {
+            CurrentPharmacySupport.rememberSelection(pharmacyService, session, pharmacyLocationId);
+        }
     }
 
     private List<StockAdjustmentLine> buildLines(PharmacyService pharmacyService,

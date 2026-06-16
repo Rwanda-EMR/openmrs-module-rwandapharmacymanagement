@@ -33,11 +33,11 @@
                     [path: "inventory/dispensingStore", label: "Dispensing pharmacies"],
                     [path: "inventory/receiptHistory", label: "Receipt history"],
                     [path: "inventory/valuation", label: "Stock valuation"],
-	                    [path: "pharmacyorder/approve", label: "Pharmacy transfer approval"],
-		                    [path: "transfer/mainToDispensing", label: "Main to dispensing"],
-	                    [path: "transfer/returnToMain", label: "Return to main pharmacy"],
+	                    [path: "pharmacyorder/approve", label: "Pharmacy transfer approval", privilegeAny: ["Task: rwandapharmacymanagement.transferStock", "Task: rwandapharmacymanagement.approveMainToDispensingTransfer"]],
+		                    [path: "transfer/mainToDispensing", label: "Main to dispensing", privilegeAny: ["Task: rwandapharmacymanagement.transferStock", "Task: rwandapharmacymanagement.approveMainToDispensingTransfer"]],
+	                    [path: "transfer/returnToMain", label: "Return to main pharmacy", privilege: "Task: rwandapharmacymanagement.transferStock"],
                     [path: "transfer/interPharmacy", label: "Dispensing to dispensing"],
-                    [path: "admin/reconciliation", label: "Reconciliation"]
+                    [path: "admin/reconciliation", label: "Reconciliation", privilege: "Task: rwandapharmacymanagement.adjustStock"]
             ]],
             [title: "Supplier", links: [
                     [path: "supplier/settings", label: "Configuration"],
@@ -54,7 +54,7 @@
             [title: "Control", links: [
                     [path: "alerts/dashboard", label: "Alerts"],
                     [path: "admin/linkBill", label: "Link prescription bills"],
-                    [path: "admin/missingBillingMappings", label: "Missing billing mappings"],
+                    [path: "admin/missingBillingMappings", label: "Missing billing mappings", privilege: "Task: rwandapharmacymanagement.manageSettings"],
                     [path: "safety/rules", label: "Safety rules"],
                     [path: "integration/pendingHie", label: "Pending HIE queue"],
                     [path: "integration/logs", label: "Integration logs"]
@@ -73,6 +73,8 @@
     <title>${ config.pageTitle ?: ui.message("rwandapharmacymanagement.title") }</title>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <link rel="shortcut icon" type="image/ico" href="/${ ui.contextPath() }/images/openmrs-favicon.ico"/>
+    <link rel="icon" type="image/png" href="/${ ui.contextPath() }/images/openmrs-favicon.png"/>
     ${ ui.resourceLinks() }
     <script src="/${ui.contextPath()}/csrfguard" type="text/javascript"></script>
     <style>

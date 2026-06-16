@@ -6,6 +6,7 @@ import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
+import org.openmrs.util.PrivilegeConstants;
 import org.openmrs.ui.framework.page.PageModel;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.springframework.stereotype.Controller;
@@ -21,11 +22,14 @@ import java.util.Map;
 @Controller
 public class MissingBillingMappingsPageController {
 
+    private static final String PRIVILEGE_MANAGE_SETTINGS = "Task: rwandapharmacymanagement.manageSettings";
+
     public void get(PageModel model,
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService) {
+        Context.requirePrivilege(PRIVILEGE_MANAGE_SETTINGS);
         List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
-        for (StockedItemSummary summary : stockedDrugSummaries(inventoryService, pharmacyService)) {
+        for (StockedItemSummary summary : stockedItemSummaries(inventoryService, pharmacyService)) {
             if (hasExactFacilityServicePriceName(summary.item)) {
                 continue;
             }
@@ -33,6 +37,7 @@ public class MissingBillingMappingsPageController {
             row.put("item", summary.item);
             row.put("quantityOnHand", summary.quantityOnHand);
             row.put("pharmacies", summary.pharmacies);
+            row.put("itemType", summary.item.getDrug() == null ? "Consumable" : "Drug");
             row.put("drugName", summary.item.getDrug() == null ? "" : summary.item.getDrug().getName());
             row.put("drugConceptId", summary.item.getDrug() == null || summary.item.getDrug().getConcept() == null
                     ? null : summary.item.getDrug().getConcept().getConceptId());
@@ -51,7 +56,7 @@ public class MissingBillingMappingsPageController {
         model.addAttribute("rowCount", rows.size());
     }
 
-    private List<StockedItemSummary> stockedDrugSummaries(InventoryService inventoryService, PharmacyService pharmacyService) {
+    private List<StockedItemSummary> stockedItemSummaries(InventoryService inventoryService, PharmacyService pharmacyService) {
         Map<Integer, StockedItemSummary> byItemId = new LinkedHashMap<Integer, StockedItemSummary>();
         for (PharmacyLocation pharmacyLocation : pharmacyService.getAllPharmacyLocations()) {
             if (pharmacyLocation == null || pharmacyLocation.getPharmacyLocationId() == null
@@ -64,7 +69,7 @@ public class MissingBillingMappingsPageController {
             }
             for (InventoryBalance balance : balances) {
                 if (balance == null || balance.getItem() == null || balance.getItem().getItemId() == null
-                        || balance.getItem().getDrug() == null || balance.getQuantityOnHand() == null
+                        || balance.getQuantityOnHand() == null
                         || balance.getQuantityOnHand().compareTo(BigDecimal.ZERO) <= 0) {
                     continue;
                 }
@@ -151,12 +156,16 @@ public class MissingBillingMappingsPageController {
 
     @SuppressWarnings("unchecked")
     private List<List<Object>> executeSql(String sql) {
+        Context.addProxyPrivilege(PrivilegeConstants.SQL_LEVEL_ACCESS);
         try {
             List<List<Object>> rows = Context.getAdministrationService().executeSQL(sql, true);
             return rows == null ? Collections.<List<Object>>emptyList() : rows;
         }
-        catch (Exception ignored) {
-            return Collections.emptyList();
+        catch (Exception e) {
+            throw new IllegalStateException("Unable to check MOH Billing mappings.", e);
+        }
+        finally {
+            Context.removeProxyPrivilege(PrivilegeConstants.SQL_LEVEL_ACCESS);
         }
     }
 

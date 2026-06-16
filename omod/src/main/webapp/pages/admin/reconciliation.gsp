@@ -39,6 +39,7 @@
 <% if (activePharmacy) { %><p><strong>Pharmacy:</strong> ${ activePharmacy.name }</p><% } %>
 <% if (activePharmacy) { %>
 <form method="post">
+    <input type="hidden" name="pharmacyLocationId" value="${ activePharmacy.pharmacyLocationId }"/>
     <table id="adjustment-lines">
         <thead><tr><th>Item</th><th>New Quantity</th><th>Batch Number</th><th>Expiry Date</th></tr></thead>
         <tbody>

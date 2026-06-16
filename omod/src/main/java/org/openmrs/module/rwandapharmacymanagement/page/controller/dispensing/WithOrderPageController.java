@@ -85,6 +85,7 @@ public class WithOrderPageController {
                        @RequestParam(value = "quantity", required = false) BigDecimal[] quantities,
                        @RequestParam(value = "batchNumber", required = false) String[] batchNumbers,
                        @RequestParam(value = "expiryDate", required = false) String[] expiryDates,
+                       @RequestParam(value = "viewOnly", required = false) Boolean viewOnly,
                        HttpSession session,
                        UiUtils ui) {
         PharmacyLocation activePharmacy = CurrentPharmacySupport.requireCurrentPharmacy(pharmacyService, session);
@@ -93,14 +94,18 @@ public class WithOrderPageController {
                 Context.getUserContext() == null ? null : Context.getUserContext().getLocationId())) {
             throw new IllegalArgumentException("Selected request is not available to the active pharmacy");
         }
-        if (!Boolean.TRUE.equals(request.getPaymentConfirmed())) {
-            throw new IllegalArgumentException("This prescription has not been paid yet");
-        }
         if (markUnavailableLineId != null) {
             dispensingService.markRequestLineUnavailable(requestId, markUnavailableLineId,
                     "Drug not available in all pharmacies");
-            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "dispense/withOrder",
-                    java.util.Collections.<String, Object>singletonMap("requestId", requestId));
+            Map<String, Object> redirectParams = new LinkedHashMap<String, Object>();
+            redirectParams.put("requestId", requestId);
+            if (Boolean.TRUE.equals(viewOnly)) {
+                redirectParams.put("viewOnly", Boolean.TRUE);
+            }
+            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "dispense/withOrder", redirectParams);
+        }
+        if (!Boolean.TRUE.equals(request.getPaymentConfirmed())) {
+            throw new IllegalArgumentException("This prescription has not been paid yet");
         }
         DispenseRecord record = new DispenseRecord();
         record.setPatient(request.getPatient());

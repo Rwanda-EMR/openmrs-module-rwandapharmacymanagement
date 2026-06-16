@@ -2,19 +2,20 @@
     ui.decorateWith("rwandapharmacymanagement", "simplePage")
 %>
 
-<h2>Stocked Drugs Missing Billing Service Names</h2>
+<h2>Stocked Items Missing Billing Service Names</h2>
 
 <p>
-    Showing stocked pharmacy drugs that do not have an active MOH Billing facility service price whose
+    Showing stocked pharmacy drugs and consumables that do not have an active MOH Billing facility service price whose
     name, short name, or description exactly matches the pharmacy item or OpenMRS drug name.
 </p>
 
-<p><strong>${ rowCount ?: 0 }</strong> stocked drug${ rowCount == 1 ? '' : 's' } missing an exact billing name match.</p>
+<p><strong>${ rowCount ?: 0 }</strong> stocked item${ rowCount == 1 ? '' : 's' } missing an exact billing name match.</p>
 
 <table>
     <thead>
     <tr>
         <th>Pharmacy item</th>
+        <th>Type</th>
         <th>Drug</th>
         <th>Concepts</th>
         <th>On hand</th>
@@ -25,7 +26,7 @@
     <tbody>
     <% if (!rows || rows.isEmpty()) { %>
     <tr>
-        <td colspan="6">All stocked drugs have exact active billing service name matches.</td>
+        <td colspan="7">All stocked items have exact active billing service name matches.</td>
     </tr>
     <% } %>
     <% rows?.each { row -> %>
@@ -34,6 +35,7 @@
             <strong>${ row.item?.name ?: '' }</strong><br/>
             <span style="color:#666;">${ row.item?.code ?: '' }</span>
         </td>
+        <td>${ row.itemType ?: '' }</td>
         <td>${ row.drugName ?: '' }</td>
         <td>
             Item: ${ row.itemConceptId ?: '' }<br/>

@@ -1,5 +1,6 @@
 <%
     ui.decorateWith("rwandapharmacymanagement", "simplePage")
+    def canAdjustStock = context.hasPrivilege("Task: rwandapharmacymanagement.adjustStock")
     def stockParams = { extra ->
         def params = [stockPage: stockPage, stockPageSize: stockPageSize, requestPage: requestPage, requestPageSize: requestPageSize]
         if (activePharmacy?.pharmacyLocationId) {
@@ -433,7 +434,7 @@
         <div class="stock-panel-title">${ activePharmacy.name } • ${ stockTotalItems ?: 0 } batch records</div>
         <div class="stock-panel-actions">
             <a class="stock-btn stock-btn-primary" href="${ ui.pageLink("rwandapharmacymanagement", "inventory/dispensingStore", [cart: 'true']) }">Request cart<% if (cartCount) { %><span class="stock-cart-badge">${ cartCount }</span><% } %></a>
-            <a class="stock-btn" href="${ ui.pageLink("rwandapharmacymanagement", "admin/reconciliation") }">Reconcile</a>
+            <% if (canAdjustStock) { %><a class="stock-btn" href="${ ui.pageLink("rwandapharmacymanagement", "admin/reconciliation") }">Reconcile</a><% } %>
         </div>
     </div>
     <form class="stock-search-form" method="get">
@@ -487,7 +488,7 @@
             <td><span class="status-pill ${ statusClass }">${ statusText }</span></td>
             <td>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                    <a class="stock-btn" href="${ ui.pageLink("rwandapharmacymanagement", "admin/reconciliation") }">Adjust</a>
+                    <% if (canAdjustStock) { %><a class="stock-btn" href="${ ui.pageLink("rwandapharmacymanagement", "admin/reconciliation") }">Adjust</a><% } %>
                     <% def mainStoreAvailable = mainStoreAvailableByItemId?.get(balance.item?.itemId) ?: 0 %>
                     <% if (cartItemKeyByItemId?.containsKey(balance.item?.itemId)) { def matchingRow = cartRows.find { row -> row.itemId == balance.item?.itemId } %>
                     <a class="stock-btn stock-btn-primary" href="${ ui.pageLink("rwandapharmacymanagement", "inventory/dispensingStore", [cart: 'true']) }">&#10003; In cart (${ matchingRow?.quantity ?: '' })</a>
