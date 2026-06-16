@@ -32,6 +32,8 @@ public interface DispensingService extends OpenmrsService {
 
     List<DispenseRecord> getRecentDispenses();
 
+    List<DispenseRecord> getDispenseRecords(Date fromInclusive, Date toExclusive, Integer pharmacyLocationId);
+
     List<DispenseRecord> getDispenseRecordsForRequests(List<Integer> requestIds);
 
     List<PatientDispensingRequest> getPatientPrescriptionHistory(Integer patientId, int firstResult, int maxResults);

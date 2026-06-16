@@ -47,6 +47,7 @@ public final class PurchaseOrderPdfRenderer {
             document.add(new Paragraph(" "));
 
             addMeta(document, "Hospital", safe(hospitalName));
+            addMeta(document, "Order number", orderNumber(purchaseOrder));
             addMeta(document, "Program", safe(purchaseOrder.getProgram()));
             addMeta(document, "Supplier", purchaseOrder.getSupplier() == null ? "" : safe(purchaseOrder.getSupplier().getName()));
             addMeta(document, "Facility ID", safe(purchaseOrder.getFacilityId()));
@@ -123,6 +124,15 @@ public final class PurchaseOrderPdfRenderer {
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String orderNumber(PurchaseOrder purchaseOrder) {
+        if (purchaseOrder == null || purchaseOrder.getPurchaseOrderId() == null) {
+            return "";
+        }
+        String facilityId = purchaseOrder.getFacilityId() == null || purchaseOrder.getFacilityId().trim().isEmpty()
+                ? "1660" : purchaseOrder.getFacilityId().trim();
+        return "ord-" + facilityId + "-" + purchaseOrder.getPurchaseOrderId();
     }
 
     private static String number(BigDecimal value) {

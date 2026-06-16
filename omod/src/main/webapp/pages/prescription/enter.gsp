@@ -52,6 +52,13 @@
     .rx-summary-actions { display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; }
     .rx-summary-actions-right { display:flex; gap:10px; }
     .rx-inline-note { font-size:11px; color:#64748b; margin-top:4px; }
+    .rx-suggestions { display:none; width:100%; max-height:220px; overflow-y:auto; border:1px solid #cbd5e1; border-top:0; border-radius:0 0 4px 4px; background:#fff; }
+    .rx-suggestions.is-visible { display:block; }
+    .rx-suggestion { padding:8px 10px; cursor:pointer; border-top:1px solid #eef2f7; font-size:12px; }
+    .rx-suggestion:hover { background:#eef5fb; }
+    .rx-suggestion strong { display:block; color:#0f172a; }
+    .rx-suggestion span { display:block; color:#64748b; margin-top:2px; }
+    .rx-suggestion-empty { padding:8px 10px; color:#64748b; font-size:12px; }
     .rx-check-row { display:flex; align-items:center; gap:8px; margin-top:6px; color:#475569; font-size:12px; }
     .rx-check-row input { width:auto; margin:0; }
     .rx-remove-link { border:0; background:#fff1f2; color:#be123c; padding:4px 8px; border-radius:3px; cursor:pointer; }
@@ -204,19 +211,23 @@
         <div class="rx-panel-body">
             <div class="rx-field">
                 <label>Drug name / item</label>
-                <select id="rx-product">
-                    <option value="">Select a drug available in pharmacy stock</option>
+                <input type="text" id="rx-product-search" placeholder="Type or select a drug" autocomplete="off" oninput="handlePrescriptionProductInput()" onfocus="renderPrescriptionProductSuggestions()"/>
+                <input type="hidden" id="rx-product"/>
+                <div id="rx-product-suggestions" class="rx-suggestions"></div>
+                <datalist id="rx-product-options" style="display:none;">
                     <% prescribableItems.each { item -> %>
                     <% def stocked = stockedProductMasterItemIds?.contains(item.productMasterItemId) %>
                     <% def stockQuantity = stockQuantityByProductMasterItemId?.get(item.productMasterItemId) ?: java.math.BigDecimal.ZERO %>
                     <% def stockQuantityLabel = stockQuantity.stripTrailingZeros().toPlainString() %>
                     <% def optionLabel = stocked ? "${ item.itemName } (Qty: ${ stockQuantityLabel })" : "${ item.itemName } - not in stock" %>
-                    <option value="${ item.productMasterItemId }"
+                    <option value="${ optionLabel?.replace('"', '&quot;') ?: '' }"
+                            data-product-id="${ item.productMasterItemId }"
                             data-label="${ item.itemName?.replace('"', '&quot;') ?: '' }"
                             data-stocked="${ stocked ? 'true' : 'false' }"
-                            data-stock-total="${ stockQuantityLabel }">${ optionLabel }</option>
+                            data-stock-total="${ stockQuantityLabel }"></option>
                     <% } %>
-                </select>
+                </datalist>
+                <div class="rx-inline-note">Start typing and select a drug from the suggestions.</div>
                 <label class="rx-check-row">
                     <input type="checkbox" id="rx-include-unstocked" onchange="applyPrescriptionDrugFilter()"/>
                     <span>Include drugs not currently in stock</span>
@@ -474,6 +485,7 @@
     var prescriptionDraft = [];
     var pendingVoidRequest = null;
     var rxQuantityManuallyEdited = false;
+    var allPrescriptionProducts = [];
 
     function byId(id) { return document.getElementById(id); }
 
@@ -610,32 +622,134 @@
         quantityInput.value = Math.ceil(dose * frequency.count * periods);
     }
 
-    function applyPrescriptionDrugFilter() {
-        var includeUnstocked = byId('rx-include-unstocked') && byId('rx-include-unstocked').checked;
-        var select = byId('rx-product');
-        if (!select) {
+    function initializePrescriptionProducts() {
+        var dataList = byId('rx-product-options');
+        allPrescriptionProducts = [];
+        if (!dataList || !dataList.options) {
             return;
         }
-        var selectedOption = select.options[select.selectedIndex];
-        var selectedStillVisible = true;
-        for (var i = 0; i < select.options.length; i++) {
-            var option = select.options[i];
-            if (!option.value) {
-                option.disabled = false;
-                option.hidden = false;
+        for (var i = 0; i < dataList.options.length; i++) {
+            var option = dataList.options[i];
+            allPrescriptionProducts.push({
+                value: option.value,
+                productMasterItemId: option.getAttribute('data-product-id') || '',
+                label: option.getAttribute('data-label') || option.value,
+                stocked: option.getAttribute('data-stocked') === 'true',
+                stockTotal: option.getAttribute('data-stock-total') || ''
+            });
+        }
+    }
+
+    function productMatchesInput(product, inputValue) {
+        var typed = normalizeText(inputValue).toLowerCase();
+        if (!product || !typed) {
+            return false;
+        }
+        return normalizeText(product.value).toLowerCase() === typed
+                || normalizeText(product.label).toLowerCase() === typed;
+    }
+
+    function isPrescriptionProductVisible(product) {
+        var includeUnstocked = byId('rx-include-unstocked') && byId('rx-include-unstocked').checked;
+        return product && (includeUnstocked || product.stocked);
+    }
+
+    function handlePrescriptionProductInput() {
+        var input = byId('rx-product-search');
+        var hidden = byId('rx-product');
+        if (!input || !hidden) {
+            return;
+        }
+        hidden.value = '';
+        for (var i = 0; i < allPrescriptionProducts.length; i++) {
+            var product = allPrescriptionProducts[i];
+            if (isPrescriptionProductVisible(product) && productMatchesInput(product, input.value)) {
+                hidden.value = product.productMasterItemId;
+                hidePrescriptionProductSuggestions();
+                return;
+            }
+        }
+        renderPrescriptionProductSuggestions();
+    }
+
+    function matchingPrescriptionProducts() {
+        var includeUnstocked = byId('rx-include-unstocked') && byId('rx-include-unstocked').checked;
+        var searchText = normalizeText(byId('rx-product-search') ? byId('rx-product-search').value : '').toLowerCase();
+        var matches = [];
+        for (var i = 0; i < allPrescriptionProducts.length; i++) {
+            var product = allPrescriptionProducts[i];
+            var label = normalizeText(product.label).toLowerCase();
+            var value = normalizeText(product.value).toLowerCase();
+            var matchesSearch = !searchText || label.indexOf(searchText) >= 0;
+            var visible = (includeUnstocked || product.stocked) && (matchesSearch || value.indexOf(searchText) >= 0);
+            if (!visible) {
                 continue;
             }
-            var stocked = option.getAttribute('data-stocked') === 'true';
-            var visible = includeUnstocked || stocked;
-            option.disabled = !visible;
-            option.hidden = !visible;
-            if (option === selectedOption && !visible) {
-                selectedStillVisible = false;
-            }
+            matches.push(product);
         }
-        if (!selectedStillVisible) {
-            select.selectedIndex = 0;
+        return matches;
+    }
+
+    function renderPrescriptionProductSuggestions() {
+        var suggestions = byId('rx-product-suggestions');
+        if (!suggestions) {
+            return;
         }
+        suggestions.innerHTML = '';
+        if (byId('rx-product')) {
+            byId('rx-product').value = '';
+        }
+        var matches = matchingPrescriptionProducts();
+        if (!matches.length) {
+            suggestions.innerHTML = '<div class="rx-suggestion-empty">No matching drugs found.</div>';
+            suggestions.classList.add('is-visible');
+            return;
+        }
+        var maxSuggestions = Math.min(matches.length, 80);
+        for (var i = 0; i < maxSuggestions; i++) {
+            var product = matches[i];
+            var row = document.createElement('div');
+            row.className = 'rx-suggestion';
+            row.setAttribute('data-product-id', product.productMasterItemId);
+            row.setAttribute('data-product-value', product.value);
+            row.innerHTML = '<strong>' + escapeHtml(product.label) + '</strong><span>'
+                    + escapeHtml(product.stocked ? ('Qty: ' + product.stockTotal) : 'Not in stock') + '</span>';
+            row.onclick = function () {
+                selectPrescriptionProduct(this.getAttribute('data-product-id'), this.getAttribute('data-product-value'));
+            };
+            suggestions.appendChild(row);
+        }
+        if (matches.length > maxSuggestions) {
+            var more = document.createElement('div');
+            more.className = 'rx-suggestion-empty';
+            more.textContent = 'Keep typing to narrow ' + matches.length + ' matching drugs.';
+            suggestions.appendChild(more);
+        }
+        suggestions.classList.add('is-visible');
+    }
+
+    function selectPrescriptionProduct(productMasterItemId, label) {
+        if (byId('rx-product-search')) {
+            byId('rx-product-search').value = label || '';
+        }
+        if (byId('rx-product')) {
+            byId('rx-product').value = productMasterItemId || '';
+        }
+        hidePrescriptionProductSuggestions();
+    }
+
+    function hidePrescriptionProductSuggestions() {
+        var suggestions = byId('rx-product-suggestions');
+        if (suggestions) {
+            suggestions.classList.remove('is-visible');
+        }
+    }
+
+    function applyPrescriptionDrugFilter() {
+        if (byId('rx-product')) {
+            byId('rx-product').value = '';
+        }
+        renderPrescriptionProductSuggestions();
     }
 
     function toggleLineEdit(lineId) {
@@ -696,9 +810,10 @@
     }
 
     function collectDraftLine() {
-        var select = byId('rx-product');
-        if (!select.value) {
-            alert('Select a drug first.');
+        handlePrescriptionProductInput();
+        var productId = byId('rx-product') ? byId('rx-product').value : '';
+        if (!productId) {
+            alert('Select a drug from the suggestions first.');
             return null;
         }
         var quantity = parseFloat(byId('rx-quantity').value || '0');
@@ -706,10 +821,10 @@
             alert('Quantity must be greater than zero.');
             return null;
         }
-        var option = select.options[select.selectedIndex];
+        var selectedProduct = findPrescriptionProduct(productId);
         return {
-            productMasterItemId: select.value,
-            label: option ? option.text : '',
+            productMasterItemId: productId,
+            label: selectedProduct ? selectedProduct.value : normalizeText(byId('rx-product-search').value),
             dose: normalizeText(byId('rx-dose').value),
             route: normalizeText(byId('rx-route').value),
             frequency: normalizeText(byId('rx-frequency').value),
@@ -723,6 +838,9 @@
 
     function resetDraftForm() {
         byId('rx-product').value = '';
+        if (byId('rx-product-search')) {
+            byId('rx-product-search').value = '';
+        }
         byId('rx-route').value = '';
         byId('rx-frequency').value = '';
         byId('rx-dose').value = '';
@@ -735,6 +853,16 @@
         byId('rx-quantity').value = '';
         rxQuantityManuallyEdited = false;
         byId('rx-instructions').value = '';
+        hidePrescriptionProductSuggestions();
+    }
+
+    function findPrescriptionProduct(productMasterItemId) {
+        for (var i = 0; i < allPrescriptionProducts.length; i++) {
+            if (allPrescriptionProducts[i].productMasterItemId === productMasterItemId) {
+                return allPrescriptionProducts[i];
+            }
+        }
+        return null;
     }
 
     function addToPrescription() {
@@ -834,7 +962,8 @@
         }
     }
 
-    applyPrescriptionDrugFilter();
+    initializePrescriptionProducts();
+    hidePrescriptionProductSuggestions();
     byId('rx-frequency').onchange = autoCalculateQuantity;
     byId('rx-dose').oninput = autoCalculateQuantity;
     byId('rx-duration').oninput = autoCalculateQuantity;

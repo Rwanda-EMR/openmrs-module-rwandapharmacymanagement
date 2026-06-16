@@ -34,6 +34,8 @@ public interface DispensingDao {
 
     List<DispenseRecord> getRecentDispenses();
 
+    List<DispenseRecord> getDispenseRecords(Date fromInclusive, Date toExclusive, Integer pharmacyLocationId);
+
     PatientDispensingRequest getRequest(Integer requestId);
 
     PatientDispensingRequest saveRequest(PatientDispensingRequest patientDispensingRequest);

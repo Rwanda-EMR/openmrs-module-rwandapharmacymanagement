@@ -523,6 +523,24 @@ public class HibernateDispensingDao implements DispensingDao {
     }
 
     @Override
+    public List<DispenseRecord> getDispenseRecords(Date fromInclusive, Date toExclusive, Integer pharmacyLocationId) {
+        org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(DispenseRecord.class);
+        criteria.add(Restrictions.eq("voided", false));
+        if (fromInclusive != null) {
+            criteria.add(Restrictions.ge("dateCreated", fromInclusive));
+        }
+        if (toExclusive != null) {
+            criteria.add(Restrictions.lt("dateCreated", toExclusive));
+        }
+        if (pharmacyLocationId != null) {
+            criteria.createAlias("dispensingPharmacyLocation", "dispensingPharmacyLocation");
+            criteria.add(Restrictions.eq("dispensingPharmacyLocation.pharmacyLocationId", pharmacyLocationId));
+        }
+        criteria.addOrder(Order.asc("dateCreated"));
+        return criteria.list();
+    }
+
+    @Override
     public PatientDispensingRequest getRequest(Integer requestId) {
         return (PatientDispensingRequest) sessionFactory.getCurrentSession().get(PatientDispensingRequest.class, requestId);
     }

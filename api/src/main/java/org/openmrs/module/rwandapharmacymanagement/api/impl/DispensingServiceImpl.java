@@ -439,6 +439,11 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
     }
 
     @Override
+    public List<DispenseRecord> getDispenseRecords(Date fromInclusive, Date toExclusive, Integer pharmacyLocationId) {
+        return dispensingDao.getDispenseRecords(fromInclusive, toExclusive, pharmacyLocationId);
+    }
+
+    @Override
     public List<DispenseRecord> getDispenseRecordsForRequests(List<Integer> requestIds) {
         return dispensingDao.getDispenseRecordsForRequests(requestIds);
     }

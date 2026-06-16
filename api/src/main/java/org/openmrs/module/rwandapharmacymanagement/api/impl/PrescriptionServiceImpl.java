@@ -251,7 +251,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             PatientDispensingRequest linkedRequest = linkCommittedPrescriptionBill(request);
             schedulePrescriptionBillLinkRetries(linkedRequest == null ? request : linkedRequest, 2);
-            prescriptionCommunicationService.handlePrescriptionSaved(linkedRequest == null ? request : linkedRequest, sendSms);
+            notifyPrescriptionSavedInSingleTransaction(linkedRequest == null ? request : linkedRequest, sendSms);
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronizationAdapter() {
@@ -259,7 +259,27 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             public void afterCommit() {
                 PatientDispensingRequest linkedRequest = linkCommittedPrescriptionBillInSingleTransaction(request, 1);
                 schedulePrescriptionBillLinkRetries(linkedRequest == null ? request : linkedRequest, 2);
-                prescriptionCommunicationService.handlePrescriptionSaved(linkedRequest == null ? request : linkedRequest, sendSms);
+                notifyPrescriptionSavedInSingleTransaction(linkedRequest == null ? request : linkedRequest, sendSms);
+            }
+        });
+    }
+
+    private void notifyPrescriptionSavedInSingleTransaction(final PatientDispensingRequest request, final boolean sendSms) {
+        if (prescriptionCommunicationService == null || request == null) {
+            return;
+        }
+        if (transactionManager == null || request.getPatientDispensingRequestId() == null) {
+            prescriptionCommunicationService.handlePrescriptionSaved(request, sendSms);
+            return;
+        }
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        transactionTemplate.execute(new TransactionCallback<Void>() {
+            @Override
+            public Void doInTransaction(TransactionStatus status) {
+                PatientDispensingRequest managedRequest = dispensingService.getRequest(request.getPatientDispensingRequestId());
+                prescriptionCommunicationService.handlePrescriptionSaved(managedRequest == null ? request : managedRequest, sendSms);
+                return null;
             }
         });
     }
