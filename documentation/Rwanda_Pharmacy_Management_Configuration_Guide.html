@@ -139,7 +139,7 @@
     <li>Create facility services and billable services for drugs and consumables that should be billed.</li>
     <li>Map each billed drug/consumable concept to a facility service price.</li>
     <li>For prescriptions, drug billing mapping is checked through product drug concept and stocked local item concept/drug concept.</li>
-    <li>For consumables, mapped items create billing items when an unpaid bill is available. Unmapped or not-well-mapped items pass to the queue and can be linked later by admin.</li>
+    <li>Consumable order page loading does not check billing mappings. Billing mappings are validated when the order is submitted.</li>
     <li>Configure <code>rwandapharmacymanagement.prescription.paymentBillMode</code> as <code>strict</code> or <code>latest</code>.</li>
 </ol>
 
@@ -297,7 +297,7 @@
 <table>
     <tr><th>Workflow</th><th>Required configuration before testing</th></tr>
     <tr><td>Prescription request</td><td>Product master pulled; product linked to OpenMRS Drug/concept; local item exists; stock exists; billing mapping configured if billable; patient has visit; app action installed.</td></tr>
-    <tr><td>Consumable request</td><td>Product master pulled; item material type is consumable; local item exists; concept/billing mapping configured where billable; app action installed.</td></tr>
+    <tr><td>Consumable request</td><td>Product master pulled; item material type is consumable; local item exists; concept/billing mapping configured; app action installed.</td></tr>
     <tr><td>Lab request</td><td>Lab concept set configured; lab request app installed; lab location mapped to pharmacy tag/location; stock exists.</td></tr>
     <tr><td>General pharmacy request</td><td>Pharmacies created; stock exists in requested pharmacy; app installed; active user has dashboard privilege.</td></tr>
     <tr><td>Patient queue</td><td>OpenMRS location linked to pharmacy or tag; pharmacy selected where multiple; billing property configured.</td></tr>

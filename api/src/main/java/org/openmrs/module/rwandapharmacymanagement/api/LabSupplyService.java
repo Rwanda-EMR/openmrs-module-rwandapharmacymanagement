@@ -29,5 +29,5 @@ public interface LabSupplyService extends OpenmrsService {
     LabSupplyRequest getRequest(Integer requestId);
 
     LabSupplyRequest approveRequest(Integer requestId, PharmacyLocation dispensingPharmacyLocation,
-                                    Integer[] lineIds, BigDecimal[] approvedQuantities);
+                                    Integer[] lineIds, BigDecimal[] approvedQuantities, String[] batchNumbers);
 }

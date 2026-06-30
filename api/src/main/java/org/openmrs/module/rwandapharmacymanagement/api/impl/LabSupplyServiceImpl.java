@@ -120,7 +120,7 @@ public class LabSupplyServiceImpl extends BaseOpenmrsService implements LabSuppl
 
     @Override
     public LabSupplyRequest approveRequest(Integer requestId, PharmacyLocation dispensingPharmacyLocation,
-                                           Integer[] lineIds, BigDecimal[] approvedQuantities) {
+                                           Integer[] lineIds, BigDecimal[] approvedQuantities, String[] batchNumbers) {
         if (dispensingPharmacyLocation == null || dispensingPharmacyLocation.getPharmacyLocationId() == null) {
             throw new IllegalArgumentException("Dispensing pharmacy is required");
         }
@@ -132,6 +132,7 @@ public class LabSupplyServiceImpl extends BaseOpenmrsService implements LabSuppl
             throw new IllegalArgumentException("Only requested lab supply items can be approved");
         }
         Map<Integer, BigDecimal> approvedByLineId = quantitiesByLineId(lineIds, approvedQuantities);
+        Map<Integer, String> batchNumberByLineId = batchNumbersByLineId(lineIds, batchNumbers);
         List<InventoryBalance> balances = inventoryDao.getInventoryForPharmacy(dispensingPharmacyLocation.getPharmacyLocationId());
         Map<Integer, List<InventoryBalance>> balancesByItemId = new LinkedHashMap<Integer, List<InventoryBalance>>();
         Map<Integer, BigDecimal> availableByItemId = new LinkedHashMap<Integer, BigDecimal>();
@@ -170,7 +171,8 @@ public class LabSupplyServiceImpl extends BaseOpenmrsService implements LabSuppl
             }
             line.setApprovedQuantity(approvedQuantity);
             labSupplyDao.saveRequestLine(line);
-            consumeStockFifo(balancesByItemId.get(itemId), approvedQuantity, line, request, dispensingPharmacyLocation, currentUser, now);
+            consumeStock(balancesByItemId.get(itemId), approvedQuantity,
+                    batchNumberByLineId.get(line.getLabSupplyRequestLineId()), line, request, dispensingPharmacyLocation, currentUser, now);
             availableByItemId.put(itemId, availableQuantity.subtract(approvedQuantity));
         }
         request.setDispensingPharmacyLocation(dispensingPharmacyLocation);
@@ -226,9 +228,24 @@ public class LabSupplyServiceImpl extends BaseOpenmrsService implements LabSuppl
         return quantitiesByLineId;
     }
 
-    private void consumeStockFifo(List<InventoryBalance> itemBalances, BigDecimal quantityToConsume,
-                                  LabSupplyRequestLine line, LabSupplyRequest request,
-                                  PharmacyLocation dispensingPharmacyLocation, User currentUser, Date when) {
+    private Map<Integer, String> batchNumbersByLineId(Integer[] lineIds, String[] batchNumbers) {
+        Map<Integer, String> batchNumbersByLineId = new LinkedHashMap<Integer, String>();
+        if (lineIds == null || batchNumbers == null) {
+            return batchNumbersByLineId;
+        }
+        for (int i = 0; i < lineIds.length; i++) {
+            Integer lineId = lineIds[i];
+            String batchNumber = batchNumbers.length > i ? normalizeBatchNumber(batchNumbers[i]) : null;
+            if (lineId != null && batchNumber != null) {
+                batchNumbersByLineId.put(lineId, batchNumber);
+            }
+        }
+        return batchNumbersByLineId;
+    }
+
+    private void consumeStock(List<InventoryBalance> itemBalances, BigDecimal quantityToConsume, String selectedBatchNumber,
+                              LabSupplyRequestLine line, LabSupplyRequest request,
+                              PharmacyLocation dispensingPharmacyLocation, User currentUser, Date when) {
         if (quantityToConsume == null || quantityToConsume.compareTo(BigDecimal.ZERO) <= 0 || itemBalances == null) {
             return;
         }
@@ -238,6 +255,9 @@ public class LabSupplyServiceImpl extends BaseOpenmrsService implements LabSuppl
                 return;
             }
             if (balance == null || balance.getQuantityOnHand() == null || balance.getQuantityOnHand().compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            if (selectedBatchNumber != null && !selectedBatchNumber.equals(normalizeStoredBatchNumber(balance.getBatchNumber()))) {
                 continue;
             }
             BigDecimal deducted = remaining.min(balance.getQuantityOnHand());
@@ -259,7 +279,23 @@ public class LabSupplyServiceImpl extends BaseOpenmrsService implements LabSuppl
             remaining = remaining.subtract(deducted);
         }
         if (remaining.compareTo(BigDecimal.ZERO) > 0) {
-            throw new IllegalArgumentException("Insufficient stock for " + (line.getItem() == null ? "selected item" : line.getItem().getName()));
+            String batchText = selectedBatchNumber == null ? "" : " in selected batch";
+            throw new IllegalArgumentException("Insufficient stock" + batchText + " for "
+                    + (line.getItem() == null ? "selected item" : line.getItem().getName()));
         }
+    }
+
+    private String normalizeBatchNumber(String batchNumber) {
+        if (batchNumber == null || batchNumber.trim().isEmpty() || "__FIFO__".equals(batchNumber)) {
+            return null;
+        }
+        if ("__NO_BATCH__".equals(batchNumber)) {
+            return "";
+        }
+        return batchNumber.trim();
+    }
+
+    private String normalizeStoredBatchNumber(String batchNumber) {
+        return batchNumber == null || batchNumber.trim().isEmpty() ? "" : batchNumber.trim();
     }
 }

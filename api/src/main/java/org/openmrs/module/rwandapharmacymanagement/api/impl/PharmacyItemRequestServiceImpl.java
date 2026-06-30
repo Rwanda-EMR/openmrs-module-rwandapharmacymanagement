@@ -105,7 +105,7 @@ public class PharmacyItemRequestServiceImpl extends BaseOpenmrsService implement
 
     @Override
     public PharmacyItemRequest approveRequest(Integer requestId, PharmacyLocation activePharmacy,
-                                              Integer[] lineIds, BigDecimal[] approvedQuantities) {
+                                              Integer[] lineIds, BigDecimal[] approvedQuantities, String[] batchNumbers) {
         if (activePharmacy == null || activePharmacy.getPharmacyLocationId() == null) {
             throw new IllegalArgumentException("Active pharmacy is required");
         }
@@ -121,6 +121,7 @@ public class PharmacyItemRequestServiceImpl extends BaseOpenmrsService implement
             throw new IllegalArgumentException("Only requested pharmacy item requests can be approved");
         }
         Map<Integer, BigDecimal> approvedByLineId = quantitiesByLineId(lineIds, approvedQuantities);
+        Map<Integer, String> batchNumberByLineId = batchNumbersByLineId(lineIds, batchNumbers);
         Map<Integer, List<InventoryBalance>> balancesByItemId = balancesByItemId(activePharmacy);
         User currentUser = Context.getAuthenticatedUser();
         Date now = new Date();
@@ -136,7 +137,8 @@ public class PharmacyItemRequestServiceImpl extends BaseOpenmrsService implement
             }
             line.setApprovedQuantity(approvedQuantity);
             pharmacyItemRequestDao.saveRequestLine(line);
-            consumeStockFifo(balancesByItemId.get(line.getItem().getItemId()), approvedQuantity, line, request, activePharmacy, currentUser, now);
+            consumeStock(balancesByItemId.get(line.getItem().getItemId()), approvedQuantity,
+                    batchNumberByLineId.get(line.getPharmacyItemRequestLineId()), line, request, activePharmacy, currentUser, now);
         }
         request.setApprovedBy(currentUser);
         request.setApprovedDate(now);
@@ -197,9 +199,24 @@ public class PharmacyItemRequestServiceImpl extends BaseOpenmrsService implement
         return quantitiesByLineId;
     }
 
-    private void consumeStockFifo(List<InventoryBalance> itemBalances, BigDecimal quantityToConsume,
-                                  PharmacyItemRequestLine line, PharmacyItemRequest request,
-                                  PharmacyLocation pharmacyLocation, User currentUser, Date when) {
+    private Map<Integer, String> batchNumbersByLineId(Integer[] lineIds, String[] batchNumbers) {
+        Map<Integer, String> batchNumbersByLineId = new LinkedHashMap<Integer, String>();
+        if (lineIds == null || batchNumbers == null) {
+            return batchNumbersByLineId;
+        }
+        for (int i = 0; i < lineIds.length; i++) {
+            Integer lineId = lineIds[i];
+            String batchNumber = batchNumbers.length > i ? normalizeBatchNumber(batchNumbers[i]) : null;
+            if (lineId != null && batchNumber != null) {
+                batchNumbersByLineId.put(lineId, batchNumber);
+            }
+        }
+        return batchNumbersByLineId;
+    }
+
+    private void consumeStock(List<InventoryBalance> itemBalances, BigDecimal quantityToConsume, String selectedBatchNumber,
+                              PharmacyItemRequestLine line, PharmacyItemRequest request,
+                              PharmacyLocation pharmacyLocation, User currentUser, Date when) {
         if (quantityToConsume == null || quantityToConsume.compareTo(BigDecimal.ZERO) <= 0) {
             return;
         }
@@ -211,6 +228,9 @@ public class PharmacyItemRequestServiceImpl extends BaseOpenmrsService implement
                 }
                 BigDecimal available = balance.getQuantityOnHand() == null ? BigDecimal.ZERO : balance.getQuantityOnHand();
                 if (available.compareTo(BigDecimal.ZERO) <= 0) {
+                    continue;
+                }
+                if (selectedBatchNumber != null && !selectedBatchNumber.equals(normalizeStoredBatchNumber(balance.getBatchNumber()))) {
                     continue;
                 }
                 BigDecimal deducted = remaining.min(available);
@@ -232,8 +252,24 @@ public class PharmacyItemRequestServiceImpl extends BaseOpenmrsService implement
             }
         }
         if (remaining.compareTo(BigDecimal.ZERO) > 0) {
-            throw new IllegalArgumentException("Insufficient stock for " + (line.getItem() == null ? "selected item" : line.getItem().getName()));
+            String batchText = selectedBatchNumber == null ? "" : " in selected batch";
+            throw new IllegalArgumentException("Insufficient stock" + batchText + " for "
+                    + (line.getItem() == null ? "selected item" : line.getItem().getName()));
         }
+    }
+
+    private String normalizeBatchNumber(String batchNumber) {
+        if (batchNumber == null || batchNumber.trim().isEmpty() || "__FIFO__".equals(batchNumber)) {
+            return null;
+        }
+        if ("__NO_BATCH__".equals(batchNumber)) {
+            return "";
+        }
+        return batchNumber.trim();
+    }
+
+    private String normalizeStoredBatchNumber(String batchNumber) {
+        return batchNumber == null || batchNumber.trim().isEmpty() ? "" : batchNumber.trim();
     }
 
     private static class PreparedLine {

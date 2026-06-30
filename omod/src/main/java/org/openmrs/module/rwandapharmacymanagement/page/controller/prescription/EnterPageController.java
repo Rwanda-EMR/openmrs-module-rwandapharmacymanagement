@@ -79,7 +79,9 @@ public class EnterPageController {
                 patient != null && patient.getPatientId() != null ? String.valueOf(patient.getPatientId()) : null);
         model.addAttribute("patientUuidForSubmit", patient == null ? null : patient.getUuid());
         model.addAttribute("routes", sortConcepts(Context.getOrderService().getDrugRoutes()));
-        model.addAttribute("frequencies", getConfiguredFrequencyConcepts());
+        List<Concept> frequencyConcepts = getConfiguredFrequencyConcepts();
+        model.addAttribute("frequencies", frequencyConcepts);
+        model.addAttribute("frequencyOptions", buildFrequencyOptions(frequencyConcepts));
         model.addAttribute("durationUnits", sortConcepts(Context.getOrderService().getDurationUnits()));
         model.addAttribute("pricingService", pricingService);
         model.addAttribute("pageTitle", "Prescription");
@@ -381,6 +383,36 @@ public class EnterPageController {
             }
         }
         return sortConcepts(new ArrayList<Concept>(frequenciesByKey.values()));
+    }
+
+    private List<Map<String, Object>> buildFrequencyOptions(List<Concept> frequencyConcepts) {
+        List<Map<String, Object>> options = new ArrayList<Map<String, Object>>();
+        Map<String, org.openmrs.OrderFrequency> orderFrequencyByConceptKey = orderFrequencyByConceptKey();
+        for (Concept frequencyConcept : frequencyConcepts == null ? Collections.<Concept>emptyList() : frequencyConcepts) {
+            if (frequencyConcept == null) {
+                continue;
+            }
+            Map<String, Object> option = new LinkedHashMap<String, Object>();
+            option.put("label", frequencyConcept.getDisplayString());
+            org.openmrs.OrderFrequency orderFrequency = orderFrequencyByConceptKey.get(conceptKey(frequencyConcept));
+            option.put("frequencyPerDay", orderFrequency == null ? null : orderFrequency.getFrequencyPerDay());
+            options.add(option);
+        }
+        return options;
+    }
+
+    private Map<String, org.openmrs.OrderFrequency> orderFrequencyByConceptKey() {
+        Map<String, org.openmrs.OrderFrequency> frequenciesByConceptKey = new LinkedHashMap<String, org.openmrs.OrderFrequency>();
+        List<org.openmrs.OrderFrequency> orderFrequencies = Context.getOrderService().getOrderFrequencies(false);
+        if (orderFrequencies == null) {
+            return frequenciesByConceptKey;
+        }
+        for (org.openmrs.OrderFrequency orderFrequency : orderFrequencies) {
+            if (orderFrequency != null && orderFrequency.getConcept() != null) {
+                frequenciesByConceptKey.put(conceptKey(orderFrequency.getConcept()), orderFrequency);
+            }
+        }
+        return frequenciesByConceptKey;
     }
 
     private void addUniqueConcept(Map<String, Concept> conceptsByKey, Concept concept) {

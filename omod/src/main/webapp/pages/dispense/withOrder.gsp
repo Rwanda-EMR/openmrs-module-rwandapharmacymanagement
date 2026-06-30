@@ -5,8 +5,13 @@
     def prescriptionMap = binding.hasVariable("prescriptionDetailByRequestLineId") && prescriptionDetailByRequestLineId ? prescriptionDetailByRequestLineId : [:]
     def sourceHintMap = binding.hasVariable("sourcePharmacyHintByRequestLineId") && sourcePharmacyHintByRequestLineId ? sourcePharmacyHintByRequestLineId : [:]
     def remainingMap = binding.hasVariable("remainingQuantityByRequestLineId") && remainingQuantityByRequestLineId ? remainingQuantityByRequestLineId : [:]
+    def selectionError = binding.hasVariable("dispensingSelectionError") ? dispensingSelectionError : null
     def viewOnlyMode = binding.hasVariable("viewOnly") && viewOnly ? true : false
     def consumableRequest = selectedRequest?.requestType?.toString() == 'CONSUMABLE'
+    def paymentExceptionChoices = binding.hasVariable("paymentExceptionTypes") && paymentExceptionTypes ? paymentExceptionTypes : []
+    def canApprovePaymentException = binding.hasVariable("canApprovePaymentException") && canApprovePaymentException ? true : false
+    def paymentExceptionApproved = selectedRequest?.paymentExceptionApproved ? true : false
+    def paymentSatisfied = selectedRequest?.paymentConfirmed || paymentExceptionApproved
     def userName = { user -> user?.personName?.toString() ?: user?.username ?: '' }
     def requesterName = { request ->
         request?.orderingProvider?.name ?: userName(request?.creator)
@@ -15,6 +20,7 @@
 <style type="text/css">
     .serve-page { display:grid; gap:14px; }
     .serve-banner { padding:10px 12px; border-radius:4px; border:1px solid #f0ad4e; background:#fcf8e3; color:#8a6d3b; }
+    .serve-error { padding:10px 12px; border-radius:4px; border:1px solid #ebccd1; background:#f2dede; color:#a94442; }
     .serve-card { background:#fff; border:1px solid #d8e2ea; border-radius:4px; overflow:hidden; }
     .serve-card-head { background:#f3f6f9; border-bottom:1px solid #d8e2ea; padding:10px 14px; font-weight:600; color:#334155; }
     .serve-card-body { padding:14px; }
@@ -47,12 +53,22 @@
     .serve-source-hint { margin-top:8px; padding:10px 12px; border-radius:4px; border:1px solid #d9edf7; background:#f4fbff; color:#245269; font-size:12px; }
     .serve-complete { margin-top:8px; padding:10px 12px; border-radius:4px; border:1px solid #d6e9c6; background:#f5fff3; color:#3c763d; font-size:12px; }
     .serve-pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; color:#fff; background:#16a34a; }
+    .serve-exception-box { margin-top:14px; border:1px solid #f0ad4e; background:#fff8e8; border-radius:4px; padding:12px; }
+    .serve-exception-box h4 { margin:0 0 8px; color:#8a6d3b; }
+    .serve-exception-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .serve-exception-grid label { display:block; margin-bottom:4px; font-size:12px; font-weight:600; color:#334155; }
+    .serve-exception-grid select, .serve-exception-grid input, .serve-exception-grid textarea { width:100%; border:1px solid #cbd5e1; border-radius:4px; padding:7px 8px; font:inherit; background:#fff; }
+    .serve-exception-grid textarea { min-height:68px; }
     @media (max-width: 1100px) {
         .serve-grid, .serve-meta, .serve-rx-grid { grid-template-columns:1fr; }
     }
 </style>
 
 <h2>${ viewOnlyMode ? (consumableRequest ? 'View consumable request' : 'View prescription') : (consumableRequest ? 'Dispense consumables' : 'Dispense medication') }</h2>
+
+<% if (selectionError) { %>
+<div class="serve-error">${ selectionError }</div>
+<% } %>
 
 <% if (pharmacySelectionRequired) { %>
 <div class="serve-banner">
@@ -74,6 +90,9 @@
     <div class="serve-card">
         <div class="serve-card-head">Queue selection</div>
         <div class="serve-card-body serve-grid">
+            <% if (paymentRefreshRequested) { %>
+            <div class="serve-banner" style="grid-column:1 / -1;">Payment status refresh completed.</div>
+            <% } %>
             <div class="serve-field">
                 <label>Dispensing pharmacy</label>
                 <div class="serve-meta-value">${ activePharmacy.name }</div>
@@ -92,6 +111,7 @@
                             <% } %>
                         </select>
                         <button type="submit" class="serve-btn">Load request</button>
+                        <a class="serve-btn serve-btn-secondary" href="${ ui.pageLink('rwandapharmacymanagement', 'dispense/withOrder', [requestId: selectedRequest?.patientDispensingRequestId, viewOnly: viewOnlyMode, pharmacyLocationId: activePharmacy.pharmacyLocationId, refreshPayments: true]) }">Refresh payment status</a>
                     </div>
                 </form>
             </div>
@@ -117,13 +137,67 @@
                 </div>
                 <div class="serve-meta-card">
                     <div class="serve-meta-label">Payment</div>
-                    <div class="serve-meta-value"><span class="serve-pill" style="${ selectedRequest?.paymentConfirmed ? '' : 'background:#f59e0b;' }">${ selectedRequest?.paymentConfirmed ? 'Paid' : 'Not paid' }</span></div>
+                    <div class="serve-meta-value">
+                        <span class="serve-pill" style="${ selectedRequest?.paymentConfirmed ? '' : (paymentExceptionApproved ? 'background:#7c3aed;' : 'background:#f59e0b;') }">
+                            ${ selectedRequest?.paymentConfirmed ? 'Paid' : (paymentExceptionApproved ? 'Exception approved' : 'Not paid') }
+                        </span>
+                    </div>
                 </div>
                 <div class="serve-meta-card">
                     <div class="serve-meta-label">Requested by</div>
                     <div class="serve-meta-value">${ requesterName(selectedRequest) ?: '' }</div>
                 </div>
             </div>
+
+            <% if (paymentExceptionApproved) { %>
+            <div class="serve-exception-box">
+                <h4>Dispense authorized without confirmed payment</h4>
+                <div class="serve-muted">
+                    Reason: <strong>${ selectedRequest.paymentExceptionType ?: '' }</strong>
+                    ${ selectedRequest.paymentExceptionReason ? ' - ' + selectedRequest.paymentExceptionReason : '' }
+                    ${ selectedRequest.paymentExceptionApprovedBy ? ' | Approved by ' + userName(selectedRequest.paymentExceptionApprovedBy) : '' }
+                    ${ selectedRequest.paymentExceptionApprovedDate ? ' on ' + selectedRequest.paymentExceptionApprovedDate.format('dd/MMM/yyyy HH:mm') : '' }
+                </div>
+                <% if (selectedRequest.paymentExceptionNote) { %>
+                <div class="serve-muted" style="margin-top:6px;">Note: ${ selectedRequest.paymentExceptionNote }</div>
+                <% } %>
+            </div>
+            <% } else if (!selectedRequest?.paymentConfirmed && canApprovePaymentException) { %>
+            <div class="serve-exception-box">
+                <h4>Authorize dispense exception</h4>
+                <div class="serve-muted" style="margin-bottom:10px;">Use this only when dispensing is approved even though billing has not confirmed payment.</div>
+                <div class="serve-exception-grid">
+                    <div>
+                        <label>Exception type</label>
+                        <select name="paymentExceptionType" form="payment-exception-form" required="required">
+                            <option value="">Select reason type</option>
+                            <% paymentExceptionChoices.each { type -> %>
+                            <option value="${ type.name() }">${ type.name().replace('_', ' ') }</option>
+                            <% } %>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Reason</label>
+                        <input type="text" name="paymentExceptionReason" form="payment-exception-form" required="required" placeholder="e.g. approved by finance, emergency, system down"/>
+                    </div>
+                    <div style="grid-column:1 / -1;">
+                        <label>Note</label>
+                        <textarea name="paymentExceptionNote" form="payment-exception-form" placeholder="Optional supporting details"></textarea>
+                    </div>
+                </div>
+                <form method="post" id="payment-exception-form" style="margin-top:10px;">
+                    <input type="hidden" name="requestId" value="${ selectedRequest.patientDispensingRequestId }"/>
+                    <input type="hidden" name="action" value="approvePaymentException"/>
+                    <% if (viewOnlyMode) { %><input type="hidden" name="viewOnly" value="true"/><% } %>
+                    <button type="submit" class="serve-btn" style="background:#7c3aed;border-color:#6d28d9;">Approve dispense exception</button>
+                </form>
+            </div>
+            <% } else if (!selectedRequest?.paymentConfirmed) { %>
+            <div class="serve-exception-box">
+                <h4>Payment exception approval required</h4>
+                <div class="serve-muted">You do not have permission to approve dispensing without confirmed payment. Ask a user with payment exception approval rights to authorize this request.</div>
+            </div>
+            <% } %>
 
             <form method="post" id="serve-request-form" style="margin-top:14px;">
                 <input type="hidden" name="requestId" value="${ selectedRequest.patientDispensingRequestId }"/>
@@ -150,7 +224,7 @@
                         <div class="serve-rx-grid" style="grid-template-columns:repeat(3, minmax(0, 1fr));">
                             <div class="serve-rx-block"><div class="serve-rx-label">Requested quantity</div><div class="serve-rx-value">${ line.requestedQuantity ?: '' }</div></div>
                             <div class="serve-rx-block"><div class="serve-rx-label">Unit of measure</div><div class="serve-rx-value">${ line.unitOfMeasure ?: '' }</div></div>
-                            <div class="serve-rx-block"><div class="serve-rx-label">Payment</div><div class="serve-rx-value">${ selectedRequest?.paymentConfirmed ? 'Ready to dispense' : 'Waiting for payment' }</div></div>
+                            <div class="serve-rx-block"><div class="serve-rx-label">Payment</div><div class="serve-rx-value">${ paymentSatisfied ? (paymentExceptionApproved && !selectedRequest?.paymentConfirmed ? 'Exception authorized' : 'Ready to dispense') : 'Waiting for payment' }</div></div>
                         </div>
                         <% } else { %>
                         <div class="serve-rx-grid">
@@ -230,8 +304,8 @@
                     <a class="serve-btn serve-btn-secondary" href="${ ui.pageLink('rwandapharmacymanagement', 'queue/patientQueue') }">Back to queue</a>
                     <% if (viewOnlyMode) { %>
                     <a class="serve-btn" href="${ ui.pageLink('rwandapharmacymanagement', 'dispense/withOrder', [requestId: selectedRequest.patientDispensingRequestId]) }">Open serve form</a>
-                    <% } else if (!selectedRequest?.paymentConfirmed) { %>
-                    <span class="serve-btn" style="background:#f59e0b;border-color:#d97706;">Waiting for payment</span>
+                    <% } else if (!paymentSatisfied) { %>
+                    <span class="serve-btn" style="background:#f59e0b;border-color:#d97706;">Waiting for payment or exception approval</span>
                     <% } else { %>
                     <button type="submit" class="serve-btn">${ consumableRequest ? 'Serve this request' : 'Serve this prescription' }</button>
                     <% } %>

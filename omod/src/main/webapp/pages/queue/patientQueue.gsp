@@ -1,5 +1,8 @@
 <%
     ui.decorateWith("rwandapharmacymanagement", "simplePage")
+    def activeTab = binding.hasVariable("queueTab") && queueTab ? queueTab : 'recent'
+    def baseQueueParams = [pharmacyLocationId: activePharmacy?.pharmacyLocationId, q: queueSearch]
+    def tabLink = { key -> ui.pageLink('rwandapharmacymanagement', 'queue/patientQueue', baseQueueParams + [tab: key, page: 1]) }
 %>
 <style type="text/css">
     .queue-shell { display:grid; gap:14px; }
@@ -8,8 +11,12 @@
     .queue-panel { background:#fff; border:1px solid #d8e2ea; border-radius:4px; overflow:hidden; }
     .queue-panel-head { background:#f3f6f9; border-bottom:1px solid #d8e2ea; padding:10px 14px; font-weight:600; color:#334155; }
     .queue-toolbar { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid #e5edf3; background:#fff; flex-wrap:wrap; }
-    .queue-search { min-width:260px; max-width:420px; width:100%; }
+    .queue-tabs { display:flex; gap:6px; flex-wrap:wrap; padding:10px 14px; border-bottom:1px solid #e5edf3; background:#f8fafc; }
+    .queue-tab { display:inline-block; padding:7px 12px; border-radius:999px; border:1px solid #cbd5e1; background:#fff; color:#334155; text-decoration:none; font-size:12px; font-weight:600; }
+    .queue-tab-active { background:#0f766e; border-color:#0f766e; color:#fff; }
+    .queue-search { min-width:260px; width:100%; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
     .queue-search input { width:100%; border:1px solid #cbd5e1; border-radius:4px; padding:8px 10px; font-size:12px; }
+    .queue-search button { padding:8px 12px; border-radius:4px; border:1px solid #337ab7; background:#337ab7; color:#fff; font-size:12px; font-weight:600; cursor:pointer; }
     .queue-table { width:100%; border-collapse:collapse; }
     .queue-table th, .queue-table td { padding:10px 12px; border-bottom:1px solid #e5edf3; text-align:left; font-size:12px; vertical-align:middle; }
     .queue-table th { background:#fafcfe; color:#475569; font-weight:600; }
@@ -20,12 +27,17 @@
     .queue-wait-high { background:#d9534f; }
     .queue-paid { display:inline-block; padding:2px 7px; border-radius:4px; font-size:11px; font-weight:700; color:#fff; background:#22c55e; }
     .queue-unpaid { display:inline-block; padding:2px 7px; border-radius:4px; font-size:11px; font-weight:700; color:#fff; background:#f59e0b; }
+    .queue-exception { display:inline-block; padding:2px 7px; border-radius:4px; font-size:11px; font-weight:700; color:#fff; background:#7c3aed; }
     .queue-action-group { display:flex; gap:6px; flex-wrap:wrap; }
     .queue-serve { display:inline-block; padding:4px 10px; border-radius:4px; border:1px solid #2e6da4; background:#337ab7; color:#fff; text-decoration:none; font-size:11px; font-weight:600; }
     .queue-serve:hover { background:#286090; }
     .queue-view { display:inline-block; padding:4px 10px; border-radius:4px; border:1px solid #64748b; background:#fff; color:#334155; text-decoration:none; font-size:11px; font-weight:600; }
+    .queue-refresh { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:4px; border:1px solid #64748b; background:#fff; color:#334155; text-decoration:none; font-size:15px; font-weight:700; line-height:1; }
+    .queue-refresh:hover { background:#f1f5f9; }
     .queue-blocked { display:inline-block; padding:4px 10px; border-radius:4px; border:1px solid #d1d5db; background:#f8fafc; color:#94a3b8; font-size:11px; font-weight:600; cursor:not-allowed; }
     .queue-empty { padding:18px 14px; color:#64748b; }
+    .queue-pager { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 14px; border-top:1px solid #e5edf3; color:#64748b; font-size:12px; flex-wrap:wrap; }
+    .queue-pager-actions { display:flex; gap:6px; align-items:center; }
 </style>
 
 <h2>Patient dispensing queue</h2>
@@ -49,21 +61,39 @@
 <div class="queue-banner queue-warn">No pharmacy is configured for ${ pharmacySelectionLocationName ?: 'your current location' }.</div>
 <% } else { %>
 <div class="queue-shell">
+    <% if (paymentRefreshRequested) { %>
+    <div class="queue-banner">Payment status refresh completed.</div>
+    <% } else if (refreshedPaymentRequestId) { %>
+    <div class="queue-banner">Payment status refreshed for the selected request.</div>
+    <% } %>
     <div class="queue-panel">
-        <div class="queue-panel-head">Queue (${ requests?.size() ?: 0 } patients)</div>
+        <div class="queue-panel-head">Queue (${ requests?.size() ?: 0 } shown, page size ${ queuePageSize ?: 100 })</div>
+        <div class="queue-tabs">
+            <a class="queue-tab ${ activeTab == 'recent' ? 'queue-tab-active' : '' }" href="${ tabLink('recent') }">Recent</a>
+            <a class="queue-tab ${ activeTab == 'ready' ? 'queue-tab-active' : '' }" href="${ tabLink('ready') }">Ready</a>
+            <a class="queue-tab ${ activeTab == 'waiting' ? 'queue-tab-active' : '' }" href="${ tabLink('waiting') }">Waiting Payment</a>
+            <a class="queue-tab ${ activeTab == 'exception' ? 'queue-tab-active' : '' }" href="${ tabLink('exception') }">Exception Approved</a>
+            <a class="queue-tab ${ activeTab == 'older' ? 'queue-tab-active' : '' }" href="${ tabLink('older') }">Older Pending</a>
+            <a class="queue-tab ${ activeTab == 'search' ? 'queue-tab-active' : '' }" href="${ tabLink('search') }">Search All</a>
+        </div>
         <div class="queue-toolbar">
-            <div class="queue-search">
-                <input type="text" id="queue-search-input" placeholder="Search by patient identifier or patient name"/>
-            </div>
-            <div class="queue-empty" id="queue-search-empty" style="display:none;padding:0;">No queue rows match that search.</div>
+            <form method="get" class="queue-search">
+                <input type="hidden" name="pharmacyLocationId" value="${ activePharmacy.pharmacyLocationId }"/>
+                <input type="hidden" name="tab" value="${ activeTab }"/>
+                <input type="text" name="q" value="${ queueSearch ?: '' }" placeholder="Search patient identifier or patient name" style="max-width:360px;"/>
+                <button type="submit">Search</button>
+                <% if (queueSearch) { %><a class="queue-view" href="${ ui.pageLink('rwandapharmacymanagement', 'queue/patientQueue', [pharmacyLocationId: activePharmacy.pharmacyLocationId, tab: activeTab]) }">Clear</a><% } %>
+            </form>
+            <a class="queue-view" href="${ ui.pageLink('rwandapharmacymanagement', 'queue/patientQueue', [pharmacyLocationId: activePharmacy.pharmacyLocationId, q: queueSearch, tab: activeTab, page: queuePage, refreshPayments: true]) }">Refresh payment status</a>
         </div>
         <% if (!requests) { %>
-        <div class="queue-empty">No dispensing requests are waiting for ${ activePharmacy.name }.</div>
+        <div class="queue-empty">${ queueSearch ? 'No dispensing requests match that search.' : 'No dispensing requests are waiting for ' + activePharmacy.name + '.' }</div>
         <% } else { %>
         <table class="queue-table">
             <thead>
             <tr>
                 <th>#</th>
+                <th>Created</th>
                 <th>Patient name</th>
                 <th>Patient ID</th>
                 <th>Age</th>
@@ -71,7 +101,7 @@
                 <th>Type</th>
                 <th>Items</th>
                 <th>Wait time</th>
-                <th>Payment</th>
+                <th>Status</th>
                 <th>Action</th>
             </tr>
             </thead>
@@ -82,23 +112,28 @@
                 def waitTime = waitTimeByRequestId[request.patientDispensingRequestId] ?: '0 min'
                 def waitClass = waitTime.contains('h') || waitTime.startsWith('3') || waitTime.startsWith('4') || waitTime.startsWith('5') ? 'queue-wait queue-wait-high' : 'queue-wait'
                 def paid = paymentStatusByRequestId[request.patientDispensingRequestId]
+                def exceptionApproved = paymentExceptionByRequestId[request.patientDispensingRequestId]
+                def ready = paid || exceptionApproved
+                def consumableRequest = request.requestType?.toString() == 'CONSUMABLE'
                 def patientLabel = request.patient?.personName ? request.patient.personName.toString() : ''
                 def patientIdLabel = patientIdentifierByRequestId[request.patientDispensingRequestId] ?: ''
             %>
             <tr class="queue-row" data-search="${ (patientLabel + ' ' + patientIdLabel).toLowerCase() }">
-                <td>${ idx + 1 }</td>
+                <td>${ (queueFirstResult ?: 1) + idx }</td>
+                <td>${ request.dateCreated ? request.dateCreated.format('dd/MM HH:mm') : '' }</td>
                 <td class="queue-name">${ patientLabel }</td>
                 <td class="queue-id">${ patientIdLabel }</td>
                 <td>${ age == null ? '' : age }</td>
                 <td>${ gender ?: '' }</td>
-                <td>${ request.requestType?.toString() == 'CONSUMABLE' ? 'Consumable' : 'Prescription' }</td>
+                <td>${ consumableRequest ? 'Consumable' : 'Prescription' }</td>
                 <td><span class="queue-badge">${ drugCountByRequestId[request.patientDispensingRequestId] ?: 0 }</span></td>
                 <td><span class="${ waitClass }">${ waitTime }</span></td>
-                <td><span class="${ paid ? 'queue-paid' : 'queue-unpaid' }">${ paid ? 'Paid' : 'Not paid' }</span></td>
+                <td><span class="${ paid ? 'queue-paid' : (exceptionApproved ? 'queue-exception' : 'queue-unpaid') }">${ paid ? 'Paid' : (exceptionApproved ? 'Exception' : 'Waiting payment') }</span></td>
                 <td>
                     <div class="queue-action-group">
                         <a class="queue-view" href="${ ui.pageLink('rwandapharmacymanagement', 'dispense/withOrder', [requestId: request.patientDispensingRequestId, viewOnly: true]) }">View</a>
-                        <% if (paid) { %>
+                        <a class="queue-refresh" title="Refresh payment status" aria-label="Refresh payment status" href="${ ui.pageLink('rwandapharmacymanagement', 'queue/patientQueue', [pharmacyLocationId: activePharmacy.pharmacyLocationId, q: queueSearch, tab: activeTab, page: queuePage, refreshPaymentRequestId: request.patientDispensingRequestId]) }">&#8635;</a>
+                        <% if (ready) { %>
                         <a class="queue-serve" href="${ ui.pageLink('rwandapharmacymanagement', 'dispense/withOrder', [requestId: request.patientDispensingRequestId]) }">Serve</a>
                         <% } else { %>
                         <span class="queue-blocked">Serve</span>
@@ -110,31 +145,21 @@
             </tbody>
         </table>
         <% } %>
+        <div class="queue-pager">
+            <div>
+                Showing ${ queueFirstResult ?: 0 }-${ queueLastResult ?: 0 } of ${ queueTotal ?: 0 }
+                <% if (queueSearch) { %> matching "${ queueSearch }"<% } %>
+            </div>
+            <div class="queue-pager-actions">
+                <% if (queueHasPreviousPage) { %>
+                <a class="queue-view" href="${ ui.pageLink('rwandapharmacymanagement', 'queue/patientQueue', [pharmacyLocationId: activePharmacy.pharmacyLocationId, q: queueSearch, tab: activeTab, page: queuePage - 1]) }">Previous</a>
+                <% } %>
+                <span>Page ${ queuePage ?: 1 }</span>
+                <% if (queueHasNextPage) { %>
+                <a class="queue-view" href="${ ui.pageLink('rwandapharmacymanagement', 'queue/patientQueue', [pharmacyLocationId: activePharmacy.pharmacyLocationId, q: queueSearch, tab: activeTab, page: queuePage + 1]) }">Next</a>
+                <% } %>
+            </div>
+        </div>
     </div>
 </div>
-<script type="text/javascript">
-    (function() {
-        var input = document.getElementById('queue-search-input');
-        var rows = document.querySelectorAll('.queue-row');
-        var empty = document.getElementById('queue-search-empty');
-        if (!input || !rows.length) {
-            return;
-        }
-        input.oninput = function() {
-            var query = (input.value || '').toLowerCase().trim();
-            var visible = 0;
-            for (var i = 0; i < rows.length; i++) {
-                var row = rows[i];
-                var match = !query || (row.getAttribute('data-search') || '').indexOf(query) >= 0;
-                row.style.display = match ? '' : 'none';
-                if (match) {
-                    visible++;
-                }
-            }
-            if (empty) {
-                empty.style.display = visible ? 'none' : 'block';
-            }
-        };
-    })();
-</script>
 <% } %>

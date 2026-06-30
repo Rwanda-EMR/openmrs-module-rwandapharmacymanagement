@@ -17,6 +17,17 @@
         <property name="patientBillId" column="patient_bill_id" type="integer"/>
         <property name="billable" column="billable" type="boolean"/>
         <property name="paymentConfirmed" column="payment_confirmed" type="boolean"/>
+        <property name="paymentExceptionApproved" column="payment_exception_approved" type="boolean"/>
+        <property name="paymentExceptionType" column="payment_exception_type">
+            <type name="org.hibernate.type.EnumType">
+                <param name="enumClass">org.openmrs.module.rwandapharmacymanagement.model.enums.PaymentExceptionType</param>
+                <param name="useNamed">true</param>
+            </type>
+        </property>
+        <property name="paymentExceptionReason" column="payment_exception_reason" type="string"/>
+        <property name="paymentExceptionNote" column="payment_exception_note" type="string"/>
+        <many-to-one name="paymentExceptionApprovedBy" class="org.openmrs.User" column="payment_exception_approved_by"/>
+        <property name="paymentExceptionApprovedDate" column="payment_exception_approved_date"/>
         <property name="requestStatus" column="request_status">
             <type name="org.hibernate.type.EnumType">
                 <param name="enumClass">org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus</param>

@@ -1,8 +1,11 @@
 package org.openmrs.module.rwandapharmacymanagement.page.controller.dispense;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.openmrs.DrugOrder;
 import org.openmrs.Order;
 import org.openmrs.api.context.Context;
+import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.DispensingService;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
@@ -15,6 +18,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingReques
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.web.support.CurrentPharmacySupport;
 import org.openmrs.module.rwandapharmacymanagement.web.support.PatientRequestVisibilitySupport;
+import org.openmrs.module.rwandapharmacymanagement.model.enums.PaymentExceptionType;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.PharmacyLocationType;
 import org.openmrs.ui.framework.annotation.SpringBean;
@@ -36,6 +40,8 @@ import java.util.Map;
 
 @Controller
 public class WithOrderPageController {
+    private static final Log log = LogFactory.getLog(WithOrderPageController.class);
+    private static final int REQUEST_SELECTOR_LIMIT = 100;
 
     public void get(PageModel model,
                     @SpringBean("dispensingService") DispensingService dispensingService,
@@ -45,24 +51,33 @@ public class WithOrderPageController {
                     @RequestParam(value = "requestId", required = false) Integer requestId,
                     @RequestParam(value = "viewOnly", required = false) Boolean viewOnly,
                     @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
+                    @RequestParam(value = "refreshPayments", required = false) Boolean refreshPayments,
                     HttpSession session) {
         CurrentPharmacySupport.rememberSelection(pharmacyService, session, pharmacyLocationId);
         CurrentPharmacySupport.populateModel(model, pharmacyService, session);
         PharmacyLocation activePharmacy = (PharmacyLocation) model.getAttribute("activePharmacy");
-        dispensingService.refreshPendingRequestPayments(activePharmacy == null ? null : activePharmacy.getPharmacyLocationId());
-        List<PatientDispensingRequest> visibleRequests = activePharmacy == null ? java.util.Collections.<PatientDispensingRequest>emptyList()
-                : PatientRequestVisibilitySupport.filterForActivePharmacy(
-                        dispensingService.getPendingRequestsForPharmacy(activePharmacy.getPharmacyLocationId()), activePharmacy);
+        if (Boolean.TRUE.equals(refreshPayments)) {
+            if (requestId != null) {
+                dispensingService.refreshPendingRequestPayment(requestId);
+            } else {
+                dispensingService.refreshPendingRequestPayments(activePharmacy == null ? null : activePharmacy.getPharmacyLocationId());
+            }
+        }
         PatientDispensingRequest selectedRequest = requestId == null ? null : dispensingService.getRequest(requestId);
+        String dispensingSelectionError = null;
+        if (requestId != null && selectedRequest == null) {
+            dispensingSelectionError = "Request " + requestId + " was not found or is no longer available in the dispensing queue.";
+            log.warn(dispensingSelectionError);
+        }
         if (selectedRequest != null && activePharmacy != null
                 && !PatientRequestVisibilitySupport.isVisibleToPharmacy(selectedRequest, activePharmacy,
                 Context.getUserContext() == null ? null : Context.getUserContext().getLocationId())) {
+            dispensingSelectionError = describeRequestAccessIssue(selectedRequest, activePharmacy, requestId);
+            log.warn(dispensingSelectionError);
             selectedRequest = null;
         }
+        List<PatientDispensingRequest> visibleRequests = loadVisibleRequests(dispensingService, activePharmacy, selectedRequest);
         model.addAttribute("requests", visibleRequests);
-        model.addAttribute("items", pharmacyService.getAllItems());
-        model.addAttribute("stockBalances", activePharmacy == null ? java.util.Collections.emptyList()
-                : inventoryService.getInventoryForPharmacy(activePharmacy.getPharmacyLocationId()));
         model.addAttribute("pricingService", pricingService);
         model.addAttribute("selectedRequest", selectedRequest);
         model.addAttribute("viewOnly", Boolean.TRUE.equals(viewOnly));
@@ -73,12 +88,52 @@ public class WithOrderPageController {
         model.addAttribute("batchOptionsByRequestLineId", buildBatchOptions(selectedRequest, activePharmacy, inventoryService));
         model.addAttribute("sourcePharmacyHintByRequestLineId",
                 buildSourcePharmacyHints(selectedRequest, activePharmacy, pharmacyService, inventoryService));
+        model.addAttribute("paymentRefreshRequested", Boolean.TRUE.equals(refreshPayments));
+        model.addAttribute("dispensingSelectionError", dispensingSelectionError);
+        model.addAttribute("paymentExceptionTypes", PaymentExceptionType.values());
+        model.addAttribute("canApprovePaymentException",
+                Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_PAYMENT_EXCEPTION));
+    }
+
+    private List<PatientDispensingRequest> loadVisibleRequests(DispensingService dispensingService,
+                                                               PharmacyLocation activePharmacy,
+                                                               PatientDispensingRequest selectedRequest) {
+        if (activePharmacy == null || activePharmacy.getPharmacyLocationId() == null) {
+            return java.util.Collections.emptyList();
+        }
+        List<PatientDispensingRequest> visibleRequests;
+        if (selectedRequest == null) {
+            visibleRequests = PatientRequestVisibilitySupport.filterForActivePharmacy(
+                    dispensingService.getPendingRequestsForPharmacy(activePharmacy.getPharmacyLocationId(), null, 0,
+                            REQUEST_SELECTOR_LIMIT), activePharmacy);
+        } else {
+            visibleRequests = new ArrayList<PatientDispensingRequest>();
+        }
+        if (selectedRequest != null && selectedRequest.getPatientDispensingRequestId() != null
+                && PatientRequestVisibilitySupport.isVisibleToPharmacy(selectedRequest, activePharmacy,
+                Context.getUserContext() == null ? null : Context.getUserContext().getLocationId())) {
+            boolean alreadyIncluded = false;
+            for (PatientDispensingRequest request : visibleRequests) {
+                if (request != null && selectedRequest.getPatientDispensingRequestId().equals(request.getPatientDispensingRequestId())) {
+                    alreadyIncluded = true;
+                    break;
+                }
+            }
+            if (!alreadyIncluded) {
+                visibleRequests.add(0, selectedRequest);
+            }
+        }
+        return visibleRequests;
     }
 
     public String post(@SpringBean("dispensingService") DispensingService dispensingService,
                        @SpringBean("pharmacyService") PharmacyService pharmacyService,
                        @SpringBean("inventoryService") InventoryService inventoryService,
                        @RequestParam("requestId") Integer requestId,
+                       @RequestParam(value = "action", required = false) String action,
+                       @RequestParam(value = "paymentExceptionType", required = false) PaymentExceptionType paymentExceptionType,
+                       @RequestParam(value = "paymentExceptionReason", required = false) String paymentExceptionReason,
+                       @RequestParam(value = "paymentExceptionNote", required = false) String paymentExceptionNote,
                        @RequestParam(value = "markUnavailableLineId", required = false) Integer markUnavailableLineId,
                        @RequestParam(value = "requestLineId", required = false) Integer[] requestLineIds,
                        @RequestParam(value = "itemId", required = false) Integer[] itemIds,
@@ -94,6 +149,18 @@ public class WithOrderPageController {
                 Context.getUserContext() == null ? null : Context.getUserContext().getLocationId())) {
             throw new IllegalArgumentException("Selected request is not available to the active pharmacy");
         }
+        if ("approvePaymentException".equalsIgnoreCase(action)) {
+            if (!Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_PAYMENT_EXCEPTION)) {
+                throw new IllegalArgumentException("You do not have permission to approve payment exceptions");
+            }
+            dispensingService.approvePaymentException(requestId, paymentExceptionType, paymentExceptionReason, paymentExceptionNote);
+            Map<String, Object> redirectParams = new LinkedHashMap<String, Object>();
+            redirectParams.put("requestId", requestId);
+            if (Boolean.TRUE.equals(viewOnly)) {
+                redirectParams.put("viewOnly", Boolean.TRUE);
+            }
+            return "redirect:" + ui.pageLink("rwandapharmacymanagement", "dispense/withOrder", redirectParams);
+        }
         if (markUnavailableLineId != null) {
             dispensingService.markRequestLineUnavailable(requestId, markUnavailableLineId,
                     "Drug not available in all pharmacies");
@@ -104,7 +171,7 @@ public class WithOrderPageController {
             }
             return "redirect:" + ui.pageLink("rwandapharmacymanagement", "dispense/withOrder", redirectParams);
         }
-        if (!Boolean.TRUE.equals(request.getPaymentConfirmed())) {
+        if (!isPaymentSatisfied(request)) {
             throw new IllegalArgumentException("This prescription has not been paid yet");
         }
         DispenseRecord record = new DispenseRecord();
@@ -116,7 +183,11 @@ public class WithOrderPageController {
         record.setLines(buildLines(pharmacyService, inventoryService, request, activePharmacy, requestLineIds, itemIds,
                 quantities, batchNumbers, expiryDates));
         dispensingService.dispense(record);
-        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "dispense/withOrder");
+        Map<String, Object> redirectParams = new LinkedHashMap<String, Object>();
+        if (activePharmacy.getPharmacyLocationId() != null) {
+            redirectParams.put("pharmacyLocationId", activePharmacy.getPharmacyLocationId());
+        }
+        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "queue/patientQueue", redirectParams);
     }
 
     private List<DispenseRecordLine> buildLines(PharmacyService pharmacyService,
@@ -170,6 +241,12 @@ public class WithOrderPageController {
             allocatedByRequestLineId.put(requestLineId, newAllocatedTotal);
         }
         return lines;
+    }
+
+    private boolean isPaymentSatisfied(PatientDispensingRequest request) {
+        return request != null
+                && (Boolean.TRUE.equals(request.getPaymentConfirmed())
+                || Boolean.TRUE.equals(request.getPaymentExceptionApproved()));
     }
 
     private DispensingService dispensingServiceFromContext() {
@@ -243,6 +320,22 @@ public class WithOrderPageController {
                     PatientRequestVisibilitySupport.describeTarget(selectedRequest));
         }
         return descriptions;
+    }
+
+    private String describeRequestAccessIssue(PatientDispensingRequest request,
+                                              PharmacyLocation activePharmacy,
+                                              Integer requestId) {
+        StringBuilder message = new StringBuilder("Request ")
+                .append(requestId == null ? "" : requestId)
+                .append(" cannot be opened from ")
+                .append(activePharmacy == null || activePharmacy.getName() == null ? "the selected pharmacy" : activePharmacy.getName())
+                .append(".");
+        String targetDescription = PatientRequestVisibilitySupport.describeTarget(request);
+        if (targetDescription != null && targetDescription.trim().length() > 0) {
+            message.append(" It is routed to ").append(targetDescription).append(".");
+        }
+        message.append(" Change the active pharmacy or reroute the request before dispensing.");
+        return message.toString();
     }
 
     private Map<Integer, String> buildPatientIdentifierMap(List<PatientDispensingRequest> requests,

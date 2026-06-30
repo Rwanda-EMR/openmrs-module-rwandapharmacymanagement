@@ -4,6 +4,7 @@ import org.hibernate.SessionFactory;
 import org.hibernate.criterion.Order;
 import org.hibernate.criterion.Projections;
 import org.hibernate.criterion.Restrictions;
+import org.openmrs.api.context.Context;
 import org.openmrs.module.rwandapharmacymanagement.db.InventoryDao;
 import org.openmrs.module.rwandapharmacymanagement.model.DeliveryReceipt;
 import org.openmrs.module.rwandapharmacymanagement.model.DeliveryReceiptLine;
@@ -14,6 +15,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.StockAdjustment;
 import org.openmrs.module.rwandapharmacymanagement.model.StockAdjustmentLine;
 import org.openmrs.module.rwandapharmacymanagement.model.StockTransaction;
 
+import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
 
@@ -46,11 +48,42 @@ public class HibernateInventoryDao implements InventoryDao {
                 .add(Restrictions.eq("pharmacyLocation.pharmacyLocationId", pharmacyLocationId))
                 .add(notVoided());
         if (batchNumber == null || batchNumber.trim().isEmpty()) {
-            criteria.add(Restrictions.isNull("batchNumber"));
+            criteria.add(Restrictions.or(Restrictions.isNull("batchNumber"), Restrictions.eq("batchNumber", "")));
         } else {
             criteria.add(Restrictions.eq("batchNumber", batchNumber));
         }
-        return (InventoryBalance) criteria.uniqueResult();
+        criteria.addOrder(Order.asc("inventoryBalanceId"));
+        List<InventoryBalance> balances = criteria.list();
+        if (balances == null || balances.isEmpty()) {
+            return null;
+        }
+        InventoryBalance primary = balances.get(0);
+        if (balances.size() == 1) {
+            return primary;
+        }
+        BigDecimal totalQuantity = primary.getQuantityOnHand() == null ? BigDecimal.ZERO : primary.getQuantityOnHand();
+        for (int i = 1; i < balances.size(); i++) {
+            InventoryBalance duplicate = balances.get(i);
+            if (duplicate == null) {
+                continue;
+            }
+            totalQuantity = totalQuantity.add(duplicate.getQuantityOnHand() == null ? BigDecimal.ZERO : duplicate.getQuantityOnHand());
+            if (primary.getExpiryDate() == null && duplicate.getExpiryDate() != null) {
+                primary.setExpiryDate(duplicate.getExpiryDate());
+            }
+            if (primary.getUnitPrice() == null && duplicate.getUnitPrice() != null) {
+                primary.setUnitPrice(duplicate.getUnitPrice());
+            }
+            duplicate.setQuantityOnHand(BigDecimal.ZERO);
+            duplicate.setVoided(Boolean.TRUE);
+            duplicate.setVoidedBy(Context.getAuthenticatedUser());
+            duplicate.setDateVoided(new Date());
+            duplicate.setVoidReason("Merged duplicate inventory balance");
+            sessionFactory.getCurrentSession().saveOrUpdate(duplicate);
+        }
+        primary.setQuantityOnHand(totalQuantity);
+        sessionFactory.getCurrentSession().saveOrUpdate(primary);
+        return primary;
     }
 
     @Override

@@ -65,4 +65,8 @@
         <span class="tile-icon">↕</span>
         <span class="tile-label">Inventory Movement Report</span>
     </a>
+    <a class="tile tile-dispense" href="${ ui.pageLink("rwandapharmacymanagement", "report/paymentExceptionReport") }">
+        <span class="tile-icon">⚑</span>
+        <span class="tile-label">Payment Exception Report</span>
+    </a>
 </div>

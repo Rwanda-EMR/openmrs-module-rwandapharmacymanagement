@@ -44,18 +44,15 @@ public final class SupplierPayloadBuilder {
                     builder.append(",");
                 }
                 builder.append("{");
-                appendField(builder, "lineNumber", String.valueOf((i + 1) * 10), true);
+                appendField(builder, "lineNumber", String.valueOf(i + 1), true);
                 appendField(builder, "requestDeliveryDate", formatDate(new Date()), true);
                 appendNumeric(builder, "requestQuantity", line.getOrderedQuantity(), true);
-                appendField(builder, "quantityUom", "EA", true);
                 appendNumeric(builder, "unitPrice", line.getUnitPrice(), true);
                 BigDecimal total = safe(line.getOrderedQuantity()).multiply(safe(line.getUnitPrice()));
                 appendNumeric(builder, "totalAmount", total, true);
-                appendField(builder, "currency", "RWF", true);
-                appendNumeric(builder, "lineAmount", total, true);
-                appendField(builder, "itemName", line.getSupplierProductName() == null
-                        ? (line.getItem() == null ? "" : value(line.getItem().getName()))
-                        : value(line.getSupplierProductName()), true);
+                appendField(builder, "itemName", line.getSupplierProductCode() == null
+                        ? (line.getItem() == null ? "" : value(line.getItem().getCode()))
+                        : value(line.getSupplierProductCode()), true);
                 appendField(builder, "lnProgramName", value(line.getProgramName() == null ? "CP" : line.getProgramName()), false);
                 builder.append("}");
             }

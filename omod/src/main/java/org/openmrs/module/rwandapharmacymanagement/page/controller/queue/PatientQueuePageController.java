@@ -27,19 +27,51 @@ import java.util.concurrent.TimeUnit;
 
 @Controller
 public class PatientQueuePageController {
+    private static final int QUEUE_PAGE_SIZE = 100;
 
     public void get(PageModel model,
                     @SpringBean("dispensingService") DispensingService dispensingService,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
+                    @RequestParam(value = "refreshPayments", required = false) Boolean refreshPayments,
+                    @RequestParam(value = "refreshPaymentRequestId", required = false) Integer refreshPaymentRequestId,
+                    @RequestParam(value = "q", required = false) String search,
+                    @RequestParam(value = "tab", required = false) String tab,
+                    @RequestParam(value = "page", required = false) Integer page,
                     HttpSession session) {
         CurrentPharmacySupport.rememberSelection(pharmacyService, session, pharmacyLocationId);
         CurrentPharmacySupport.populateModel(model, pharmacyService, session);
         PharmacyLocation activePharmacy = (PharmacyLocation) model.getAttribute("activePharmacy");
-        dispensingService.refreshPendingRequestPayments(activePharmacy == null ? null : activePharmacy.getPharmacyLocationId());
+        int currentPage = page == null || page.intValue() < 1 ? 1 : page.intValue();
+        int firstResult = (currentPage - 1) * QUEUE_PAGE_SIZE;
+        String searchTerm = normalizeSearch(search);
+        String queueTab = normalizeTab(tab);
+        long totalRequests = activePharmacy == null ? 0L
+                : dispensingService.countPendingRequestsForPharmacy(activePharmacy.getPharmacyLocationId(), searchTerm,
+                queueTab, "all", "all");
         List<PatientDispensingRequest> requests = activePharmacy == null ? java.util.Collections.<PatientDispensingRequest>emptyList()
                 : PatientRequestVisibilitySupport.filterForActivePharmacy(
-                        dispensingService.getPendingRequestsForPharmacy(activePharmacy.getPharmacyLocationId()), activePharmacy);
+                        dispensingService.getPendingRequestsForPharmacy(activePharmacy.getPharmacyLocationId(), searchTerm,
+                                firstResult, QUEUE_PAGE_SIZE, queueTab, "all", "all"), activePharmacy);
+        if (Boolean.TRUE.equals(refreshPayments)) {
+            dispensingService.refreshPendingRequestPayments(requestIds(requests));
+            totalRequests = activePharmacy == null ? 0L
+                    : dispensingService.countPendingRequestsForPharmacy(activePharmacy.getPharmacyLocationId(), searchTerm,
+                    queueTab, "all", "all");
+            requests = activePharmacy == null ? java.util.Collections.<PatientDispensingRequest>emptyList()
+                    : PatientRequestVisibilitySupport.filterForActivePharmacy(
+                            dispensingService.getPendingRequestsForPharmacy(activePharmacy.getPharmacyLocationId(), searchTerm,
+                                    firstResult, QUEUE_PAGE_SIZE, queueTab, "all", "all"), activePharmacy);
+        } else if (refreshPaymentRequestId != null && requestIds(requests).contains(refreshPaymentRequestId)) {
+            dispensingService.refreshPendingRequestPayment(refreshPaymentRequestId);
+            totalRequests = activePharmacy == null ? 0L
+                    : dispensingService.countPendingRequestsForPharmacy(activePharmacy.getPharmacyLocationId(), searchTerm,
+                    queueTab, "all", "all");
+            requests = activePharmacy == null ? java.util.Collections.<PatientDispensingRequest>emptyList()
+                    : PatientRequestVisibilitySupport.filterForActivePharmacy(
+                            dispensingService.getPendingRequestsForPharmacy(activePharmacy.getPharmacyLocationId(), searchTerm,
+                                    firstResult, QUEUE_PAGE_SIZE, queueTab, "all", "all"), activePharmacy);
+        }
         model.addAttribute("queueTargetPharmacies", CurrentPharmacySupport.getCandidatePharmacies(pharmacyService));
         model.addAttribute("queueLocationName", CurrentPharmacySupport.currentLocationName());
         model.addAttribute("requests", requests);
@@ -48,6 +80,48 @@ public class PatientQueuePageController {
         model.addAttribute("waitTimeByRequestId", buildWaitTimeMap(requests));
         model.addAttribute("drugCountByRequestId", buildDrugCountMap(requests));
         model.addAttribute("paymentStatusByRequestId", buildPaymentStatusMap(requests));
+        model.addAttribute("paymentExceptionByRequestId", buildPaymentExceptionMap(requests));
+        model.addAttribute("paymentRefreshRequested", Boolean.TRUE.equals(refreshPayments));
+        model.addAttribute("refreshedPaymentRequestId", refreshPaymentRequestId);
+        model.addAttribute("queueSearch", searchTerm);
+        model.addAttribute("queueTab", queueTab);
+        model.addAttribute("queuePage", currentPage);
+        model.addAttribute("queuePageSize", QUEUE_PAGE_SIZE);
+        model.addAttribute("queueTotal", totalRequests);
+        model.addAttribute("queueFirstResult", totalRequests == 0L ? 0L : firstResult + 1L);
+        model.addAttribute("queueLastResult", Math.min(totalRequests, firstResult + requests.size()));
+        model.addAttribute("queueHasPreviousPage", currentPage > 1);
+        model.addAttribute("queueHasNextPage", firstResult + QUEUE_PAGE_SIZE < totalRequests);
+    }
+
+    private List<Integer> requestIds(List<PatientDispensingRequest> requests) {
+        List<Integer> requestIds = new ArrayList<Integer>();
+        if (requests == null) {
+            return requestIds;
+        }
+        for (PatientDispensingRequest request : requests) {
+            if (request != null && request.getPatientDispensingRequestId() != null) {
+                requestIds.add(request.getPatientDispensingRequestId());
+            }
+        }
+        return requestIds;
+    }
+
+    private String normalizeSearch(String search) {
+        if (search == null) {
+            return "";
+        }
+        return search.trim();
+    }
+
+    private String normalizeTab(String tab) {
+        String normalized = tab == null ? "" : tab.trim().toLowerCase();
+        if ("ready".equals(normalized) || "waiting".equals(normalized)
+                || "exception".equals(normalized) || "older".equals(normalized)
+                || "search".equals(normalized)) {
+            return normalized;
+        }
+        return "recent";
     }
 
     public String post(@SpringBean("dispensingService") DispensingService dispensingService,
@@ -174,6 +248,19 @@ public class PatientQueuePageController {
         for (PatientDispensingRequest request : requests) {
             if (request != null && request.getPatientDispensingRequestId() != null) {
                 statuses.put(request.getPatientDispensingRequestId(), Boolean.TRUE.equals(request.getPaymentConfirmed()));
+            }
+        }
+        return statuses;
+    }
+
+    private Map<Integer, Boolean> buildPaymentExceptionMap(List<PatientDispensingRequest> requests) {
+        Map<Integer, Boolean> statuses = new LinkedHashMap<Integer, Boolean>();
+        if (requests == null) {
+            return statuses;
+        }
+        for (PatientDispensingRequest request : requests) {
+            if (request != null && request.getPatientDispensingRequestId() != null) {
+                statuses.put(request.getPatientDispensingRequestId(), Boolean.TRUE.equals(request.getPaymentExceptionApproved()));
             }
         }
         return statuses;

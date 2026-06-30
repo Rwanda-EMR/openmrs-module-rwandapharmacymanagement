@@ -4,7 +4,6 @@ import org.hibernate.SessionFactory;
 import org.hibernate.criterion.Criterion;
 import org.hibernate.criterion.Disjunction;
 import org.hibernate.criterion.Order;
-import org.hibernate.criterion.Projections;
 import org.hibernate.criterion.Restrictions;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.rwandapharmacymanagement.db.DispensingDao;
@@ -45,11 +44,168 @@ public class HibernateDispensingDao implements DispensingDao {
     }
 
     @Override
+    public List<PatientDispensingRequest> getPendingRequestsForPharmacy(Integer pharmacyLocationId, String search, int firstResult, int maxResults) {
+        List<Integer> requestIds = pendingRequestIdsForPharmacy(pharmacyLocationId, search, firstResult, maxResults,
+                null, null, null);
+        return getRequestsByIdsInOrder(requestIds);
+    }
+
+    @Override
+    public List<PatientDispensingRequest> getPendingRequestsForPharmacy(Integer pharmacyLocationId,
+                                                                        String search,
+                                                                        int firstResult,
+                                                                        int maxResults,
+                                                                        String queueTab,
+                                                                        String requestType,
+                                                                        String dateFilter) {
+        List<Integer> requestIds = pendingRequestIdsForPharmacy(pharmacyLocationId, search, firstResult, maxResults,
+                queueTab, requestType, dateFilter);
+        return getRequestsByIdsInOrder(requestIds);
+    }
+
+    private List<PatientDispensingRequest> getRequestsByIdsInOrder(List<Integer> requestIds) {
+        if (requestIds.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        List<PatientDispensingRequest> requests = sessionFactory.getCurrentSession()
+                .createCriteria(PatientDispensingRequest.class)
+                .add(Restrictions.in("patientDispensingRequestId", requestIds))
+                .setResultTransformer(org.hibernate.Criteria.DISTINCT_ROOT_ENTITY)
+                .list();
+        Map<Integer, PatientDispensingRequest> requestsById = new HashMap<Integer, PatientDispensingRequest>();
+        for (PatientDispensingRequest request : requests) {
+            if (request != null && request.getPatientDispensingRequestId() != null) {
+                requestsById.put(request.getPatientDispensingRequestId(), request);
+            }
+        }
+        List<PatientDispensingRequest> orderedRequests = new ArrayList<PatientDispensingRequest>();
+        for (Integer requestId : requestIds) {
+            PatientDispensingRequest request = requestsById.get(requestId);
+            if (request != null) {
+                orderedRequests.add(request);
+            }
+        }
+        return orderedRequests;
+    }
+
+    @Override
     public long countPendingRequestsForPharmacy(Integer pharmacyLocationId) {
-        Number count = (Number) pendingRequestCriteria(pharmacyLocationId)
-                .setProjection(Projections.countDistinct("patientDispensingRequestId"))
+        return countPendingRequestsForPharmacy(pharmacyLocationId, null);
+    }
+
+    @Override
+    public long countPendingRequestsForPharmacy(Integer pharmacyLocationId, String search) {
+        return countPendingRequestsForPharmacy(pharmacyLocationId, search, null, null, null);
+    }
+
+    @Override
+    public long countPendingRequestsForPharmacy(Integer pharmacyLocationId,
+                                                String search,
+                                                String queueTab,
+                                                String requestType,
+                                                String dateFilter) {
+        Number count = (Number) sessionFactory.getCurrentSession()
+                .createSQLQuery("select count(distinct r.patient_dispensing_request_id) "
+                        + pendingRequestSqlFromWhere(pharmacyLocationId, search, queueTab, requestType, dateFilter))
+                .setProperties(pendingRequestSqlParameters(pharmacyLocationId, search, requestType))
                 .uniqueResult();
         return count == null ? 0L : count.longValue();
+    }
+
+    private List<Integer> pendingRequestIdsForPharmacy(Integer pharmacyLocationId,
+                                                       String search,
+                                                       int firstResult,
+                                                       int maxResults,
+                                                       String queueTab,
+                                                       String requestType,
+                                                       String dateFilter) {
+        List results = sessionFactory.getCurrentSession()
+                .createSQLQuery("select distinct r.patient_dispensing_request_id, r.date_created "
+                        + pendingRequestSqlFromWhere(pharmacyLocationId, search, queueTab, requestType, dateFilter)
+                        + " order by r.date_created desc, r.patient_dispensing_request_id desc")
+                .setProperties(pendingRequestSqlParameters(pharmacyLocationId, search, requestType))
+                .setFirstResult(Math.max(0, firstResult))
+                .setMaxResults(Math.max(1, maxResults))
+                .list();
+        List<Integer> requestIds = new ArrayList<Integer>();
+        for (Object result : results) {
+            Object idValue = result instanceof Object[] ? ((Object[]) result)[0] : result;
+            Integer requestId = integerValue(idValue);
+            if (requestId != null && !requestIds.contains(requestId)) {
+                requestIds.add(requestId);
+            }
+        }
+        return requestIds;
+    }
+
+    private String pendingRequestSqlFromWhere(Integer pharmacyLocationId,
+                                             String search,
+                                             String queueTab,
+                                             String requestType,
+                                             String dateFilter) {
+        StringBuilder sql = new StringBuilder();
+        sql.append("from rpm_patient_dispensing_request r ")
+                .append("left join rpm_patient_dispensing_request_line l on l.patient_dispensing_request_id = r.patient_dispensing_request_id ")
+                .append("left join patient_identifier pi on pi.patient_id = r.patient_id and coalesce(pi.voided, 0) = 0 ")
+                .append("left join person_name pn on pn.person_id = r.patient_id and coalesce(pn.voided, 0) = 0 ")
+                .append("where coalesce(r.voided, 0) = 0 ")
+                .append("and r.request_status in ('PENDING_PAYMENT', 'PENDING_DISPENSE', 'IN_PROGRESS') ");
+        if (pharmacyLocationId != null) {
+            sql.append("and (r.target_pharmacy_location_id = :pharmacyLocationId ")
+                    .append("or l.routed_pharmacy_location_id = :pharmacyLocationId or r.target_pharmacy_location_id is null) ");
+        }
+        if (hasText(search)) {
+            sql.append("and (lower(coalesce(pi.identifier, '')) like :search ")
+                    .append("or lower(concat_ws(' ', coalesce(pn.given_name, ''), coalesce(pn.middle_name, ''), ")
+                    .append("coalesce(pn.family_name, ''), coalesce(pn.family_name2, ''))) like :search ")
+                    .append("or cast(r.patient_id as char) like :search) ");
+        }
+        String normalizedTab = normalizeFilter(queueTab);
+        if ("ready".equals(normalizedTab)) {
+            sql.append("and (coalesce(r.payment_confirmed, 0) = 1 or coalesce(r.payment_exception_approved, 0) = 1) ");
+        } else if ("waiting".equals(normalizedTab)) {
+            sql.append("and coalesce(r.payment_confirmed, 0) = 0 and coalesce(r.payment_exception_approved, 0) = 0 ");
+        } else if ("exception".equals(normalizedTab)) {
+            sql.append("and coalesce(r.payment_exception_approved, 0) = 1 ");
+        } else if ("older".equals(normalizedTab)) {
+            sql.append("and r.date_created < date_sub(now(), interval 3 day) ");
+        }
+        if (hasText(requestType) && !"all".equals(normalizeFilter(requestType))) {
+            sql.append("and r.request_type = :requestType ");
+        }
+        String normalizedDateFilter = normalizeFilter(dateFilter);
+        if ("today".equals(normalizedDateFilter)) {
+            sql.append("and r.date_created >= curdate() ");
+        } else if ("last24".equals(normalizedDateFilter)) {
+            sql.append("and r.date_created >= date_sub(now(), interval 24 hour) ");
+        } else if ("last7".equals(normalizedDateFilter)) {
+            sql.append("and r.date_created >= date_sub(now(), interval 7 day) ");
+        } else if ("older3".equals(normalizedDateFilter)) {
+            sql.append("and r.date_created < date_sub(now(), interval 3 day) ");
+        }
+        return sql.toString();
+    }
+
+    private Map<String, Object> pendingRequestSqlParameters(Integer pharmacyLocationId, String search, String requestType) {
+        Map<String, Object> parameters = new HashMap<String, Object>();
+        if (pharmacyLocationId != null) {
+            parameters.put("pharmacyLocationId", pharmacyLocationId);
+        }
+        if (hasText(search)) {
+            parameters.put("search", "%" + search.trim().toLowerCase() + "%");
+        }
+        if (hasText(requestType) && !"all".equals(normalizeFilter(requestType))) {
+            parameters.put("requestType", requestType.trim().toUpperCase());
+        }
+        return parameters;
+    }
+
+    private String normalizeFilter(String value) {
+        return value == null ? "" : value.trim().toLowerCase();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && value.trim().length() > 0;
     }
 
     private org.hibernate.Criteria pendingRequestCriteria(Integer pharmacyLocationId) {
@@ -537,6 +693,39 @@ public class HibernateDispensingDao implements DispensingDao {
             criteria.add(Restrictions.eq("dispensingPharmacyLocation.pharmacyLocationId", pharmacyLocationId));
         }
         criteria.addOrder(Order.asc("dateCreated"));
+        return criteria.list();
+    }
+
+    @Override
+    public List<PatientDispensingRequest> getPaymentExceptionApprovedRequests(Date fromInclusive,
+                                                                              Date toExclusive,
+                                                                              Integer pharmacyLocationId,
+                                                                              RequestType requestType) {
+        org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(PatientDispensingRequest.class);
+        criteria.add(Restrictions.eq("voided", false));
+        criteria.add(Restrictions.eq("paymentExceptionApproved", true));
+        if (fromInclusive != null) {
+            criteria.add(Restrictions.ge("paymentExceptionApprovedDate", fromInclusive));
+        }
+        if (toExclusive != null) {
+            criteria.add(Restrictions.lt("paymentExceptionApprovedDate", toExclusive));
+        }
+        if (requestType != null) {
+            criteria.add(Restrictions.eq("requestType", requestType));
+        }
+        if (pharmacyLocationId != null) {
+            criteria.createAlias("targetPharmacyLocation", "targetPharmacyLocation", org.hibernate.sql.JoinType.LEFT_OUTER_JOIN);
+            criteria.createAlias("lines", "line", org.hibernate.sql.JoinType.LEFT_OUTER_JOIN);
+            criteria.createAlias("line.routedPharmacyLocation", "routedPharmacyLocation", org.hibernate.sql.JoinType.LEFT_OUTER_JOIN);
+            Disjunction pharmacyMatch = Restrictions.disjunction();
+            pharmacyMatch.add(Restrictions.eq("targetPharmacyLocation.pharmacyLocationId", pharmacyLocationId));
+            pharmacyMatch.add(Restrictions.eq("routedPharmacyLocation.pharmacyLocationId", pharmacyLocationId));
+            pharmacyMatch.add(Restrictions.isNull("targetPharmacyLocation"));
+            criteria.add(pharmacyMatch);
+            criteria.setResultTransformer(org.hibernate.Criteria.DISTINCT_ROOT_ENTITY);
+        }
+        criteria.addOrder(Order.desc("paymentExceptionApprovedDate"));
+        criteria.addOrder(Order.desc("patientDispensingRequestId"));
         return criteria.list();
     }
 

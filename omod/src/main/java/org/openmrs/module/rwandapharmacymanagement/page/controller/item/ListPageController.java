@@ -105,16 +105,16 @@ public class ListPageController {
             item.setDateCreated(new Date());
             pharmacyService.saveItem(item);
         }
-        ProductMasterItem productMasterItem = npcBacked
-                ? pharmacyService.getProductMasterItemByNpcCodeAndProgram(normalizedNpcCode, normalizedProgram)
-                : null;
+        String productMasterNpcCode = npcBacked ? normalizedNpcCode : itemCode;
+        ProductMasterItem productMasterItem = pharmacyService.getProductMasterItemByNpcCodeAndProgram(
+                productMasterNpcCode, normalizedProgram);
         if (productMasterItem == null) {
             productMasterItem = new ProductMasterItem();
             productMasterItem.setCreator(Context.getAuthenticatedUser());
             productMasterItem.setDateCreated(new Date());
         }
         productMasterItem.setItemName(name);
-        productMasterItem.setNpcCode(npcBacked ? normalizedNpcCode : null);
+        productMasterItem.setNpcCode(productMasterNpcCode);
         productMasterItem.setProgram(normalizedProgram);
         productMasterItem.setMaterialType(normalizedMaterialType);
         productMasterItem.setDrug(drug);

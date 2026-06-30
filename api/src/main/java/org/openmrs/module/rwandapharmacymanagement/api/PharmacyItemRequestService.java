@@ -25,5 +25,5 @@ public interface PharmacyItemRequestService extends OpenmrsService {
     PharmacyItemRequest getRequest(Integer requestId);
 
     PharmacyItemRequest approveRequest(Integer requestId, PharmacyLocation activePharmacy,
-                                       Integer[] lineIds, BigDecimal[] approvedQuantities);
+                                       Integer[] lineIds, BigDecimal[] approvedQuantities, String[] batchNumbers);
 }

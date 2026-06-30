@@ -108,4 +108,12 @@
         <sqlFile path="sql/migrations/rpm-hie-retry-log-metadata.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
+    <changeSet id="rpm-payment-exceptions" author="codex">
+        <sqlFile path="sql/migrations/rpm-payment-exceptions.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-inventory-balance-unique-active" author="codex">
+        <sqlFile path="sql/migrations/rpm-inventory-balance-unique-active.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>

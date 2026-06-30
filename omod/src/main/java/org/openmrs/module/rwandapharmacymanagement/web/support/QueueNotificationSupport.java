@@ -12,7 +12,6 @@ import org.openmrs.module.rwandapharmacymanagement.api.LabSupplyService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyItemRequestService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.model.LabSupplyRequest;
-import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 
 import javax.servlet.http.HttpSession;
@@ -102,9 +101,7 @@ public final class QueueNotificationSupport {
         if (activePharmacy == null || activePharmacy.getPharmacyLocationId() == null) {
             return 0;
         }
-        List<PatientDispensingRequest> requests = dispensingService()
-                .getPendingRequestsForPharmacy(activePharmacy.getPharmacyLocationId());
-        return PatientRequestVisibilitySupport.filterForActivePharmacy(requests, activePharmacy).size();
+        return safeInt(dispensingService().countPendingRequestsForPharmacy(activePharmacy.getPharmacyLocationId()));
     }
 
     private static PharmacyLocation resolveActivePharmacy(PharmacyService pharmacyService, Object session) {

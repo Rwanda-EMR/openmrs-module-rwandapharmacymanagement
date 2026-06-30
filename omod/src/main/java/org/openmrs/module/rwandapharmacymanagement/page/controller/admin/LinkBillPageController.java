@@ -87,10 +87,10 @@ public class LinkBillPageController {
         if (request == null || request.getPatientBillId() != null || Boolean.TRUE.equals(request.getVoided())) {
             return false;
         }
-            if (request.getRequestType() != null && request.getRequestType() != RequestType.PRESCRIPTION
-                    && request.getRequestType() != RequestType.CONSUMABLE) {
-                return false;
-            }
+        if (request.getRequestType() != null && request.getRequestType() != RequestType.PRESCRIPTION
+                && request.getRequestType() != RequestType.CONSUMABLE) {
+            return false;
+        }
         if (!Boolean.TRUE.equals(request.getBillable())) {
             return false;
         }

@@ -72,6 +72,7 @@ public final class RwandaPharmacyManagementConfig {
     public static final String PRIVILEGE_TRANSFER_STOCK = "Task: rwandapharmacymanagement.transferStock";
     public static final String PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER = "Task: rwandapharmacymanagement.approveMainToDispensingTransfer";
     public static final String PRIVILEGE_ADJUST_STOCK = "Task: rwandapharmacymanagement.adjustStock";
+    public static final String PRIVILEGE_APPROVE_PAYMENT_EXCEPTION = "Task: rwandapharmacymanagement.approvePaymentException";
 
     private RwandaPharmacyManagementConfig() {
     }

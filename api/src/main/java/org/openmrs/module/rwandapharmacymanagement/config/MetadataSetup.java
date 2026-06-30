@@ -29,6 +29,7 @@ public class MetadataSetup implements Setup {
             RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK,
             RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER,
             RwandaPharmacyManagementConfig.PRIVILEGE_ADJUST_STOCK,
+            RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_PAYMENT_EXCEPTION,
             "Task: rwandapharmacymanagement.viewPatientQueue",
             "Task: rwandapharmacymanagement.dispenseWithOrder",
             "Task: rwandapharmacymanagement.dispenseWithoutOrder",
@@ -67,7 +68,8 @@ public class MetadataSetup implements Setup {
                 "Task: rwandapharmacymanagement.viewPatientQueue",
                 "Task: rwandapharmacymanagement.dispenseWithOrder",
                 "Task: rwandapharmacymanagement.dispenseWithoutOrder",
-                RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK);
+                RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK,
+                RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_PAYMENT_EXCEPTION);
         saveRole(userService, "Rwanda Pharmacy Dispenser",
                 RwandaPharmacyManagementConfig.PRIVILEGE_DASHBOARD,
                 "Task: rwandapharmacymanagement.viewStock",
@@ -95,7 +97,8 @@ public class MetadataSetup implements Setup {
                 "Task: rwandapharmacymanagement.dispenseWithOrder",
                 "Task: rwandapharmacymanagement.dispenseWithoutOrder",
                 RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK,
-                RwandaPharmacyManagementConfig.PRIVILEGE_ADJUST_STOCK);
+                RwandaPharmacyManagementConfig.PRIVILEGE_ADJUST_STOCK,
+                RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_PAYMENT_EXCEPTION);
         saveRole(userService, "Rwanda Pharmacy Purchase Order Officer",
                 RwandaPharmacyManagementConfig.PRIVILEGE_DASHBOARD,
                 "Task: rwandapharmacymanagement.viewStock",
@@ -132,6 +135,7 @@ public class MetadataSetup implements Setup {
                 RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK,
                 RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER,
                 RwandaPharmacyManagementConfig.PRIVILEGE_ADJUST_STOCK,
+                RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_PAYMENT_EXCEPTION,
                 "Task: rwandapharmacymanagement.viewPatientQueue",
                 "Task: rwandapharmacymanagement.dispenseWithOrder",
                 "Task: rwandapharmacymanagement.dispenseWithoutOrder",

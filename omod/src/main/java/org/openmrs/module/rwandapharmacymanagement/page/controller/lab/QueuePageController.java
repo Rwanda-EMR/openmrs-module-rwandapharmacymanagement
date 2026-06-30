@@ -52,6 +52,7 @@ public class QueuePageController {
         model.addAttribute("selectedRequest", selectedRequest);
         model.addAttribute("approved", FlashMessageSupport.consumeBoolean(session, FLASH_APPROVED));
         model.addAttribute("availableByItemId", buildAvailableByItemId(activePharmacy, inventoryService));
+        model.addAttribute("batchOptionsByItemId", buildBatchOptionsByItemId(activePharmacy, inventoryService));
         model.addAttribute("waitTimeByRequestId", buildWaitTimeMap(visibleRequests));
     }
 
@@ -60,6 +61,7 @@ public class QueuePageController {
                        @RequestParam("requestId") Integer requestId,
                        @RequestParam(value = "lineId", required = false) Integer[] lineIds,
                        @RequestParam(value = "approvedQuantity", required = false) BigDecimal[] approvedQuantities,
+                       @RequestParam(value = "batchNumber", required = false) String[] batchNumbers,
                        HttpSession session,
                        UiUtils ui) {
         PharmacyLocation activePharmacy = CurrentPharmacySupport.requireCurrentPharmacy(pharmacyService, session);
@@ -67,7 +69,7 @@ public class QueuePageController {
         if (!isVisibleToPharmacy(request, activePharmacy, pharmacyService)) {
             throw new IllegalArgumentException("Selected lab request is not available to the active dispensing pharmacy");
         }
-        labSupplyService.approveRequest(requestId, activePharmacy, lineIds, approvedQuantities);
+        labSupplyService.approveRequest(requestId, activePharmacy, lineIds, approvedQuantities, batchNumbers);
         FlashMessageSupport.set(session, FLASH_APPROVED, Boolean.TRUE);
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "lab/queue");
     }
@@ -117,6 +119,31 @@ public class QueuePageController {
             availableByItemId.put(itemId, existing.add(balance.getQuantityOnHand()));
         }
         return availableByItemId;
+    }
+
+    private Map<Integer, List<Map<String, Object>>> buildBatchOptionsByItemId(PharmacyLocation activePharmacy, InventoryService inventoryService) {
+        Map<Integer, List<Map<String, Object>>> batchOptionsByItemId = new LinkedHashMap<Integer, List<Map<String, Object>>>();
+        if (activePharmacy == null || activePharmacy.getPharmacyLocationId() == null) {
+            return batchOptionsByItemId;
+        }
+        for (InventoryBalance balance : inventoryService.getInventoryForPharmacy(activePharmacy.getPharmacyLocationId())) {
+            if (balance == null || balance.getItem() == null || balance.getItem().getItemId() == null
+                    || balance.getQuantityOnHand() == null || balance.getQuantityOnHand().compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            Integer itemId = balance.getItem().getItemId();
+            if (!batchOptionsByItemId.containsKey(itemId)) {
+                batchOptionsByItemId.put(itemId, new ArrayList<Map<String, Object>>());
+            }
+            Map<String, Object> option = new LinkedHashMap<String, Object>();
+            option.put("batchNumber", balance.getBatchNumber());
+            option.put("batchValue", balance.getBatchNumber() == null || balance.getBatchNumber().trim().isEmpty()
+                    ? "__NO_BATCH__" : balance.getBatchNumber());
+            option.put("expiryDate", balance.getExpiryDate());
+            option.put("available", balance.getQuantityOnHand());
+            batchOptionsByItemId.get(itemId).add(option);
+        }
+        return batchOptionsByItemId;
     }
 
     private Map<Integer, String> buildWaitTimeMap(List<LabSupplyRequest> requests) {

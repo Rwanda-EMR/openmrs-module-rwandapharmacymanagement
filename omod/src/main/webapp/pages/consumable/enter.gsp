@@ -179,7 +179,7 @@
                         </div>
                     </div>
                     <div class="cons-actions">
-                        <span class="cons-muted">Requests are visible to all connected dispensing pharmacies for the requesting location. Consumables mapped in MOH Billing are billed on an unpaid patient bill; unmapped consumables queue as paid.</span>
+                        <span class="cons-muted">Requests are visible to all connected dispensing pharmacies for the requesting location. Billing mappings are validated when the order is submitted, not while loading this page.</span>
                         <button type="submit" class="cons-btn cons-btn-primary">Queue consumables</button>
                     </div>
                 </form>

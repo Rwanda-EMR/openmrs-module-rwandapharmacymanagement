@@ -61,11 +61,12 @@
             ]],
             [title: "Reports", links: [
                     [path: "report/pharmacyStock", label: "Individual pharmacy report"],
-                    [path: "report/overallStock", label: "Overall hospital stock report"],
-                    [path: "report/inventoryMovement", label: "Inventory movement report"],
-                    [path: "report/dispensingReport", label: "Dispensing report"],
-                    [path: "report/itemMovement", label: "Item movement report"]
-            ]]
+	                    [path: "report/overallStock", label: "Overall hospital stock report"],
+	                    [path: "report/inventoryMovement", label: "Inventory movement report"],
+	                    [path: "report/dispensingReport", label: "Dispensing report"],
+	                    [path: "report/paymentExceptionReport", label: "Payment exception report"],
+	                    [path: "report/itemMovement", label: "Item movement report"]
+	            ]]
     ]
 %>
 <!DOCTYPE html>

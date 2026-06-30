@@ -22,6 +22,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
 import org.openmrs.module.rwandapharmacymanagement.model.StockTransaction;
+import org.openmrs.module.rwandapharmacymanagement.model.enums.PaymentExceptionType;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestType;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.StockTransactionType;
@@ -87,8 +88,39 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
     }
 
     @Override
+    public List<PatientDispensingRequest> getPendingRequestsForPharmacy(Integer pharmacyLocationId, String search, int firstResult, int maxResults) {
+        return dispensingDao.getPendingRequestsForPharmacy(pharmacyLocationId, search, firstResult, maxResults);
+    }
+
+    @Override
+    public List<PatientDispensingRequest> getPendingRequestsForPharmacy(Integer pharmacyLocationId,
+                                                                        String search,
+                                                                        int firstResult,
+                                                                        int maxResults,
+                                                                        String queueTab,
+                                                                        String requestType,
+                                                                        String dateFilter) {
+        return dispensingDao.getPendingRequestsForPharmacy(pharmacyLocationId, search, firstResult, maxResults,
+                queueTab, requestType, dateFilter);
+    }
+
+    @Override
     public long countPendingRequestsForPharmacy(Integer pharmacyLocationId) {
         return dispensingDao.countPendingRequestsForPharmacy(pharmacyLocationId);
+    }
+
+    @Override
+    public long countPendingRequestsForPharmacy(Integer pharmacyLocationId, String search) {
+        return dispensingDao.countPendingRequestsForPharmacy(pharmacyLocationId, search);
+    }
+
+    @Override
+    public long countPendingRequestsForPharmacy(Integer pharmacyLocationId,
+                                                String search,
+                                                String queueTab,
+                                                String requestType,
+                                                String dateFilter) {
+        return dispensingDao.countPendingRequestsForPharmacy(pharmacyLocationId, search, queueTab, requestType, dateFilter);
     }
 
     @Override
@@ -128,7 +160,7 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
 
     @Override
     public void refreshPendingRequestPayments() {
-        refreshPendingRequestPayments(null);
+        refreshPendingRequestPayments((Integer) null);
     }
 
     @Override
@@ -143,101 +175,160 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
                 + ", requestCount=" + requests.size());
         boolean strictBillMode = strictPaymentBillMode();
         for (PatientDispensingRequest request : requests) {
-            if (request == null) {
-                continue;
+            refreshPendingRequestPayment(request, strictBillMode);
+        }
+    }
+
+    @Override
+    public void refreshPendingRequestPayments(Collection<Integer> requestIds) {
+        if (requestIds == null || requestIds.isEmpty()) {
+            return;
+        }
+        Set<Integer> uniqueRequestIds = new HashSet<Integer>();
+        for (Integer requestId : requestIds) {
+            if (requestId != null) {
+                uniqueRequestIds.add(requestId);
             }
-            if (!Boolean.TRUE.equals(request.getBillable())) {
-                request.setPaymentConfirmed(Boolean.TRUE);
-                if (request.getRequestStatus() == RequestStatus.PENDING_PAYMENT) {
-                    request.setRequestStatus(RequestStatus.PENDING_DISPENSE);
-                }
-                if (request.getLines() != null) {
-                    for (PatientDispensingRequestLine line : request.getLines()) {
-                        if (line == null || line.getLineStatus() == RequestStatus.DISPENSED
-                                || line.getLineStatus() == RequestStatus.UNAVAILABLE
-                                || line.getLineStatus() == RequestStatus.CANCELLED
-                                || line.getLineStatus() == RequestStatus.PARTIALLY_DISPENSED) {
-                            continue;
-                        }
-                        line.setLineStatus(RequestStatus.PENDING_DISPENSE);
-                        dispensingDao.saveRequestLine(line);
-                    }
-                }
-                dispensingDao.saveRequest(request);
-                continue;
+        }
+        if (uniqueRequestIds.isEmpty()) {
+            return;
+        }
+        log.info("Refreshing dispensing request payment links for loaded queue requests. requestCount="
+                + uniqueRequestIds.size());
+        boolean strictBillMode = strictPaymentBillMode();
+        for (Integer requestId : uniqueRequestIds) {
+            refreshPendingRequestPayment(dispensingDao.getRequest(requestId), strictBillMode);
+        }
+    }
+
+    @Override
+    public void refreshPendingRequestPayment(Integer requestId) {
+        if (requestId == null) {
+            return;
+        }
+        refreshPendingRequestPayment(dispensingDao.getRequest(requestId), strictPaymentBillMode());
+    }
+
+    @Override
+    public PatientDispensingRequest approvePaymentException(Integer requestId,
+                                                            PaymentExceptionType exceptionType,
+                                                            String reason,
+                                                            String note) {
+        if (requestId == null) {
+            throw new IllegalArgumentException("Request is required");
+        }
+        if (exceptionType == null) {
+            throw new IllegalArgumentException("Payment exception type is required");
+        }
+        String normalizedReason = reason == null ? "" : reason.trim();
+        if (normalizedReason.isEmpty()) {
+            throw new IllegalArgumentException("Payment exception reason is required");
+        }
+        PatientDispensingRequest request = dispensingDao.getRequest(requestId);
+        if (request == null) {
+            throw new IllegalArgumentException("Dispensing request not found");
+        }
+        if (request.getRequestStatus() == RequestStatus.DISPENSED
+                || request.getRequestStatus() == RequestStatus.CANCELLED
+                || request.getRequestStatus() == RequestStatus.UNAVAILABLE) {
+            throw new IllegalArgumentException("Payment exception can only be approved for active requests");
+        }
+
+        request.setPaymentExceptionApproved(Boolean.TRUE);
+        request.setPaymentExceptionType(exceptionType);
+        request.setPaymentExceptionReason(normalizedReason);
+        request.setPaymentExceptionNote(note == null ? null : note.trim());
+        request.setPaymentExceptionApprovedBy(Context.getAuthenticatedUser());
+        request.setPaymentExceptionApprovedDate(new Date());
+        if (request.getRequestStatus() == RequestStatus.PENDING_PAYMENT) {
+            request.setRequestStatus(RequestStatus.PENDING_DISPENSE);
+        }
+        updateActiveLineStatuses(request, RequestStatus.PENDING_DISPENSE);
+        return dispensingDao.saveRequest(request);
+    }
+
+    private void refreshPendingRequestPayment(PatientDispensingRequest request, boolean strictBillMode) {
+        if (request == null) {
+            return;
+        }
+        if (!Boolean.TRUE.equals(request.getBillable())) {
+            request.setPaymentConfirmed(Boolean.TRUE);
+            if (request.getRequestStatus() == RequestStatus.PENDING_PAYMENT) {
+                request.setRequestStatus(RequestStatus.PENDING_DISPENSE);
             }
-            Integer patientBillId = request.getPatientBillId();
-            if (request.getRequestType() == RequestType.CONSUMABLE && patientBillId == null
-                    && Boolean.TRUE.equals(request.getPaymentConfirmed())) {
-                if (request.getRequestStatus() == RequestStatus.PENDING_PAYMENT) {
-                    request.setRequestStatus(RequestStatus.PENDING_DISPENSE);
-                    dispensingDao.saveRequest(request);
-                }
-                continue;
-            }
-            if (patientBillId == null && request.getPatient() != null) {
-                Set<String> itemNames = billingLookupNames(request);
-                log.info("Trying to link dispensing request to patient bill during queue refresh. requestId="
-                        + request.getPatientDispensingRequestId() + ", patientId=" + request.getPatient().getPatientId()
-                        + ", requestDate=" + request.getDateCreated() + ", itemNames=" + itemNames);
-                patientBillId = dispensingDao.findLatestPatientBillId(request.getPatient().getPatientId(),
-                        request.getDateCreated(), itemNames);
-                if (patientBillId != null) {
-                    request.setPatientBillId(patientBillId);
-                    log.info("Matched dispensing request to patient bill during queue refresh. requestId="
-                            + request.getPatientDispensingRequestId() + ", patientBillId=" + patientBillId);
-                } else {
-                    log.warn("No patient bill found during queue refresh. requestId="
-                            + request.getPatientDispensingRequestId() + ", patientId="
-                            + request.getPatient().getPatientId() + ", requestDate=" + request.getDateCreated()
-                            + ", itemNames=" + itemNames);
-                }
-            }
-            Boolean paid = dispensingDao.isPatientBillPaid(patientBillId);
-            if (paid == null) {
-                paid = findPaymentStateFromBillingService(patientBillId);
-            }
-            if (paid == null) {
-                if (strictBillMode) {
-                    paid = Boolean.FALSE;
-                } else {
-                    if (patientBillId != null && request.getPatientBillId() != null) {
-                        dispensingDao.saveRequest(request);
-                        log.info("Saved dispensing request patient bill link during queue refresh with unknown payment status. requestId="
-                                + request.getPatientDispensingRequestId() + ", patientBillId=" + patientBillId);
-                    }
-                    continue;
-                }
-            }
-            request.setPaymentConfirmed(paid);
-            if (Boolean.TRUE.equals(paid)) {
-                if (request.getRequestStatus() == RequestStatus.PENDING_PAYMENT) {
-                    request.setRequestStatus(RequestStatus.PENDING_DISPENSE);
-                }
-            } else {
-                request.setRequestStatus(RequestStatus.PENDING_PAYMENT);
-            }
-            if (request.getLines() != null) {
-                for (PatientDispensingRequestLine line : request.getLines()) {
-                    if (line == null) {
-                        continue;
-                    }
-                    if (line.getLineStatus() == RequestStatus.DISPENSED
-                            || line.getLineStatus() == RequestStatus.UNAVAILABLE
-                            || line.getLineStatus() == RequestStatus.CANCELLED
-                            || line.getLineStatus() == RequestStatus.PARTIALLY_DISPENSED) {
-                        continue;
-                    }
-                    line.setLineStatus(Boolean.TRUE.equals(paid) ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
-                    dispensingDao.saveRequestLine(line);
-                }
-            }
+            updateActiveLineStatuses(request, RequestStatus.PENDING_DISPENSE);
             dispensingDao.saveRequest(request);
+            return;
+        }
+        Integer patientBillId = request.getPatientBillId();
+        if (patientBillId == null && request.getPatient() != null) {
+            Set<String> itemNames = billingLookupNames(request);
+            log.info("Trying to link dispensing request to patient bill during queue refresh. requestId="
+                    + request.getPatientDispensingRequestId() + ", patientId=" + request.getPatient().getPatientId()
+                    + ", requestDate=" + request.getDateCreated() + ", itemNames=" + itemNames);
+            patientBillId = dispensingDao.findLatestPatientBillId(request.getPatient().getPatientId(),
+                    request.getDateCreated(), itemNames);
             if (patientBillId != null) {
-                log.info("Saved dispensing request payment state during queue refresh. requestId="
-                        + request.getPatientDispensingRequestId() + ", patientBillId=" + patientBillId
-                        + ", paid=" + paid + ", requestStatus=" + request.getRequestStatus());
+                request.setPatientBillId(patientBillId);
+                log.info("Matched dispensing request to patient bill during queue refresh. requestId="
+                        + request.getPatientDispensingRequestId() + ", patientBillId=" + patientBillId);
+            } else {
+                log.warn("No patient bill found during queue refresh. requestId="
+                        + request.getPatientDispensingRequestId() + ", patientId="
+                        + request.getPatient().getPatientId() + ", requestDate=" + request.getDateCreated()
+                        + ", itemNames=" + itemNames);
             }
+        }
+        Boolean paid = dispensingDao.isPatientBillPaid(patientBillId);
+        if (paid == null) {
+            paid = findPaymentStateFromBillingService(patientBillId);
+        }
+        if (paid == null) {
+            if (strictBillMode) {
+                paid = Boolean.FALSE;
+            } else {
+                if (patientBillId != null && request.getPatientBillId() != null) {
+                    dispensingDao.saveRequest(request);
+                    log.info("Saved dispensing request patient bill link during queue refresh with unknown payment status. requestId="
+                            + request.getPatientDispensingRequestId() + ", patientBillId=" + patientBillId);
+                }
+                return;
+            }
+        }
+        request.setPaymentConfirmed(paid);
+        if (Boolean.TRUE.equals(paid)) {
+            if (request.getRequestStatus() == RequestStatus.PENDING_PAYMENT) {
+                request.setRequestStatus(RequestStatus.PENDING_DISPENSE);
+            }
+        } else if (isPaymentExceptionApproved(request)) {
+            if (request.getRequestStatus() == RequestStatus.PENDING_PAYMENT) {
+                request.setRequestStatus(RequestStatus.PENDING_DISPENSE);
+            }
+        } else {
+            request.setRequestStatus(RequestStatus.PENDING_PAYMENT);
+        }
+        updateActiveLineStatuses(request, isPaymentSatisfied(request) ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
+        dispensingDao.saveRequest(request);
+        if (patientBillId != null) {
+            log.info("Saved dispensing request payment state during queue refresh. requestId="
+                    + request.getPatientDispensingRequestId() + ", patientBillId=" + patientBillId
+                    + ", paid=" + paid + ", requestStatus=" + request.getRequestStatus());
+        }
+    }
+
+    private void updateActiveLineStatuses(PatientDispensingRequest request, RequestStatus status) {
+        if (request.getLines() == null) {
+            return;
+        }
+        for (PatientDispensingRequestLine line : request.getLines()) {
+            if (line == null || line.getLineStatus() == RequestStatus.DISPENSED
+                    || line.getLineStatus() == RequestStatus.UNAVAILABLE
+                    || line.getLineStatus() == RequestStatus.CANCELLED
+                    || line.getLineStatus() == RequestStatus.PARTIALLY_DISPENSED) {
+                continue;
+            }
+            line.setLineStatus(status);
+            dispensingDao.saveRequestLine(line);
         }
     }
 
@@ -444,6 +535,14 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
     }
 
     @Override
+    public List<PatientDispensingRequest> getPaymentExceptionApprovedRequests(Date fromInclusive,
+                                                                              Date toExclusive,
+                                                                              Integer pharmacyLocationId,
+                                                                              RequestType requestType) {
+        return dispensingDao.getPaymentExceptionApprovedRequests(fromInclusive, toExclusive, pharmacyLocationId, requestType);
+    }
+
+    @Override
     public List<DispenseRecord> getDispenseRecordsForRequests(List<Integer> requestIds) {
         return dispensingDao.getDispenseRecordsForRequests(requestIds);
     }
@@ -612,12 +711,16 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
         boolean hasActiveLine = false;
         boolean allActiveLinesDispensed = true;
         boolean anyQuantityServed = false;
+        boolean anyUnavailableLine = false;
         for (PatientDispensingRequestLine requestLine : request.getLines()) {
             if (requestLine == null) {
                 continue;
             }
             if (requestLine.getLineStatus() == RequestStatus.CANCELLED
                     || requestLine.getLineStatus() == RequestStatus.UNAVAILABLE) {
+                if (requestLine.getLineStatus() == RequestStatus.UNAVAILABLE) {
+                    anyUnavailableLine = true;
+                }
                 dispensingDao.saveRequestLine(requestLine);
                 continue;
             }
@@ -646,6 +749,7 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
             dispensingDao.saveRequestLine(requestLine);
         }
         if (!hasActiveLine) {
+            request.setRequestStatus(anyUnavailableLine ? RequestStatus.UNAVAILABLE : RequestStatus.CANCELLED);
             dispensingDao.saveRequest(request);
             return;
         }
@@ -660,8 +764,17 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
     }
 
     private RequestStatus resolvePendingLineStatus(PatientDispensingRequest request) {
-        return Boolean.TRUE.equals(request.getPaymentConfirmed())
+        return isPaymentSatisfied(request)
                 ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT;
+    }
+
+    private boolean isPaymentSatisfied(PatientDispensingRequest request) {
+        return request != null
+                && (Boolean.TRUE.equals(request.getPaymentConfirmed()) || isPaymentExceptionApproved(request));
+    }
+
+    private boolean isPaymentExceptionApproved(PatientDispensingRequest request) {
+        return request != null && Boolean.TRUE.equals(request.getPaymentExceptionApproved());
     }
 
     private Map<Integer, BigDecimal> calculateDispensedQuantitiesByItem(Integer requestId) {

@@ -1,6 +1,7 @@
 <%
     ui.decorateWith("rwandapharmacymanagement", "simplePage")
     def availableByItemId = binding.hasVariable("availableByItemId") && availableByItemId ? availableByItemId : [:]
+    def batchOptionsByItemId = binding.hasVariable("batchOptionsByItemId") && batchOptionsByItemId ? batchOptionsByItemId : [:]
 %>
 <h2>Pharmacy Item Request Queue</h2>
 <style type="text/css">
@@ -55,13 +56,23 @@
                     <form method="post">
                         <input type="hidden" name="requestId" value="${ request.pharmacyItemRequestId }"/>
                         <table class="poq-table">
-                            <thead><tr><th>Item</th><th>Requested</th><th>Available here</th><th>Approved quantity</th></tr></thead>
+                            <thead><tr><th>Item</th><th>Requested</th><th>Available here</th><th>Batch number</th><th>Approved quantity</th></tr></thead>
                             <tbody>
                             <% request.lines?.each { line -> %>
                             <tr>
                                 <td>${ line.item?.name ?: '' }<input type="hidden" name="lineId" value="${ line.pharmacyItemRequestLineId }"/></td>
                                 <td>${ line.requestedQuantity ?: 0 }</td>
                                 <td>${ availableByItemId[line.item?.itemId] ?: 0 }</td>
+                                <td>
+                                    <select name="batchNumber">
+                                        <option value="__FIFO__">Auto / FIFO</option>
+                                        <% (batchOptionsByItemId[line.item?.itemId] ?: []).each { batch -> %>
+                                        <option value="${ batch.batchValue }">
+                                            ${ batch.batchNumber ?: 'No batch' } (${ batch.available ?: 0 }${ batch.expiryDate ? ', exp ' + ui.formatDatePretty(batch.expiryDate) : '' })
+                                        </option>
+                                        <% } %>
+                                    </select>
+                                </td>
                                 <td><input type="number" step="0.01" min="0" max="${ line.requestedQuantity ?: 0 }" name="approvedQuantity" value="${ line.requestedQuantity ?: 0 }"/></td>
                             </tr>
                             <% } %>

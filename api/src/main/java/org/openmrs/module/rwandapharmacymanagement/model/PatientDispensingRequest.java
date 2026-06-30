@@ -5,10 +5,13 @@ import org.openmrs.Location;
 import org.openmrs.Order;
 import org.openmrs.Patient;
 import org.openmrs.Provider;
+import org.openmrs.User;
 import org.openmrs.Visit;
+import org.openmrs.module.rwandapharmacymanagement.model.enums.PaymentExceptionType;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestType;
 
+import java.util.Date;
 import java.util.List;
 
 public class PatientDispensingRequest extends BaseTrackedEntity {
@@ -24,6 +27,12 @@ public class PatientDispensingRequest extends BaseTrackedEntity {
     private Integer patientBillId;
     private Boolean billable = Boolean.TRUE;
     private Boolean paymentConfirmed = Boolean.FALSE;
+    private Boolean paymentExceptionApproved = Boolean.FALSE;
+    private PaymentExceptionType paymentExceptionType;
+    private String paymentExceptionReason;
+    private String paymentExceptionNote;
+    private User paymentExceptionApprovedBy;
+    private Date paymentExceptionApprovedDate;
     private RequestStatus requestStatus;
     private RequestType requestType = RequestType.PRESCRIPTION;
     private String medicalActReference;
@@ -115,6 +124,54 @@ public class PatientDispensingRequest extends BaseTrackedEntity {
 
     public void setPaymentConfirmed(Boolean paymentConfirmed) {
         this.paymentConfirmed = paymentConfirmed;
+    }
+
+    public Boolean getPaymentExceptionApproved() {
+        return paymentExceptionApproved;
+    }
+
+    public void setPaymentExceptionApproved(Boolean paymentExceptionApproved) {
+        this.paymentExceptionApproved = paymentExceptionApproved;
+    }
+
+    public PaymentExceptionType getPaymentExceptionType() {
+        return paymentExceptionType;
+    }
+
+    public void setPaymentExceptionType(PaymentExceptionType paymentExceptionType) {
+        this.paymentExceptionType = paymentExceptionType;
+    }
+
+    public String getPaymentExceptionReason() {
+        return paymentExceptionReason;
+    }
+
+    public void setPaymentExceptionReason(String paymentExceptionReason) {
+        this.paymentExceptionReason = paymentExceptionReason;
+    }
+
+    public String getPaymentExceptionNote() {
+        return paymentExceptionNote;
+    }
+
+    public void setPaymentExceptionNote(String paymentExceptionNote) {
+        this.paymentExceptionNote = paymentExceptionNote;
+    }
+
+    public User getPaymentExceptionApprovedBy() {
+        return paymentExceptionApprovedBy;
+    }
+
+    public void setPaymentExceptionApprovedBy(User paymentExceptionApprovedBy) {
+        this.paymentExceptionApprovedBy = paymentExceptionApprovedBy;
+    }
+
+    public Date getPaymentExceptionApprovedDate() {
+        return paymentExceptionApprovedDate;
+    }
+
+    public void setPaymentExceptionApprovedDate(Date paymentExceptionApprovedDate) {
+        this.paymentExceptionApprovedDate = paymentExceptionApprovedDate;
     }
 
     public RequestStatus getRequestStatus() {

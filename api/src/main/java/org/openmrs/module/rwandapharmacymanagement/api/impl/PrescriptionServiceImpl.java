@@ -45,6 +45,7 @@ import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -143,7 +144,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(line.getProductMasterItemId());
             validateProductMasterDrug(productMasterItem);
             org.openmrs.module.rwandapharmacymanagement.model.Item localItem = ensureLocalItem(productMasterItem);
-            BigDecimal requestedQuantity = normalizeQuantity(line.getQuantity());
+            BigDecimal requestedQuantity = calculateRequestedQuantity(line);
             DrugOrder order = buildDrugOrder(patient, savedEncounter, orderingProvider, productMasterItem.getDrug(), line,
                     requestedQuantity, sortWeight++);
             Order savedOrder = Context.getOrderService().saveOrder(order, (OrderContext) null);
@@ -210,7 +211,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(line.getProductMasterItemId());
         validateProductMasterDrug(productMasterItem);
         org.openmrs.module.rwandapharmacymanagement.model.Item localItem = ensureLocalItem(productMasterItem);
-        BigDecimal requestedQuantity = normalizeQuantity(line.getQuantity());
+        BigDecimal requestedQuantity = calculateRequestedQuantity(line);
         DrugOrder matchingOrder = findMatchingOrder(request, requestLine);
         if (matchingOrder == null) {
             throw new IllegalStateException("Matching drug order was not found for the selected prescription line");
@@ -402,6 +403,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
                     line.setLineStatus(Boolean.TRUE.equals(paid) ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
                 }
             }
+            updateRelatedBillingDrugFrequency(persistedRequest);
             PatientDispensingRequest savedRequest = dispensingService.saveRequest(persistedRequest);
             log.info("Linked prescription request to patient bill. requestId="
                     + savedRequest.getPatientDispensingRequestId() + ", patientBillId=" + patientBillId
@@ -585,6 +587,146 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         request.setVoidedBy(Context.getAuthenticatedUser());
         request.setDateVoided(new Date());
         request.setVoidReason(reason);
+    }
+
+    private void updateRelatedBillingDrugFrequency(PatientDispensingRequest request) {
+        if (request == null || request.getPatientBillId() == null || request.getLines() == null
+                || request.getLines().isEmpty()) {
+            return;
+        }
+        try {
+            Class<?> billingServiceClass = Context.loadClass("org.openmrs.module.mohbilling.service.BillingService");
+            Class<?> patientBillClass = Context.loadClass("org.openmrs.module.mohbilling.model.PatientBill");
+            Class<?> patientServiceBillClass = Context.loadClass("org.openmrs.module.mohbilling.model.PatientServiceBill");
+            Object billingService = Context.getService(billingServiceClass);
+            if (billingService == null) {
+                return;
+            }
+            Object patientBill = billingServiceClass.getMethod("getPatientBill", Integer.class)
+                    .invoke(billingService, request.getPatientBillId());
+            if (patientBill == null) {
+                return;
+            }
+            Object consommation = billingServiceClass.getMethod("getConsommationByPatientBill", patientBillClass)
+                    .invoke(billingService, patientBill);
+            if (consommation == null) {
+                return;
+            }
+            Set<?> billItems = safeCastSet(invokeNoArg(consommation, "getBillItems"));
+            if (billItems == null || billItems.isEmpty()) {
+                return;
+            }
+
+            int updated = 0;
+            for (Object billItem : billItems) {
+                if (billItem == null || extractBoolean(billItem, "getVoided")) {
+                    continue;
+                }
+                PatientDispensingRequestLine matchingLine = matchingPrescriptionLine(billItem, request.getLines());
+                if (matchingLine == null || !(matchingLine.getOrder() instanceof DrugOrder)) {
+                    continue;
+                }
+                String drugFrequency = buildDrugFrequencyDetails(matchingLine, (DrugOrder) matchingLine.getOrder());
+                if (drugFrequency.isEmpty()) {
+                    continue;
+                }
+                if (setDrugFrequencyOnBillingItem(billingServiceClass, billingService, patientServiceBillClass,
+                        billItem, drugFrequency)) {
+                    updated++;
+                }
+            }
+            if (updated > 0) {
+                log.info("Updated prescription drug frequency on billing items. requestId="
+                        + request.getPatientDispensingRequestId() + ", patientBillId=" + request.getPatientBillId()
+                        + ", updatedItems=" + updated);
+            }
+        }
+        catch (Exception ex) {
+            log.warn("Unable to update prescription drug frequency on billing items. requestId="
+                    + request.getPatientDispensingRequestId() + ", patientBillId=" + request.getPatientBillId(), ex);
+        }
+    }
+
+    private PatientDispensingRequestLine matchingPrescriptionLine(Object billItem,
+                                                                 List<PatientDispensingRequestLine> requestLines) {
+        if (billItem == null || requestLines == null) {
+            return null;
+        }
+        for (PatientDispensingRequestLine requestLine : requestLines) {
+            if (requestLine == null || !(requestLine.getOrder() instanceof DrugOrder)) {
+                continue;
+            }
+            if (matchesBillingItem(billItem, requestLine, requestLine.getOrder())) {
+                return requestLine;
+            }
+        }
+        return null;
+    }
+
+    private String buildDrugFrequencyDetails(PatientDispensingRequestLine requestLine, DrugOrder order) {
+        List<String> parts = new ArrayList<String>();
+        addDetailPart(parts, "Dose", formatDose(order));
+        addDetailPart(parts, "Frequency", order.getFrequency() == null ? "" : order.getFrequency().getName());
+        addDetailPart(parts, "Route", order.getRoute() == null ? "" : order.getRoute().getDisplayString());
+        addDetailPart(parts, "Duration", formatDuration(order));
+        addDetailPart(parts, "Quantity", requestLine == null || requestLine.getRequestedQuantity() == null
+                ? "" : requestLine.getRequestedQuantity().stripTrailingZeros().toPlainString());
+        StringBuilder value = new StringBuilder();
+        for (String part : parts) {
+            if (value.length() > 0) {
+                value.append("; ");
+            }
+            value.append(part);
+        }
+        return value.toString();
+    }
+
+    private void addDetailPart(List<String> parts, String label, String value) {
+        if (parts == null || value == null || value.trim().isEmpty()) {
+            return;
+        }
+        parts.add(label + ": " + value.trim());
+    }
+
+    private String formatDose(DrugOrder order) {
+        if (order == null || order.getDose() == null) {
+            return "";
+        }
+        String dose = BigDecimal.valueOf(order.getDose()).stripTrailingZeros().toPlainString();
+        String units = order.getDoseUnits() == null ? "" : order.getDoseUnits().getDisplayString();
+        return units == null || units.trim().isEmpty() ? dose : dose + " " + units.trim();
+    }
+
+    private String formatDuration(DrugOrder order) {
+        if (order == null || order.getDuration() == null) {
+            return "";
+        }
+        String duration = String.valueOf(order.getDuration());
+        String units = order.getDurationUnits() == null ? "" : order.getDurationUnits().getDisplayString();
+        return units == null || units.trim().isEmpty() ? duration : duration + " " + units.trim();
+    }
+
+    private boolean setDrugFrequencyOnBillingItem(Class<?> billingServiceClass, Object billingService,
+                                                  Class<?> patientServiceBillClass, Object billItem,
+                                                  String drugFrequency) throws Exception {
+        if (invokeSetterIfPresent(billItem, "setDrugFrequency", drugFrequency, String.class)) {
+            billingServiceClass.getMethod("saveBilledItem", patientServiceBillClass).invoke(billingService, billItem);
+            return true;
+        }
+        Integer patientServiceBillId = extractInteger(billItem, "getPatientServiceBillId");
+        if (patientServiceBillId == null) {
+            patientServiceBillId = extractInteger(billItem, "getId");
+        }
+        if (patientServiceBillId == null) {
+            return false;
+        }
+        Context.getAdministrationService().executeSQL("update moh_bill_patient_service_bill set drug_frequency = '"
+                + sqlEscape(drugFrequency) + "' where patient_service_bill_id = " + patientServiceBillId, false);
+        return true;
+    }
+
+    private String sqlEscape(String value) {
+        return value == null ? "" : value.replace("'", "''");
     }
 
     private void voidRelatedBillingItems(PatientDispensingRequest request,
@@ -1014,6 +1156,20 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         }
     }
 
+    private boolean invokeSetterIfPresent(Object target, String methodName, Object value, Class<?> parameterType) {
+        if (target == null) {
+            return false;
+        }
+        try {
+            Method method = target.getClass().getMethod(methodName, parameterType);
+            method.invoke(target, value);
+            return true;
+        }
+        catch (Exception ignored) {
+            return false;
+        }
+    }
+
     private boolean extractBoolean(Object target, String methodName) {
         Object value = invokeNoArg(target, methodName);
         return value instanceof Boolean && ((Boolean) value).booleanValue();
@@ -1212,7 +1368,178 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Prescription quantity must be greater than zero");
         }
-        return quantity.stripTrailingZeros();
+        return normalizeQuantityScale(quantity);
+    }
+
+    BigDecimal calculateRequestedQuantity(PrescriptionLineCommand line) {
+        if (line == null) {
+            throw new IllegalArgumentException("Prescription line is required");
+        }
+        BigDecimal submittedQuantity = line.getQuantity();
+        if (submittedQuantity != null && submittedQuantity.compareTo(BigDecimal.ZERO) > 0) {
+            return normalizeQuantity(submittedQuantity);
+        }
+        BigDecimal calculatedQuantity = calculateQuantityFromDoseSchedule(line);
+        if (calculatedQuantity == null) {
+            return normalizeQuantity(submittedQuantity);
+        }
+        return calculatedQuantity;
+    }
+
+    private BigDecimal calculateQuantityFromDoseSchedule(PrescriptionLineCommand line) {
+        if (line.getDose() == null || line.getDose().compareTo(BigDecimal.ZERO) <= 0
+                || line.getDuration() == null || line.getDuration().intValue() <= 0) {
+            return null;
+        }
+        FrequencySchedule frequencySchedule = resolveFrequencySchedule(line.getFrequency());
+        if (frequencySchedule == null || frequencySchedule.count.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        BigDecimal periods = durationToPeriods(line.getDuration(), line.getDurationUnit(), frequencySchedule.period);
+        if (periods.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        return line.getDose()
+                .multiply(frequencySchedule.count)
+                .multiply(periods)
+                .setScale(0, RoundingMode.CEILING)
+                .stripTrailingZeros()
+                .setScale(0);
+    }
+
+    private BigDecimal normalizeQuantityScale(BigDecimal quantity) {
+        BigDecimal normalized = quantity.stripTrailingZeros();
+        return normalized.scale() < 0 ? normalized.setScale(0) : normalized;
+    }
+
+    private FrequencySchedule resolveFrequencySchedule(String frequencyName) {
+        OrderFrequency orderFrequency = null;
+        try {
+            orderFrequency = resolveFrequency(frequencyName);
+        }
+        catch (Exception ignored) {
+        }
+        if (orderFrequency != null && orderFrequency.getFrequencyPerDay() != null
+                && orderFrequency.getFrequencyPerDay().doubleValue() > 0) {
+            return new FrequencySchedule(BigDecimal.valueOf(orderFrequency.getFrequencyPerDay().doubleValue()), "day");
+        }
+        return parseFrequencySchedule(frequencyName);
+    }
+
+    private FrequencySchedule parseFrequencySchedule(String frequencyName) {
+        String text = normalizeFrequencyName(frequencyName);
+        if (text.isEmpty() || text.contains("per need") || text.contains("as needed") || "prn".equals(text)) {
+            return null;
+        }
+        if (text.contains("every other day") || text.contains("alternate day")) {
+            return new FrequencySchedule(new BigDecimal("0.5"), "day");
+        }
+        if (containsWord(text, "qod") || containsWord(text, "eod")) {
+            return new FrequencySchedule(new BigDecimal("0.5"), "day");
+        }
+        BigDecimal count = parseFrequencyCount(text);
+        if (count == null) {
+            if (text.contains("daily") || text.contains("per day") || text.contains("a day")
+                    || text.contains("morning") || text.contains("evening") || text.contains("night")) {
+                count = BigDecimal.ONE;
+            } else if (text.contains("weekly") || text.contains("a week") || text.contains("per week")) {
+                count = BigDecimal.ONE;
+            } else if (text.contains("monthly") || text.contains("a month") || text.contains("per month")) {
+                count = BigDecimal.ONE;
+            }
+        }
+        if (count == null) {
+            return null;
+        }
+        String period = "day";
+        if (text.contains("week")) {
+            period = "week";
+        } else if (text.contains("month")) {
+            period = "month";
+        }
+        return new FrequencySchedule(count, period);
+    }
+
+    private BigDecimal parseFrequencyCount(String text) {
+        BigDecimal abbreviationCount = parseFrequencyAbbreviationCount(text);
+        if (abbreviationCount != null) {
+            return abbreviationCount;
+        }
+        if (containsWord(text, "once") || containsWord(text, "one")) {
+            return BigDecimal.ONE;
+        }
+        if (containsWord(text, "twice") || containsWord(text, "two")) {
+            return new BigDecimal("2");
+        }
+        if (containsWord(text, "thrice") || containsWord(text, "three")) {
+            return new BigDecimal("3");
+        }
+        String[] words = new String[] {
+                "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+                "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"
+        };
+        for (int i = 0; i < words.length; i++) {
+            if (containsWord(text, words[i])) {
+                return new BigDecimal(i + 4);
+            }
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\b(\\d+)\\b").matcher(text);
+        return matcher.find() ? new BigDecimal(matcher.group(1)) : null;
+    }
+
+    private BigDecimal parseFrequencyAbbreviationCount(String text) {
+        if (containsWord(text, "qd") || containsWord(text, "od")
+                || containsWord(text, "q24h") || containsHourlyPhrase(text, "24")) {
+            return BigDecimal.ONE;
+        }
+        if (containsWord(text, "bid") || containsWord(text, "bd")
+                || containsWord(text, "q12h") || containsHourlyPhrase(text, "12")) {
+            return new BigDecimal("2");
+        }
+        if (containsWord(text, "tid") || containsWord(text, "tds")
+                || containsWord(text, "q8h") || containsHourlyPhrase(text, "8")) {
+            return new BigDecimal("3");
+        }
+        if (containsWord(text, "qid") || containsWord(text, "qds")
+                || containsWord(text, "q6h") || containsHourlyPhrase(text, "6")) {
+            return new BigDecimal("4");
+        }
+        return null;
+    }
+
+    private boolean containsHourlyPhrase(String text, String hours) {
+        return text != null && text.matches(".*\\b" + hours + "\\s+hourly\\b.*");
+    }
+
+    private boolean containsWord(String text, String word) {
+        return text != null && text.matches(".*\\b" + word + "\\b.*");
+    }
+
+    private BigDecimal durationToPeriods(Integer duration, String durationUnit, String targetPeriod) {
+        BigDecimal days = new BigDecimal(duration.intValue());
+        String unit = safe(durationUnit).trim().toLowerCase(Locale.ENGLISH);
+        if (unit.startsWith("week")) {
+            days = days.multiply(new BigDecimal("7"));
+        } else if (unit.startsWith("month")) {
+            days = days.multiply(new BigDecimal("30"));
+        }
+        if ("week".equals(targetPeriod)) {
+            return days.divide(new BigDecimal("7"), 8, RoundingMode.HALF_UP);
+        }
+        if ("month".equals(targetPeriod)) {
+            return days.divide(new BigDecimal("30"), 8, RoundingMode.HALF_UP);
+        }
+        return days;
+    }
+
+    private static class FrequencySchedule {
+        private final BigDecimal count;
+        private final String period;
+
+        private FrequencySchedule(BigDecimal count, String period) {
+            this.count = count;
+            this.period = period;
+        }
     }
 
     private boolean isAvailableInHospitalStock(org.openmrs.module.rwandapharmacymanagement.model.Item item) {

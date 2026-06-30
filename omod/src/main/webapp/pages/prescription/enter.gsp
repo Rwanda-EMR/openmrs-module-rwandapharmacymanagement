@@ -243,9 +243,9 @@
                 </div>
                 <div class="rx-field">
                     <label>Frequency</label>
-                    <select id="rx-frequency">
+                    <select id="rx-frequency" onchange="autoCalculateQuantity()" oninput="autoCalculateQuantity()">
                         <option value="">Select frequency</option>
-                        <% frequencies.each { frequency -> %><option value="${ frequency.displayString }">${ frequency.displayString }</option><% } %>
+                        <% frequencyOptions.each { frequency -> %><option value="${ frequency.label }" data-frequency-per-day="${ frequency.frequencyPerDay ?: '' }">${ frequency.label }</option><% } %>
                     </select>
                     <div class="rx-inline-note">Quantity uses the numeric meaning parsed from the selected frequency.</div>
                 </div>
@@ -253,15 +253,15 @@
             <div class="rx-grid-3">
                 <div class="rx-field">
                     <label>Dose</label>
-                    <input type="number" step="0.01" min="0" id="rx-dose"/>
+                    <input type="number" step="0.01" min="0" id="rx-dose" oninput="autoCalculateQuantity()" onchange="autoCalculateQuantity()"/>
                 </div>
                 <div class="rx-field">
                     <label>Duration</label>
-                    <input type="number" min="1" id="rx-duration"/>
+                    <input type="number" min="1" id="rx-duration" oninput="autoCalculateQuantity()" onchange="autoCalculateQuantity()"/>
                 </div>
                 <div class="rx-field">
                     <label>Duration unit</label>
-                    <select id="rx-duration-unit">
+                    <select id="rx-duration-unit" onchange="autoCalculateQuantity()" oninput="autoCalculateQuantity()">
                         <option value="">Select unit</option>
                         <% durationUnits.each { durationUnit -> %><option value="${ durationUnit.displayString }">${ durationUnit.displayString }</option><% } %>
                     </select>
@@ -407,8 +407,8 @@
                                 <label>Frequency</label>
                                 <select id="rx-edit-frequency-${ line.requestLineId }" name="frequency" onchange="autoCalculateEditQuantity('${ line.requestLineId }')">
                                     <option value="">Select frequency</option>
-                                    <% frequencies.each { frequency -> %>
-                                    <option value="${ frequency.displayString }" ${ line.frequency == frequency.displayString || line.frequency == frequency.name ? 'selected="selected"' : '' }>${ frequency.displayString }</option>
+                                    <% frequencyOptions.each { frequency -> %>
+                                    <option value="${ frequency.label }" data-frequency-per-day="${ frequency.frequencyPerDay ?: '' }" ${ line.frequency == frequency.label ? 'selected="selected"' : '' }>${ frequency.label }</option>
                                     <% } %>
                                 </select>
                             </div>
@@ -484,7 +484,6 @@
 <script type="text/javascript">
     var prescriptionDraft = [];
     var pendingVoidRequest = null;
-    var rxQuantityManuallyEdited = false;
     var allPrescriptionProducts = [];
 
     function byId(id) { return document.getElementById(id); }
@@ -503,10 +502,16 @@
 
     function parseNumericToken(label) {
         var text = normalizeFrequencyLabel(label);
+        var abbreviationCount = parseFrequencyAbbreviationCount(text);
+        if (abbreviationCount) {
+            return abbreviationCount;
+        }
         var numberWords = {
             'once': 1, 'one': 1, 'twice': 2, 'two': 2, 'thrice': 3, 'three': 3,
             'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9,
-            'ten': 10, 'eleven': 11, 'twelve': 12
+            'ten': 10, 'eleven': 11, 'twelve': 12,
+            'thirteen': 13, 'fourteen': 14, 'fifteen': 15, 'sixteen': 16,
+            'seventeen': 17, 'eighteen': 18, 'nineteen': 19, 'twenty': 20
         };
         for (var key in numberWords) {
             if (numberWords.hasOwnProperty(key) && text.match(new RegExp('\\b' + key + '\\b'))) {
@@ -520,6 +525,25 @@
         return 0;
     }
 
+    function parseFrequencyAbbreviationCount(text) {
+        if (!text) {
+            return 0;
+        }
+        if (text.match(new RegExp('\\b(qd|od|q24h|24 hourly)\\b'))) {
+            return 1;
+        }
+        if (text.match(new RegExp('\\b(bid|bd|q12h|12 hourly)\\b'))) {
+            return 2;
+        }
+        if (text.match(new RegExp('\\b(tid|tds|q8h|8 hourly)\\b'))) {
+            return 3;
+        }
+        if (text.match(new RegExp('\\b(qid|qds|q6h|6 hourly)\\b'))) {
+            return 4;
+        }
+        return 0;
+    }
+
     function parseFrequency(label) {
         var text = normalizeFrequencyLabel(label);
         if (!text) {
@@ -529,6 +553,9 @@
             return null;
         }
         if (text.indexOf('every other day') >= 0 || text.indexOf('alternate day') >= 0) {
+            return { count: 0.5, period: 'day' };
+        }
+        if (text.match(new RegExp('\\b(qod|eod)\\b'))) {
             return { count: 0.5, period: 'day' };
         }
         var count = parseNumericToken(text);
@@ -577,23 +604,48 @@
         return days;
     }
 
+    function selectedFrequencyPerDay(selectElement) {
+        if (!selectElement || selectElement.selectedIndex < 0) {
+            return 0;
+        }
+        var option = selectElement.options[selectElement.selectedIndex];
+        var value = option ? parseFloat(option.getAttribute('data-frequency-per-day') || '0') : 0;
+        return value > 0 ? value : 0;
+    }
+
+    function calculateQuantityFromSchedule(doseValue, frequencyValue, durationValue, durationUnitValue, frequencyPerDayValue) {
+        var dose = parseFloat(doseValue || '0');
+        var frequencyPerDay = parseFloat(frequencyPerDayValue || '0');
+        var frequency = frequencyPerDay > 0 ? { count: frequencyPerDay, period: 'day' } : parseFrequency(frequencyValue);
+        if (!(dose > 0) || !frequency) {
+            return '';
+        }
+        var periods = durationToPeriods(durationValue, durationUnitValue, frequency.period);
+        if (!(periods > 0)) {
+            return '';
+        }
+        return String(Math.ceil(dose * frequency.count * periods));
+    }
+
+    function currentDraftCalculatedQuantity() {
+        return calculateQuantityFromSchedule(
+                byId('rx-dose').value,
+                byId('rx-frequency').value,
+                byId('rx-duration').value,
+                byId('rx-duration-unit').value,
+                selectedFrequencyPerDay(byId('rx-frequency')));
+    }
+
     function autoCalculateQuantity() {
         var quantityInput = byId('rx-quantity');
-        if (!quantityInput || rxQuantityManuallyEdited) {
+        if (!quantityInput) {
             return;
         }
-        var dose = parseFloat(byId('rx-dose').value || '0');
-        var duration = byId('rx-duration').value;
-        var durationUnit = byId('rx-duration-unit').value;
-        var frequency = parseFrequency(byId('rx-frequency').value);
-        if (!(dose > 0) || !frequency) {
+        var calculatedQuantity = currentDraftCalculatedQuantity();
+        if (!calculatedQuantity) {
             return;
         }
-        var periods = durationToPeriods(duration, durationUnit, frequency.period);
-        if (!(periods > 0)) {
-            return;
-        }
-        quantityInput.value = Math.ceil(dose * frequency.count * periods);
+        quantityInput.value = calculatedQuantity;
     }
 
     function autoCalculateEditQuantity(lineId) {
@@ -605,21 +657,16 @@
         if (!doseInput || !durationInput || !durationUnitInput || !frequencyInput || !quantityInput) {
             return;
         }
-        if (quantityInput.getAttribute('data-manual-quantity') === 'true') {
+        var calculatedQuantity = calculateQuantityFromSchedule(
+                doseInput.value,
+                frequencyInput.value,
+                durationInput.value,
+                durationUnitInput.value,
+                selectedFrequencyPerDay(frequencyInput));
+        if (!calculatedQuantity) {
             return;
         }
-        var dose = parseFloat(doseInput.value || '0');
-        var duration = durationInput.value;
-        var durationUnit = durationUnitInput.value;
-        var frequency = parseFrequency(frequencyInput.value);
-        if (!(dose > 0) || !frequency) {
-            return;
-        }
-        var periods = durationToPeriods(duration, durationUnit, frequency.period);
-        if (!(periods > 0)) {
-            return;
-        }
-        quantityInput.value = Math.ceil(dose * frequency.count * periods);
+        quantityInput.value = calculatedQuantity;
     }
 
     function initializePrescriptionProducts() {
@@ -811,6 +858,7 @@
 
     function collectDraftLine() {
         handlePrescriptionProductInput();
+        autoCalculateQuantity();
         var productId = byId('rx-product') ? byId('rx-product').value : '';
         if (!productId) {
             alert('Select a drug from the suggestions first.');
@@ -851,7 +899,6 @@
             byId('rx-start-date-display').value = '';
         }
         byId('rx-quantity').value = '';
-        rxQuantityManuallyEdited = false;
         byId('rx-instructions').value = '';
         hidePrescriptionProductSuggestions();
     }
@@ -965,19 +1012,13 @@
     initializePrescriptionProducts();
     hidePrescriptionProductSuggestions();
     byId('rx-frequency').onchange = autoCalculateQuantity;
+    byId('rx-frequency').oninput = autoCalculateQuantity;
     byId('rx-dose').oninput = autoCalculateQuantity;
+    byId('rx-dose').onchange = autoCalculateQuantity;
     byId('rx-duration').oninput = autoCalculateQuantity;
+    byId('rx-duration').onchange = autoCalculateQuantity;
     byId('rx-duration-unit').onchange = autoCalculateQuantity;
-    byId('rx-quantity').oninput = function () {
-        rxQuantityManuallyEdited = normalizeText(this.value) !== '';
-    };
-    var editQuantityInputs = document.querySelectorAll('input[id^="rx-edit-quantity-"]');
-    for (var i = 0; i < editQuantityInputs.length; i++) {
-        editQuantityInputs[i].setAttribute('data-manual-quantity', 'true');
-        editQuantityInputs[i].oninput = function () {
-            this.setAttribute('data-manual-quantity', normalizeText(this.value) !== '' ? 'true' : 'false');
-        };
-    }
+    byId('rx-duration-unit').oninput = autoCalculateQuantity;
     byId('rx-submit-form').onsubmit = function () {
         if (!prescriptionDraft.length) {
             alert('Add at least one drug to the prescribed items list before submitting.');

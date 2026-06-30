@@ -23,6 +23,7 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -313,7 +314,18 @@ public class DispensingStorePageController {
             BigDecimal available = balance.getQuantityOnHand() == null ? BigDecimal.ZERO : balance.getQuantityOnHand();
             itemRow.put("available", ((BigDecimal) itemRow.get("available")).add(available));
         }
+        Collections.sort(itemRows, new Comparator<Map<String, Object>>() {
+            @Override
+            public int compare(Map<String, Object> left, Map<String, Object> right) {
+                return safeString(left == null ? null : left.get("name"))
+                        .compareToIgnoreCase(safeString(right == null ? null : right.get("name")));
+            }
+        });
         return itemRows;
+    }
+
+    private String safeString(Object value) {
+        return value == null ? "" : value.toString();
     }
 
     private BigDecimal unitPriceForItem(List<InventoryBalance> balances, Integer itemId) {

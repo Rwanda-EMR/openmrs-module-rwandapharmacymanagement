@@ -28,7 +28,7 @@
         <p id="concept-id-row">
             <label>OpenMRS concept ID</label><br/>
             <input type="number" id="concept-id" name="conceptId"/>
-            <br/><span style="color:#666;font-size:12px;">Optional for consumables. If this concept is mapped in MOH Billing, the consumable will be billed; otherwise it will still queue as paid.</span>
+            <br/><span style="color:#666;font-size:12px;">Optional for consumables. Consumables should be mapped in MOH Billing before they are ordered.</span>
         </p>
         <p id="drug-id-row" style="display:none;">
             <label>OpenMRS drug ID</label><br/>
