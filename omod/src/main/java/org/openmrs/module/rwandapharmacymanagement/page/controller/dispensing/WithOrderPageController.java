@@ -391,6 +391,9 @@ public class WithOrderPageController {
     }
 
     private DrugOrder findMatchingOrder(PatientDispensingRequest request, PatientDispensingRequestLine requestLine) {
+        if (requestLine != null && requestLine.getOrder() != null) {
+            return requestLine.getOrder();
+        }
         if (request == null || request.getEncounter() == null || request.getEncounter().getOrders() == null
                 || requestLine == null || requestLine.getItem() == null) {
             return null;

@@ -154,7 +154,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             }
             PatientDispensingRequestLine requestLine = new PatientDispensingRequestLine();
             requestLine.setPatientDispensingRequest(request);
-            requestLine.setOrder(order);
+            requestLine.setOrder(savedOrder instanceof DrugOrder ? (DrugOrder) savedOrder : order);
             requestLine.setItem(localItem);
             requestLine.setRequestedQuantity(requestedQuantity);
             boolean billableLine = isAvailableInHospitalStock(localItem);
