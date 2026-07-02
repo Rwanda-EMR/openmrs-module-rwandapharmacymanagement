@@ -1,6 +1,10 @@
 package org.openmrs.module.rwandapharmacymanagement.api.impl;
 
+import org.openmrs.Concept;
+import org.openmrs.Encounter;
+import org.openmrs.EncounterType;
 import org.openmrs.Location;
+import org.openmrs.Obs;
 import org.openmrs.Patient;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.impl.BaseOpenmrsService;
@@ -8,6 +12,7 @@ import org.openmrs.module.rwandapharmacymanagement.api.ConsumableOrderService;
 import org.openmrs.module.rwandapharmacymanagement.api.DispensingService;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
+import org.openmrs.module.rwandapharmacymanagement.api.dto.ConsumableBillingReadiness;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.ConsumableOrderLineCommand;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
@@ -21,7 +26,9 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -46,6 +53,35 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
 
     public void setInventoryService(InventoryService inventoryService) {
         this.inventoryService = inventoryService;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ConsumableBillingReadiness getBillingReadiness(Patient patient) {
+        if (patient == null || patient.getPatientId() == null) {
+            return new ConsumableBillingReadiness(false, "Patient is required before adding consumables.");
+        }
+        try {
+            Class<?> billingServiceClass = Context.loadClass("org.openmrs.module.mohbilling.service.BillingService");
+            Object billingService = Context.getService(billingServiceClass);
+            if (billingService == null) {
+                return new ConsumableBillingReadiness(false, "MOH Billing service is not available.");
+            }
+            Object insurancePolicy = resolveTodaysRegistrationInsurancePolicy(billingServiceClass, billingService, patient);
+            if (insurancePolicy == null) {
+                return new ConsumableBillingReadiness(false,
+                        "No insurance policy from today's registration was found for this patient.");
+            }
+            Object globalBill = resolveOpenGlobalBill(billingServiceClass, billingService, insurancePolicy);
+            if (globalBill == null) {
+                return new ConsumableBillingReadiness(false,
+                        "The insurance selected in today's registration has no open global bill.");
+            }
+            return new ConsumableBillingReadiness(true, "Ready for consumable billing.");
+        }
+        catch (Exception ex) {
+            return new ConsumableBillingReadiness(false, "Unable to verify consumable billing readiness.");
+        }
     }
 
     @Override
@@ -185,9 +221,9 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
                 throw new IllegalStateException("Billing service is not available");
             }
 
-            Object insurancePolicy = resolveInsurancePolicy(billingServiceClass, billingService, request.getPatient());
+            Object insurancePolicy = resolveTodaysRegistrationInsurancePolicy(billingServiceClass, billingService, request.getPatient());
             if (insurancePolicy == null) {
-                throw new IllegalArgumentException("No active insurance policy was found for this patient. MOH Billing cannot create a consumable bill.");
+                throw new IllegalArgumentException("No insurance policy from today's registration was found for this patient. MOH Billing cannot create a consumable bill.");
             }
             Object insurance = invokeNoArg(insurancePolicy, "getInsurance");
             if (insurance == null) {
@@ -371,30 +407,127 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
         return constructor.newInstance();
     }
 
-    private Object resolveInsurancePolicy(Class<?> billingServiceClass, Object billingService, Patient patient) throws Exception {
+    private Object resolveTodaysRegistrationInsurancePolicy(Class<?> billingServiceClass, Object billingService,
+                                                            Patient patient) throws Exception {
+        Encounter registrationEncounter = resolveTodaysRegistrationEncounter(patient);
+        if (registrationEncounter == null) {
+            return null;
+        }
+        Concept insuranceType = resolveRegistrationInsuranceType(registrationEncounter);
+        String insuranceNumber = resolveRegistrationInsuranceNumber(registrationEncounter);
+        if (insuranceType == null || insuranceNumber.trim().isEmpty()) {
+            return null;
+        }
         Object policies = billingServiceClass.getMethod("getAllInsurancePoliciesByPatient", Patient.class)
                 .invoke(billingService, patient);
         if (!(policies instanceof Iterable)) {
             return null;
         }
         Date now = new Date();
-        Object fallback = null;
         for (Object policy : (Iterable<?>) policies) {
             if (policy == null || extractBoolean(policy, "isRetired")) {
                 continue;
-            }
-            if (fallback == null) {
-                fallback = policy;
             }
             Date start = extractDate(policy, "getCoverageStartDate");
             Date end = extractDate(policy, "getExpirationDate");
             boolean startsBeforeNow = start == null || !start.after(now);
             boolean endsAfterNow = end == null || !end.before(now);
-            if (startsBeforeNow && endsAfterNow) {
+            if (startsBeforeNow && endsAfterNow && matchesRegistrationInsurance(policy, insuranceType, insuranceNumber)) {
                 return policy;
             }
         }
-        return fallback;
+        return null;
+    }
+
+    private Encounter resolveTodaysRegistrationEncounter(Patient patient) throws Exception {
+        EncounterType registrationEncounterType = resolveRegistrationEncounterType();
+        if (registrationEncounterType == null) {
+            return null;
+        }
+        Date now = new Date();
+        List<Encounter> encounters = Context.getEncounterService().getEncounters(patient, null, startOfDay(now), endOfDay(now),
+                null, Collections.singleton(registrationEncounterType), null, null, null, false);
+        Encounter latest = null;
+        for (Encounter encounter : encounters) {
+            if (encounter == null || encounter.getEncounterDatetime() == null) {
+                continue;
+            }
+            if (latest == null || encounter.getEncounterDatetime().after(latest.getEncounterDatetime())) {
+                latest = encounter;
+            }
+        }
+        return latest;
+    }
+
+    private EncounterType resolveRegistrationEncounterType() throws Exception {
+        Class<?> configClass = Context.loadClass("org.openmrs.module.rwandaemr.RwandaEmrConfig");
+        List<?> configs = Context.getRegisteredComponents(configClass);
+        if (configs == null || configs.isEmpty()) {
+            return null;
+        }
+        Object config = configs.get(0);
+        Object encounterType = configClass.getMethod("getRegistrationEncounterType").invoke(config);
+        return encounterType instanceof EncounterType ? (EncounterType) encounterType : null;
+    }
+
+    private Concept resolveRegistrationInsuranceType(Encounter encounter) {
+        Concept concept = resolveConceptFromGlobalProperty("registration.insuranceTypeConcept");
+        if (concept == null) {
+            return null;
+        }
+        for (Obs obs : encounter.getObsAtTopLevel(false)) {
+            if (obs != null && concept.equals(obs.getConcept())) {
+                return obs.getValueCoded();
+            }
+        }
+        return null;
+    }
+
+    private String resolveRegistrationInsuranceNumber(Encounter encounter) {
+        Concept concept = resolveConceptFromGlobalProperty("registration.insuranceNumberConcept");
+        if (concept == null) {
+            return "";
+        }
+        for (Obs obs : encounter.getObsAtTopLevel(false)) {
+            if (obs != null && concept.equals(obs.getConcept())) {
+                return safeObject(obs.getValueText()).trim();
+            }
+        }
+        return "";
+    }
+
+    private Concept resolveConceptFromGlobalProperty(String globalPropertyName) {
+        String value = Context.getAdministrationService().getGlobalProperty(globalPropertyName);
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        String key = value.trim();
+        try {
+            return Context.getConceptService().getConcept(Integer.valueOf(key));
+        }
+        catch (NumberFormatException ignored) {
+        }
+        Concept concept = Context.getConceptService().getConceptByUuid(key);
+        if (concept != null) {
+            return concept;
+        }
+        if (key.contains(":")) {
+            String[] mapping = key.split(":", 2);
+            concept = Context.getConceptService().getConceptByMapping(mapping[1], mapping[0]);
+            if (concept != null) {
+                return concept;
+            }
+        }
+        return Context.getConceptService().getConceptByName(key);
+    }
+
+    private boolean matchesRegistrationInsurance(Object policy, Concept insuranceType, String insuranceNumber) {
+        Object insurance = invokeNoArg(policy, "getInsurance");
+        Object insuranceConcept = invokeNoArg(insurance, "getConcept");
+        String policyNumber = safeObject(invokeNoArg(policy, "getInsuranceCardNo")).trim();
+        return insuranceConcept instanceof Concept
+                && insuranceType.equals(insuranceConcept)
+                && insuranceNumber.trim().equals(policyNumber);
     }
 
     private Object resolveBeneficiary(Class<?> billingServiceClass, Object billingService, Object insurancePolicy,
@@ -571,6 +704,26 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
     private Date extractDate(Object target, String methodName) {
         Object value = invokeNoArg(target, methodName);
         return value instanceof Date ? (Date) value : null;
+    }
+
+    private Date startOfDay(Date date) {
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(date);
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        return calendar.getTime();
+    }
+
+    private Date endOfDay(Date date) {
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(date);
+        calendar.set(Calendar.HOUR_OF_DAY, 23);
+        calendar.set(Calendar.MINUTE, 59);
+        calendar.set(Calendar.SECOND, 59);
+        calendar.set(Calendar.MILLISECOND, 999);
+        return calendar.getTime();
     }
 
     private boolean matchesPatient(Object candidate, Patient patient) {

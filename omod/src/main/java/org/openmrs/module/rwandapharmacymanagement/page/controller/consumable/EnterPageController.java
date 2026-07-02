@@ -6,6 +6,7 @@ import org.openmrs.api.context.Context;
 import org.openmrs.module.rwandapharmacymanagement.api.ConsumableOrderService;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
+import org.openmrs.module.rwandapharmacymanagement.api.dto.ConsumableBillingReadiness;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.ConsumableOrderLineCommand;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
@@ -36,6 +37,7 @@ public class EnterPageController {
     private static final String FLASH_REQUEST_COUNT = "rpm.consumableEnter.requestCount";
 
     public void get(PageModel model,
+                    @SpringBean("consumableOrderService") ConsumableOrderService consumableOrderService,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @RequestParam(value = "patientId", required = false) String patientIdOrUuid,
@@ -49,6 +51,10 @@ public class EnterPageController {
                 patient != null && patient.getPatientId() != null ? String.valueOf(patient.getPatientId()) : null);
         model.addAttribute("patientUuidForSubmit", patient == null ? null : patient.getUuid());
         model.addAttribute("orderableItems", buildOrderableItems(pharmacyService, inventoryService));
+        ConsumableBillingReadiness billingReadiness = consumableOrderService.getBillingReadiness(patient);
+        model.addAttribute("billingReady", billingReadiness.isReady());
+        model.addAttribute("billingReadinessMessage", billingReadiness.getMessage());
+        model.addAttribute("canAddConsumables", patient != null && currentLocation != null && billingReadiness.isReady());
         Integer requestCount = FlashMessageSupport.consumeInteger(session, FLASH_REQUEST_COUNT);
         model.addAttribute("ordered", FlashMessageSupport.consumeBoolean(session, FLASH_ORDERED));
         model.addAttribute("requestCount", requestCount == null || requestCount.intValue() < 1 ? 0 : requestCount.intValue());
@@ -68,6 +74,10 @@ public class EnterPageController {
         }
         if (patient == null) {
             throw new IllegalArgumentException("Patient not found");
+        }
+        ConsumableBillingReadiness billingReadiness = consumableOrderService.getBillingReadiness(patient);
+        if (!billingReadiness.isReady()) {
+            throw new IllegalArgumentException(billingReadiness.getMessage());
         }
         Location currentLocation = Context.getUserContext() == null ? null : Context.getUserContext().getLocation();
         List<ConsumableOrderLineCommand> commands = buildCommands(productMasterItemIds, quantities, unitOfMeasures);

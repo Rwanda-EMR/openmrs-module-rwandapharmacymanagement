@@ -71,6 +71,8 @@
     <div class="cons-banner cons-warn">No patient was supplied. Open this page from the patient dashboard.</div>
     <% } else if (!currentLocation) { %>
     <div class="cons-banner cons-warn">No current OpenMRS location is set for this session.</div>
+    <% } else if (!billingReady) { %>
+    <div class="cons-banner cons-warn">${ ui.encodeHtmlContent(billingReadinessMessage ?: 'Patient is not ready for consumable billing.') }</div>
     <% } else if (!orderableItems) { %>
     <div class="cons-banner cons-warn">No consumable items are linked locally for ordering.</div>
     <% } %>
@@ -142,7 +144,11 @@
                     <input type="number" step="0.01" min="0" id="cons-qty"/>
                     <div class="cons-inline-note">Use plain units only. No prescription dose, route, duration, or visit fields are required here.</div>
                 </div>
+                <% if (canAddConsumables) { %>
                 <button type="button" class="cons-btn cons-btn-add" onclick="addConsumableLine()">Add item</button>
+                <% } else { %>
+                <div class="cons-inline-note">${ ui.encodeHtmlContent(billingReadinessMessage ?: 'Patient is not ready for consumable billing.') }</div>
+                <% } %>
             </div>
         </div>
 
@@ -180,7 +186,7 @@
                     </div>
                     <div class="cons-actions">
                         <span class="cons-muted">Requests are visible to all connected dispensing pharmacies for the requesting location. Billing mappings are validated when the order is submitted, not while loading this page.</span>
-                        <button type="submit" class="cons-btn cons-btn-primary">Queue consumables</button>
+                        <button type="submit" class="cons-btn cons-btn-primary"<% if (!billingReady) { %> disabled="disabled" style="opacity:.55; cursor:not-allowed;"<% } %>>Queue consumables</button>
                     </div>
                 </form>
             </div>
@@ -321,6 +327,10 @@
 
     document.getElementById('cons-product').onchange = updateConsumableAvailability;
     document.getElementById('cons-form').onsubmit = function () {
+        <% if (!billingReady) { %>
+        alert('${ ui.encodeJavaScript(billingReadinessMessage ?: 'Patient is not ready for consumable billing.') }');
+        return false;
+        <% } %>
         if (!document.querySelectorAll('#cons-lines-body tr[data-quantity]').length) {
             alert('Add at least one consumable item before saving.');
             return false;

@@ -858,7 +858,6 @@
 
     function collectDraftLine() {
         handlePrescriptionProductInput();
-        autoCalculateQuantity();
         var productId = byId('rx-product') ? byId('rx-product').value : '';
         if (!productId) {
             alert('Select a drug from the suggestions first.');
