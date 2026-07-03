@@ -69,10 +69,9 @@ public class PrescriptionApiController {
                     continue;
                 }
                 BigDecimal pharmacyTotal = BigDecimal.ZERO;
-                for (InventoryBalance balance : inventoryService.getInventoryForPharmacy(pharmacyLocation.getPharmacyLocationId())) {
+                for (InventoryBalance balance : inventoryService.getAvailableInventoryForPharmacy(pharmacyLocation.getPharmacyLocationId())) {
                     if (balance == null || balance.getItem() == null
                             || balance.getQuantityOnHand() == null
-                            || balance.getQuantityOnHand().compareTo(BigDecimal.ZERO) <= 0
                             || !matchesProductMasterItem(balance.getItem(), productMasterItem)) {
                         continue;
                     }

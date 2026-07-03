@@ -14,6 +14,8 @@ import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.api.PrescriptionService;
 import org.openmrs.module.rwandapharmacymanagement.api.PricingService;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.PrescriptionLineCommand;
+import org.openmrs.module.rwandapharmacymanagement.integration.hie.HieMedicationPayloadBuilder;
+import org.openmrs.module.rwandapharmacymanagement.integration.sms.SmsPhoneNumberUtil;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecord;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecordLine;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
@@ -47,6 +49,7 @@ public class EnterPageController {
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @SpringBean("pricingService") PricingService pricingService,
+                    @SpringBean("hieMedicationPayloadBuilder") HieMedicationPayloadBuilder hieMedicationPayloadBuilder,
                     @RequestParam(value = "patientId", required = false) String patientIdOrUuid,
                     @RequestParam(value = "patientBillId", required = false) Integer patientBillId,
                     @RequestParam(value = "billId", required = false) Integer billId,
@@ -86,6 +89,9 @@ public class EnterPageController {
         model.addAttribute("pricingService", pricingService);
         model.addAttribute("pageTitle", "Prescription");
         model.addAttribute("patientBillId", resolvedPatientBillId);
+        String patientPhoneNumber = resolvePatientPhoneNumber(patient, hieMedicationPayloadBuilder);
+        model.addAttribute("patientPhoneNumber", patientPhoneNumber);
+        model.addAttribute("patientSmsPhoneValid", SmsPhoneNumberUtil.isValidForSending(patientPhoneNumber));
         model.addAttribute("prescriptionSaved", Boolean.FALSE);
         model.addAttribute("requestId", requestId);
         model.addAttribute("historyEntries", buildHistoryEntries(historyRequests, dispensingService));
@@ -189,6 +195,15 @@ public class EnterPageController {
         }
     }
 
+    private String resolvePatientPhoneNumber(Patient patient, HieMedicationPayloadBuilder hieMedicationPayloadBuilder) {
+        if (patient == null || hieMedicationPayloadBuilder == null) {
+            return "";
+        }
+        return hieMedicationPayloadBuilder.resolvePatientPhoneNumber(patient,
+                Context.getAdministrationService().getGlobalProperty(
+                        RwandaPharmacyManagementConfig.GP_SMS_PHONE_PERSON_ATTRIBUTE_TYPE_UUID, ""));
+    }
+
     private Visit resolveActiveVisit(Patient patient) {
         if (patient == null) {
             return null;
@@ -288,9 +303,8 @@ public class EnterPageController {
                     || pharmacyLocation.getPharmacyLocationId() == null) {
                 continue;
             }
-            for (InventoryBalance balance : inventoryService.getInventoryForPharmacy(pharmacyLocation.getPharmacyLocationId())) {
-                if (balance == null || balance.getItem() == null || balance.getQuantityOnHand() == null
-                        || balance.getQuantityOnHand().compareTo(BigDecimal.ZERO) <= 0) {
+            for (InventoryBalance balance : inventoryService.getAvailableInventoryForPharmacy(pharmacyLocation.getPharmacyLocationId())) {
+                if (balance == null || balance.getItem() == null || balance.getQuantityOnHand() == null) {
                     continue;
                 }
                 ProductMasterItem matched = matchStockedProductMasterItem(balance.getItem(), byCode, byDrugId);

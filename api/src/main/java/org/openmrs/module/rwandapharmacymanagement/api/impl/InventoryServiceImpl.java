@@ -52,6 +52,11 @@ public class InventoryServiceImpl extends BaseOpenmrsService implements Inventor
     }
 
     @Override
+    public List<InventoryBalance> getAvailableInventoryForPharmacy(Integer pharmacyLocationId) {
+        return inventoryDao.getAvailableInventoryForPharmacy(pharmacyLocationId);
+    }
+
+    @Override
     public InventoryBalance getInventoryBalance(Integer itemId, Integer pharmacyLocationId, String batchNumber) {
         return inventoryDao.getInventoryBalance(itemId, pharmacyLocationId, batchNumber);
     }

@@ -150,7 +150,16 @@ public class RequestPageController {
                 }
                 row.put("available", ((BigDecimal) row.get("available")).add(balance.getQuantityOnHand()));
             }
-            stockByPharmacy.put(pharmacy.getPharmacyLocationId(), new ArrayList<Map<String, Object>>(byItem.values()));
+            List<Map<String, Object>> itemRows = new ArrayList<Map<String, Object>>(byItem.values());
+            Collections.sort(itemRows, new Comparator<Map<String, Object>>() {
+                @Override
+                public int compare(Map<String, Object> left, Map<String, Object> right) {
+                    String leftName = left == null || left.get("name") == null ? "" : left.get("name").toString();
+                    String rightName = right == null || right.get("name") == null ? "" : right.get("name").toString();
+                    return leftName.compareToIgnoreCase(rightName);
+                }
+            });
+            stockByPharmacy.put(pharmacy.getPharmacyLocationId(), itemRows);
         }
         return stockByPharmacy;
     }

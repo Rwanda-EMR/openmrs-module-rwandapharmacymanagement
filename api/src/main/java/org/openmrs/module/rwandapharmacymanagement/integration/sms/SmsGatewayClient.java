@@ -28,9 +28,13 @@ public class SmsGatewayClient {
         if (isBlank(postUrl)) {
             throw new IOException("SMS post URL is missing");
         }
+        String normalizedRecipient = SmsPhoneNumberUtil.normalizeForSending(recipient);
+        if (isBlank(normalizedRecipient)) {
+            throw new IOException("SMS recipient phone number is invalid");
+        }
         Map<String, String> parameters = new LinkedHashMap<String, String>();
         parameters.put("from", sender);
-        parameters.put("to", recipient);
+        parameters.put("to", normalizedRecipient);
         parameters.put("content", content);
         parameters.put("username", username);
         parameters.put("password", password);

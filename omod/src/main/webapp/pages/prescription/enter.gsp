@@ -39,6 +39,8 @@
     .rx-muted { color:#64748b; font-size:12px; }
     .rx-banner { margin:0 0 14px; padding:10px 12px; border-radius:4px; border:1px solid #bfdbfe; background:#eff6ff; color:#1d4ed8; }
     .rx-warn { border-color:#fcd34d; background:#fffbeb; color:#92400e; }
+    .rx-sms-warning.is-hidden { display:none; }
+    .rx-sms-warning-actions { margin-top:8px; }
     .rx-btn { display:inline-flex; align-items:center; justify-content:center; border:1px solid #cbd5e1; border-radius:4px; padding:8px 14px; cursor:pointer; background:#fff; color:#0f172a; font:inherit; }
     .rx-btn-primary { background:#16a34a; border-color:#15803d; color:#fff; }
     .rx-btn-danger { background:#e11d48; border-color:#be123c; color:#fff; }
@@ -132,6 +134,14 @@
 
     <% if (prescriptionSavedFlag) { %>
     <div class="rx-banner">Prescription saved and queued for the dispensing pharmacies linked to this location.</div>
+    <% } %>
+    <% if (patient && !patientSmsPhoneValid) { %>
+    <div class="rx-banner rx-warn rx-sms-warning" id="rx-sms-warning">
+        Patient phone number is ${ patientPhoneNumber ? 'not valid for SMS' : 'not available' }. SMS will not be sent unless the number is available in format 250XXXXXXXXX or 0XXXXXXXXX.
+        <div class="rx-sms-warning-actions">
+            <button type="button" class="rx-btn" onclick="continueWithoutSms()">Continue anyway</button>
+        </div>
+    </div>
     <% } %>
     <% if (!patient) { %>
     <div class="rx-banner rx-warn">No patient was supplied. Open this page from the patient dashboard.</div>
@@ -487,6 +497,13 @@
     var allPrescriptionProducts = [];
 
     function byId(id) { return document.getElementById(id); }
+
+    function continueWithoutSms() {
+        var warning = byId('rx-sms-warning');
+        if (warning) {
+            warning.className += ' is-hidden';
+        }
+    }
 
     function normalizeText(value) {
         return value ? value.toString().trim() : '';

@@ -55,13 +55,14 @@
                     <th>Lab unit</th>
                     <th>Submitted</th>
                     <th>Approved</th>
+                    <th>Dispensed by</th>
                     <th>Status</th>
                     <th>Items</th>
                 </tr>
                 </thead>
                 <tbody>
                 <% if (!requests) { %>
-                <tr><td colspan="7" class="labh-muted">No lab dispensing history found for this pharmacy.</td></tr>
+                <tr><td colspan="8" class="labh-muted">No lab dispensing history found for this pharmacy.</td></tr>
                 <% } else { requests.each { request -> %>
                 <tr>
                     <td>${ request.labSupplyRequestId ?: '' }</td>
@@ -70,8 +71,8 @@
                     <td>${ request.dateCreated ? ui.formatDatePretty(request.dateCreated) : '' }</td>
                     <td>
                         ${ request.approvedDate ? ui.formatDatePretty(request.approvedDate) : '' }
-                        ${ plainUserName(request.approvedBy) ? ' - ' + plainUserName(request.approvedBy) : '' }
                     </td>
+                    <td>${ plainUserName(request.approvedBy) }</td>
                     <td><span class="labh-status">${ request.requestStatus ?: '' }</span></td>
                     <td class="labh-lines">
                         <% request.lines?.each { line -> %>

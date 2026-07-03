@@ -106,17 +106,19 @@ public class MainStorePageController {
 
     private List<InventoryBalance> filterStockBalances(List<InventoryBalance> balances, String query) {
         String normalizedQuery = trimToEmpty(query).toLowerCase(Locale.ENGLISH);
-        if (normalizedQuery.isEmpty()) {
-            return balances;
-        }
-
         List<InventoryBalance> filtered = new ArrayList<InventoryBalance>();
         for (InventoryBalance balance : balances) {
-            if (matchesStockSearch(balance, normalizedQuery)) {
+            if (hasPositiveQuantity(balance) && (normalizedQuery.isEmpty() || matchesStockSearch(balance, normalizedQuery))) {
                 filtered.add(balance);
             }
         }
         return filtered;
+    }
+
+    private boolean hasPositiveQuantity(InventoryBalance balance) {
+        return balance != null
+                && balance.getQuantityOnHand() != null
+                && balance.getQuantityOnHand().compareTo(BigDecimal.ZERO) > 0;
     }
 
     private boolean matchesStockSearch(InventoryBalance balance, String normalizedQuery) {

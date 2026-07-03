@@ -16,6 +16,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.StockAdjustmentLine;
 import org.openmrs.module.rwandapharmacymanagement.model.StockTransaction;
 
 import java.math.BigDecimal;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 
@@ -31,6 +32,20 @@ public class HibernateInventoryDao implements InventoryDao {
     public List<InventoryBalance> getInventoryForPharmacy(Integer pharmacyLocationId) {
         org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(InventoryBalance.class);
         criteria.add(notVoided());
+        if (pharmacyLocationId != null) {
+            criteria.createAlias("pharmacyLocation", "pharmacyLocation");
+            criteria.add(Restrictions.eq("pharmacyLocation.pharmacyLocationId", pharmacyLocationId));
+        }
+        criteria.addOrder(Order.asc("expiryDate"));
+        return criteria.list();
+    }
+
+    @Override
+    public List<InventoryBalance> getAvailableInventoryForPharmacy(Integer pharmacyLocationId) {
+        org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(InventoryBalance.class);
+        criteria.add(notVoided());
+        criteria.add(Restrictions.gt("quantityOnHand", BigDecimal.ZERO));
+        criteria.add(Restrictions.or(Restrictions.isNull("expiryDate"), Restrictions.ge("expiryDate", startOfToday())));
         if (pharmacyLocationId != null) {
             criteria.createAlias("pharmacyLocation", "pharmacyLocation");
             criteria.add(Restrictions.eq("pharmacyLocation.pharmacyLocationId", pharmacyLocationId));
@@ -239,5 +254,14 @@ public class HibernateInventoryDao implements InventoryDao {
 
     private org.hibernate.criterion.Criterion notVoided() {
         return Restrictions.or(Restrictions.eq("voided", false), Restrictions.isNull("voided"));
+    }
+
+    private Date startOfToday() {
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        return calendar.getTime();
     }
 }

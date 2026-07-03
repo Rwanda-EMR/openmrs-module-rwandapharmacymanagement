@@ -15,6 +15,8 @@ public interface InventoryService extends OpenmrsService {
 
     List<InventoryBalance> getInventoryForPharmacy(Integer pharmacyLocationId);
 
+    List<InventoryBalance> getAvailableInventoryForPharmacy(Integer pharmacyLocationId);
+
     InventoryBalance getInventoryBalance(Integer itemId, Integer pharmacyLocationId, String batchNumber);
 
     List<DeliveryReceiptLine> getRecentDeliveryReceiptLines();

@@ -54,11 +54,11 @@
             <p><strong>Active dispensing pharmacy:</strong> ${ activePharmacy?.name ?: '' }</p>
             <table class="labq-table">
                 <thead>
-                <tr><th>Request ID</th><th>Requester</th><th>Submitted</th><th>Wait time</th><th>Lab unit</th><th>Lab services</th><th></th></tr>
+                <tr><th>Request ID</th><th>Requester</th><th>Submitted</th><th>Wait time</th><th>Lab unit</th><th>Lab services</th><th>Dispensed by</th><th></th></tr>
                 </thead>
                 <tbody>
                 <% if (!requests) { %>
-                <tr><td colspan="7" class="labq-muted">No pending lab requests.</td></tr>
+                <tr><td colspan="8" class="labq-muted">No pending lab requests.</td></tr>
                 <% } else { requests.each { request ->
                     def waitTime = waitTimeByRequestId[request.labSupplyRequestId] ?: '0 min'
                     def waitClass = waitTime.contains('h') || waitTime.startsWith('3') || waitTime.startsWith('4') || waitTime.startsWith('5') ? 'labq-wait labq-wait-high' : 'labq-wait'
@@ -74,6 +74,7 @@
                         <div>${ serviceName }</div>
                         <% } %>
                     </td>
+                    <td>${ plainUserName(request.approvedBy) }</td>
                     <td><a class="labq-btn" href="${ ui.pageLink('rwandapharmacymanagement', 'lab/queue', [requestId: request.labSupplyRequestId]) }">View</a></td>
                 </tr>
                 <% } } %>

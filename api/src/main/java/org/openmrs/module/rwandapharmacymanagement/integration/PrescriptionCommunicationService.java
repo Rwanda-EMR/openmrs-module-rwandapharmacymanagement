@@ -11,6 +11,7 @@ import org.openmrs.module.rwandapharmacymanagement.api.IntegrationLogService;
 import org.openmrs.module.rwandapharmacymanagement.integration.hie.HieMedicationApiClient;
 import org.openmrs.module.rwandapharmacymanagement.integration.hie.HieMedicationPayloadBuilder;
 import org.openmrs.module.rwandapharmacymanagement.integration.sms.SmsGatewayClient;
+import org.openmrs.module.rwandapharmacymanagement.integration.sms.SmsPhoneNumberUtil;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecord;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecordLine;
 import org.openmrs.module.rwandapharmacymanagement.model.IntegrationLog;
@@ -219,12 +220,19 @@ public class PrescriptionCommunicationService {
             return;
         }
         Patient patient = request == null ? null : request.getPatient();
-        String phoneNumber = hieMedicationPayloadBuilder.resolvePatientPhoneNumber(patient,
+        String sourcePhoneNumber = hieMedicationPayloadBuilder.resolvePatientPhoneNumber(patient,
                 administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_PHONE_PERSON_ATTRIBUTE_TYPE_UUID, ""));
-        if (isBlank(phoneNumber)) {
+        if (isBlank(sourcePhoneNumber)) {
             log(IntegrationType.SMS_NOTIFICATION, IntegrationStatus.SKIPPED,
                     smsPostUrl(),
                     "", "Patient phone number is missing");
+            return;
+        }
+        String phoneNumber = SmsPhoneNumberUtil.normalizeForSending(sourcePhoneNumber);
+        if (isBlank(phoneNumber)) {
+            log(IntegrationType.SMS_NOTIFICATION, IntegrationStatus.SKIPPED,
+                    smsPostUrl(),
+                    "", "Patient phone number is invalid for SMS: " + sourcePhoneNumber);
             return;
         }
         long start = System.currentTimeMillis();
