@@ -136,6 +136,7 @@ public class RequestPageController {
             Map<Integer, Map<String, Object>> byItem = new LinkedHashMap<Integer, Map<String, Object>>();
             for (InventoryBalance balance : inventoryService.getInventoryForPharmacy(pharmacy.getPharmacyLocationId())) {
                 if (balance == null || balance.getItem() == null || balance.getItem().getItemId() == null
+                        || !Boolean.TRUE.equals(balance.getItem().getVisibleToRequesters())
                         || balance.getQuantityOnHand() == null || balance.getQuantityOnHand().compareTo(BigDecimal.ZERO) <= 0) {
                     continue;
                 }

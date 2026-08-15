@@ -1,6 +1,7 @@
 package org.openmrs.module.rwandapharmacymanagement.model;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Date;
 
 public class InterPharmacyTransferLine extends BaseTrackedEntity {
@@ -13,6 +14,7 @@ public class InterPharmacyTransferLine extends BaseTrackedEntity {
     private BigDecimal quantity;
     private BigDecimal unitPrice;
     private BigDecimal totalAmount;
+    private List<InterPharmacyTransferLineBatch> batchAllocations;
 
     public Integer getInterPharmacyTransferLineId() {
         return interPharmacyTransferLineId;
@@ -76,5 +78,13 @@ public class InterPharmacyTransferLine extends BaseTrackedEntity {
 
     public void setTotalAmount(BigDecimal totalAmount) {
         this.totalAmount = totalAmount;
+    }
+
+    public List<InterPharmacyTransferLineBatch> getBatchAllocations() {
+        return batchAllocations;
+    }
+
+    public void setBatchAllocations(List<InterPharmacyTransferLineBatch> batchAllocations) {
+        this.batchAllocations = batchAllocations;
     }
 }

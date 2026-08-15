@@ -41,21 +41,6 @@ final class InventoryMovementReportSupport {
         ProductMasterLookup productMasterLookup = new ProductMasterLookup(pharmacyService.getAllProductMasterItems());
         Map<String, Row> rowsByKey = new LinkedHashMap<String, Row>();
 
-        for (StockTransaction tx : inventoryService.getStockTransactions(null, startDate, pharmacyLocationId)) {
-            if (!usable(tx)) {
-                continue;
-            }
-            ProductMasterItem productMasterItem = productMasterLookup.resolve(tx.getItem());
-            if (!matchesFilters(productMasterItem, materialType, program)) {
-                continue;
-            }
-            Row row = rowFor(rowsByKey, tx.getItem(), tx.getPharmacyLocation(), tx.getBatchNumber(), tx.getExpiryDate(),
-                    productMasterItem, detail);
-            row.openingQty = row.openingQty.add(quantity(tx));
-            row.closingQty = row.closingQty.add(quantity(tx));
-            rememberUnitCost(row, tx.getUnitPrice());
-        }
-
         for (StockTransaction tx : inventoryService.getStockTransactions(startDate, endExclusive, pharmacyLocationId)) {
             if (!usable(tx)) {
                 continue;
@@ -68,7 +53,21 @@ final class InventoryMovementReportSupport {
                     productMasterItem, detail);
             BigDecimal qty = quantity(tx);
             applyPeriodMovement(row, tx, qty);
-            row.closingQty = row.closingQty.add(qty);
+            row.periodNetQty = row.periodNetQty.add(qty);
+            rememberUnitCost(row, tx.getUnitPrice());
+        }
+
+        for (StockTransaction tx : inventoryService.getStockTransactions(null, endExclusive, null, pharmacyLocationId)) {
+            if (!usable(tx)) {
+                continue;
+            }
+            ProductMasterItem productMasterItem = productMasterLookup.resolve(tx.getItem());
+            if (!matchesFilters(productMasterItem, materialType, program)) {
+                continue;
+            }
+            Row row = rowFor(rowsByKey, tx.getItem(), tx.getPharmacyLocation(), tx.getBatchNumber(), tx.getExpiryDate(),
+                    productMasterItem, detail);
+            row.afterPeriodNetQty = row.afterPeriodNetQty.add(quantity(tx));
             rememberUnitCost(row, tx.getUnitPrice());
         }
 
@@ -88,6 +87,8 @@ final class InventoryMovementReportSupport {
 
         List<Row> rows = new ArrayList<Row>(rowsByKey.values());
         for (Row row : rows) {
+            row.closingQty = row.stockAtHand.subtract(row.afterPeriodNetQty);
+            row.openingQty = row.closingQty.subtract(row.periodNetQty);
             row.closingValue = value(row.closingQty, row.unitCost);
             row.stockAtHandValue = value(row.stockAtHand, row.unitCost);
         }
@@ -162,7 +163,8 @@ final class InventoryMovementReportSupport {
             }
         } else if (type == StockTransactionType.DISPENSE || type == StockTransactionType.DISPENSE_WITHOUT_ORDER) {
             row.dispensedQty = row.dispensedQty.add(qty.abs());
-        } else if (type == StockTransactionType.ADJUSTMENT || type == StockTransactionType.RECONCILIATION) {
+        } else if (type == StockTransactionType.ADJUSTMENT || type == StockTransactionType.RECONCILIATION
+                || type == StockTransactionType.WRITE_OFF) {
             if (qty.compareTo(BigDecimal.ZERO) >= 0) {
                 row.adjustmentInQty = row.adjustmentInQty.add(qty);
             } else {
@@ -210,7 +212,8 @@ final class InventoryMovementReportSupport {
     }
 
     private static BigDecimal quantity(StockTransaction tx) {
-        return tx == null || tx.getQuantity() == null ? BigDecimal.ZERO : tx.getQuantity();
+        return tx == null || tx.getQuantity() == null || tx.getTransactionType() == StockTransactionType.DISPOSAL
+                ? BigDecimal.ZERO : tx.getQuantity();
     }
 
     private static void rememberUnitCost(Row row, BigDecimal unitCost) {
@@ -259,6 +262,8 @@ final class InventoryMovementReportSupport {
         private BigDecimal adjustmentOutQty = BigDecimal.ZERO;
         private BigDecimal closingQty = BigDecimal.ZERO;
         private BigDecimal stockAtHand = BigDecimal.ZERO;
+        private BigDecimal periodNetQty = BigDecimal.ZERO;
+        private BigDecimal afterPeriodNetQty = BigDecimal.ZERO;
         private BigDecimal unitCost;
         private BigDecimal closingValue = BigDecimal.ZERO;
         private BigDecimal stockAtHandValue = BigDecimal.ZERO;

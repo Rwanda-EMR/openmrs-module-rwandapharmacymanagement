@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="DepartmentBulkRequest" table="rpm_department_bulk_request">
+        <id name="departmentBulkRequestId" type="int" column="department_bulk_request_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <many-to-one name="departmentLocation" class="org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation" column="department_location_id"/>
+        <many-to-one name="supplyingPharmacyLocation" class="org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation" column="supplying_pharmacy_location_id"/>
+        <property name="requestStatus" column="request_status" type="string"/>
+        <property name="workflowMode" column="workflow_mode" type="string"/>
+        <property name="justification" column="justification" type="string"/>
+        <property name="correctionNote" column="correction_note" type="string"/>
+        <many-to-one name="financeApprovedBy" class="org.openmrs.User" column="finance_approved_by"/>
+        <property name="financeApprovedDate" column="finance_approved_date"/>
+        <many-to-one name="dispensedBy" class="org.openmrs.User" column="dispensed_by"/>
+        <property name="dispensedDate" column="dispensed_date"/>
+        <bag name="lines" cascade="all-delete-orphan" inverse="true" lazy="false">
+            <key column="department_bulk_request_id"/>
+            <one-to-many class="org.openmrs.module.rwandapharmacymanagement.model.DepartmentBulkRequestLine"/>
+        </bag>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+        <property name="uuid" column="uuid" type="string"/>
+    </class>
+</hibernate-mapping>

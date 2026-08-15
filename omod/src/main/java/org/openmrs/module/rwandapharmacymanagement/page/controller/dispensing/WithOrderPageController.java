@@ -163,7 +163,7 @@ public class WithOrderPageController {
         }
         if (markUnavailableLineId != null) {
             dispensingService.markRequestLineUnavailable(requestId, markUnavailableLineId,
-                    "Drug not available in all pharmacies");
+                    "Item not available in all pharmacies");
             Map<String, Object> redirectParams = new LinkedHashMap<String, Object>();
             redirectParams.put("requestId", requestId);
             if (Boolean.TRUE.equals(viewOnly)) {
@@ -427,6 +427,10 @@ public class WithOrderPageController {
         List<InventoryBalance> balances = inventoryService.getInventoryForPharmacy(activePharmacy.getPharmacyLocationId());
         for (PatientDispensingRequestLine line : request.getLines()) {
             if (line == null || line.getPatientDispensingRequestLineId() == null || line.getItem() == null) {
+                continue;
+            }
+            if (Boolean.FALSE.equals(line.getItem().getVisibleToRequesters())) {
+                optionsByLineId.put(line.getPatientDispensingRequestLineId(), Collections.<InventoryBalance>emptyList());
                 continue;
             }
             List<InventoryBalance> matchingBalances = new ArrayList<InventoryBalance>();

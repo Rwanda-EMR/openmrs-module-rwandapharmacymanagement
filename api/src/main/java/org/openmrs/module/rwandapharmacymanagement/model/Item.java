@@ -18,6 +18,7 @@ public class Item extends BaseTrackedEntity {
     private Integer lowStockThreshold;
     private Boolean requiresBatch = Boolean.FALSE;
     private Boolean requiresExpiry = Boolean.FALSE;
+    private Boolean visibleToRequesters = Boolean.TRUE;
 
     public Integer getItemId() {
         return itemId;
@@ -121,5 +122,13 @@ public class Item extends BaseTrackedEntity {
 
     public void setRequiresExpiry(Boolean requiresExpiry) {
         this.requiresExpiry = requiresExpiry;
+    }
+
+    public Boolean getVisibleToRequesters() {
+        return visibleToRequesters;
+    }
+
+    public void setVisibleToRequesters(Boolean visibleToRequesters) {
+        this.visibleToRequesters = visibleToRequesters;
     }
 }

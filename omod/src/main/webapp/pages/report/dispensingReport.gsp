@@ -54,13 +54,14 @@
         <th>Quantity</th>
         <th>Unit price</th>
         <th>Total</th>
+        <th>Requested by / where</th>
         <th>Prescription info</th>
-        <th>Dispensed by</th>
+        <th>Served by / where</th>
     </tr>
     </thead>
     <tbody>
     <% if (!rows) { %>
-    <tr><td colspan="11">No dispensing records found for the selected filters.</td></tr>
+    <tr><td colspan="12">No dispensing records found for the selected filters.</td></tr>
     <% } else { rows.each { row -> %>
     <tr>
         <td>${ row.dispenseDate ?: '' }</td>
@@ -79,6 +80,11 @@
         <td>${ row.sellingPrice ?: '' }</td>
         <td>${ row.lineTotal ?: '' }</td>
         <td>
+            ${ row.requestedBy ?: '' }<br/>
+            <span style="color:#666;">${ row.requestedWhere ?: '' }</span><br/>
+            <span style="color:#666;">Target: ${ row.targetPharmacy ?: '' }</span>
+        </td>
+        <td>
             <% if (row.dispensedWithoutOrder) { %>
             Dispensed without order
             <% } else { %>
@@ -88,7 +94,10 @@
             Status: ${ row.requestStatus ?: '' }
             <% } %>
         </td>
-        <td>${ row.dispensedBy ?: '' }</td>
+        <td>
+            ${ row.servedBy ?: row.dispensedBy ?: '' }<br/>
+            <span style="color:#666;">${ row.servedWhere ?: row.pharmacyName ?: '' }</span>
+        </td>
     </tr>
     <% } } %>
     </tbody>

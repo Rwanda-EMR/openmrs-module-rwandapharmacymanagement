@@ -122,6 +122,8 @@ public class EnterPageController {
                        @RequestParam(value = "startDate", required = false) String[] startDates,
                        @RequestParam(value = "quantity", required = false) BigDecimal[] quantities,
                        @RequestParam(value = "instructions", required = false) String[] instructions,
+                       @RequestParam(value = "billable", required = false) Boolean[] billables,
+                       @RequestParam(value = "billingExclusionReason", required = false) String[] billingExclusionReasons,
                        UiUtils ui) {
         Integer resolvedPatientBillId = firstNonNull(patientBillId, billId, patientBillIdSnakeCase);
         Patient patient = resolvePatient(patientIdOrUuid);
@@ -144,7 +146,7 @@ public class EnterPageController {
         String normalizedAction = action == null ? "" : action.trim();
         if ("updateLine".equalsIgnoreCase(normalizedAction)) {
             List<PrescriptionLineCommand> lines = buildCommands(productMasterItemIds, doses, routes, frequencies, durations,
-                    durationUnits, startDates, quantities, instructions);
+                    durationUnits, startDates, quantities, instructions, billables, billingExclusionReasons);
             prescriptionService.updatePrescriptionLine(requestId, requestLineId, orderingProvider, lines);
             return redirectToPrescriptionPage(ui, patient, historyPage);
         }
@@ -153,7 +155,7 @@ public class EnterPageController {
             return redirectToPrescriptionPage(ui, patient, historyPage);
         }
         List<PrescriptionLineCommand> lines = buildCommands(productMasterItemIds, doses, routes, frequencies, durations,
-                durationUnits, startDates, quantities, instructions);
+                durationUnits, startDates, quantities, instructions, billables, billingExclusionReasons);
         PatientDispensingRequest request = prescriptionService.createPrescription(patient, activeVisit, orderingProvider,
                 encounterLocation, lines, resolvedPatientBillId);
         Map<String, Object> redirectParams = new LinkedHashMap<String, Object>();
@@ -231,7 +233,9 @@ public class EnterPageController {
                                                         String[] durationUnits,
                                                         String[] startDates,
                                                         BigDecimal[] quantities,
-                                                        String[] instructions) {
+                                                        String[] instructions,
+                                                        Boolean[] billables,
+                                                        String[] billingExclusionReasons) {
         List<PrescriptionLineCommand> commands = new ArrayList<PrescriptionLineCommand>();
         if (productMasterItemIds == null) {
             return commands;
@@ -251,6 +255,8 @@ public class EnterPageController {
             command.setStartDate(parseDate(valueAt(startDates, i)));
             command.setQuantity(valueAt(quantities, i));
             command.setInstructions(valueAt(instructions, i));
+            command.setBillable(valueAt(billables, i));
+            command.setBillingExclusionReason(valueAt(billingExclusionReasons, i));
             commands.add(command);
         }
         return commands;
@@ -304,7 +310,8 @@ public class EnterPageController {
                 continue;
             }
             for (InventoryBalance balance : inventoryService.getAvailableInventoryForPharmacy(pharmacyLocation.getPharmacyLocationId())) {
-                if (balance == null || balance.getItem() == null || balance.getQuantityOnHand() == null) {
+                if (balance == null || balance.getItem() == null || balance.getQuantityOnHand() == null
+                        || !Boolean.TRUE.equals(balance.getItem().getVisibleToRequesters())) {
                     continue;
                 }
                 ProductMasterItem matched = matchStockedProductMasterItem(balance.getItem(), byCode, byDrugId);
@@ -492,6 +499,7 @@ public class EnterPageController {
             return entries;
         }
         Map<String, BigDecimal> dispensedByRequestAndItem = buildDispensedQuantityMap(requests, dispensingService);
+        Map<String, List<Map<String, Object>>> dispensedLinesByRequestAndItem = buildDispensedLineDetailsMap(requests, dispensingService);
         for (PatientDispensingRequest request : requests) {
             if (request == null) {
                 continue;
@@ -520,7 +528,10 @@ public class EnterPageController {
                     lineEntry.put("itemName", line.getItem() == null ? "" : line.getItem().getName());
                     lineEntry.put("requestedQuantity", line.getRequestedQuantity());
                     lineEntry.put("dispensedQuantity", dispensedByRequestAndItem.get(historyKey(request, line)));
+                    lineEntry.put("dispensedLines", dispensedLinesByRequestAndItem.get(historyKey(request, line)));
                     lineEntry.put("lineStatus", statusLabel);
+                    lineEntry.put("billable", !Boolean.FALSE.equals(line.getBillable()));
+                    lineEntry.put("billingExclusionReason", line.getBillingExclusionReason());
                     lineEntry.put("rawLineStatus", line.getLineStatus());
                     lineEntry.put("provider", entry.get("orderingProvider"));
                     lineEntry.put("editable", editable);
@@ -545,6 +556,47 @@ public class EnterPageController {
             entries.add(entry);
         }
         return entries;
+    }
+
+    private Map<String, List<Map<String, Object>>> buildDispensedLineDetailsMap(List<PatientDispensingRequest> requests,
+                                                                                DispensingService dispensingService) {
+        List<Integer> requestIds = new ArrayList<Integer>();
+        for (PatientDispensingRequest request : requests) {
+            if (request != null && request.getPatientDispensingRequestId() != null) {
+                requestIds.add(request.getPatientDispensingRequestId());
+            }
+        }
+        Map<String, List<Map<String, Object>>> details = new LinkedHashMap<String, List<Map<String, Object>>>();
+        if (requestIds.isEmpty()) {
+            return details;
+        }
+        List<DispenseRecord> dispenseRecords = dispensingService.getDispenseRecordsForRequests(requestIds);
+        for (DispenseRecord record : dispenseRecords) {
+            if (record == null || record.getPatientDispensingRequest() == null || record.getLines() == null) {
+                continue;
+            }
+            Integer requestId = record.getPatientDispensingRequest().getPatientDispensingRequestId();
+            for (DispenseRecordLine line : record.getLines()) {
+                if (line == null || line.getItem() == null || line.getItem().getItemId() == null) {
+                    continue;
+                }
+                String key = historyKey(requestId, line.getItem().getItemId());
+                if (key == null) {
+                    continue;
+                }
+                List<Map<String, Object>> rows = details.containsKey(key) ? details.get(key) : new ArrayList<Map<String, Object>>();
+                Map<String, Object> row = new LinkedHashMap<String, Object>();
+                row.put("dateCreated", record.getDateCreated());
+                row.put("pharmacy", record.getDispensingPharmacyLocation() == null ? "" : record.getDispensingPharmacyLocation().getName());
+                row.put("dispensedBy", record.getDispensedBy() == null ? "" : record.getDispensedBy().getName());
+                row.put("batchNumber", line.getBatchNumber());
+                row.put("expiryDate", line.getExpiryDate());
+                row.put("quantityDispensed", line.getQuantityDispensed());
+                rows.add(row);
+                details.put(key, rows);
+            }
+        }
+        return details;
     }
 
     private Map<String, BigDecimal> buildDispensedQuantityMap(List<PatientDispensingRequest> requests, DispensingService dispensingService) {

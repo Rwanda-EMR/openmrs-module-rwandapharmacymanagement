@@ -4,10 +4,12 @@ import org.openmrs.Patient;
 import org.openmrs.PatientIdentifier;
 import org.openmrs.PersonName;
 import org.openmrs.Provider;
+import org.openmrs.User;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecord;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecordLine;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
+import org.openmrs.module.rwandapharmacymanagement.util.UserNameUtils;
 
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
@@ -89,7 +91,9 @@ public final class DispensingReportSupport {
         row.patientIdentifier = patientIdentifier(patient);
         row.patientId = patient == null ? null : patient.getPatientId();
         row.pharmacyName = pharmacyName(dispenseRecord.getDispensingPharmacyLocation());
-        row.dispensedBy = providerName(dispenseRecord.getDispensedBy());
+        row.servedWhere = pharmacyName(dispenseRecord.getDispensingPharmacyLocation());
+        row.dispensedBy = userName(dispenseRecord.getCreator());
+        row.servedBy = firstNonBlank(providerName(dispenseRecord.getDispensedBy()), userName(dispenseRecord.getCreator()));
         row.dispensedWithoutOrder = Boolean.TRUE.equals(dispenseRecord.getDispensedWithoutOrder());
         row.itemName = line.getItem() == null ? "" : safe(line.getItem().getName());
         row.itemCode = line.getItem() == null ? "" : safe(line.getItem().getCode());
@@ -102,6 +106,10 @@ public final class DispensingReportSupport {
         row.prescriptionReference = request == null ? "" : safe(request.getMedicalActReference());
         row.patientBillId = request == null ? null : request.getPatientBillId();
         row.requestStatus = request == null || request.getRequestStatus() == null ? "" : request.getRequestStatus().name();
+        row.requestedBy = request == null ? "" : firstNonBlank(providerName(request.getOrderingProvider()), userName(request.getCreator()));
+        row.requestedWhere = request == null || request.getRequestingLocation() == null ? ""
+                : safe(request.getRequestingLocation().getName());
+        row.targetPharmacy = request == null ? "" : pharmacyName(request.getTargetPharmacyLocation());
         return row;
     }
 
@@ -119,6 +127,10 @@ public final class DispensingReportSupport {
         }
         PatientIdentifier identifier = patient.getPatientIdentifier();
         return identifier == null ? "" : safe(identifier.getIdentifier());
+    }
+
+    private static String userName(User user) {
+        return UserNameUtils.plainName(user);
     }
 
     private static String providerName(Provider provider) {
@@ -141,6 +153,10 @@ public final class DispensingReportSupport {
         return value == null ? "" : value;
     }
 
+    private static String firstNonBlank(String first, String second) {
+        return first != null && !first.trim().isEmpty() ? first : safe(second);
+    }
+
     public static class Row {
         public Integer dispenseRecordId;
         public String dispenseDate;
@@ -149,6 +165,11 @@ public final class DispensingReportSupport {
         public String patientIdentifier;
         public String pharmacyName;
         public String dispensedBy;
+        public String servedBy;
+        public String servedWhere;
+        public String requestedBy;
+        public String requestedWhere;
+        public String targetPharmacy;
         public Boolean dispensedWithoutOrder;
         public String itemName;
         public String itemCode;

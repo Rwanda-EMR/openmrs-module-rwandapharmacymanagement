@@ -32,7 +32,11 @@ public interface PharmacyService extends OpenmrsService {
 
     List<Item> searchItems(String searchTerm, Integer limit);
 
+    List<Item> searchItemsForVisibilityControl(String searchTerm, String visibilityFilter, Integer limit);
+
     Item saveItem(Item item);
+
+    Item setItemVisibleToRequesters(Integer itemId, Boolean visibleToRequesters);
 
     ItemProductMasterMapping getItemProductMasterMapping(Integer productMasterItemId);
 

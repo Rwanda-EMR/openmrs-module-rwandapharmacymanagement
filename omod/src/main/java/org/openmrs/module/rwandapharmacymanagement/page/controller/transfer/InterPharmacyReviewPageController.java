@@ -51,6 +51,8 @@ public class InterPharmacyReviewPageController {
                        @RequestParam(value = "quantity", required = false) BigDecimal[] quantities,
                        @RequestParam(value = "batchNumber", required = false) String[] batchNumbers,
                        @RequestParam(value = "expiryDate", required = false) String[] expiryDates,
+                       @RequestParam(value = "transferLineId", required = false) Integer transferLineId,
+                       @RequestParam(value = "lineVoidReason", required = false) String lineVoidReason,
                        @RequestParam(value = "rejectionReason", required = false) String rejectionReason,
                        HttpSession session,
                        UiUtils ui) throws ParseException {
@@ -59,7 +61,9 @@ public class InterPharmacyReviewPageController {
         if (!isSourcePharmacy(transfer, activePharmacy)) {
             throw new IllegalArgumentException("Only the supplying pharmacy can transfer or reject this request");
         }
-        if ("reject".equalsIgnoreCase(action)) {
+        if ("removeLine".equalsIgnoreCase(action)) {
+            inventoryService.removeTransferLine(transferId, transferLineId, lineVoidReason);
+        } else if ("reject".equalsIgnoreCase(action)) {
             inventoryService.rejectTransfer(transferId, rejectionReason);
         } else if ("transfer".equalsIgnoreCase(action) || "serve".equalsIgnoreCase(action) || "approve".equalsIgnoreCase(action)) {
             inventoryService.serveTransfer(transferId, quantities, batchNumbers, parseDates(expiryDates));

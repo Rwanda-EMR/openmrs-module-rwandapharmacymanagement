@@ -158,7 +158,13 @@ public class HibernateDispensingDao implements DispensingDao {
             sql.append("and (lower(coalesce(pi.identifier, '')) like :search ")
                     .append("or lower(concat_ws(' ', coalesce(pn.given_name, ''), coalesce(pn.middle_name, ''), ")
                     .append("coalesce(pn.family_name, ''), coalesce(pn.family_name2, ''))) like :search ")
-                    .append("or cast(r.patient_id as char) like :search) ");
+                    .append("or cast(r.patient_id as char) like :search ")
+                    .append("or cast(r.patient_dispensing_request_id as char) like :search ")
+                    .append("or lower(coalesce(r.hie_prescription_group_id, '')) like :search ");
+            if (extractSmsRequestId(search) != null) {
+                sql.append("or r.patient_dispensing_request_id = :smsRequestId ");
+            }
+            sql.append(") ");
         }
         String normalizedTab = normalizeFilter(queueTab);
         if ("ready".equals(normalizedTab)) {
@@ -193,6 +199,10 @@ public class HibernateDispensingDao implements DispensingDao {
         }
         if (hasText(search)) {
             parameters.put("search", "%" + search.trim().toLowerCase() + "%");
+            Integer smsRequestId = extractSmsRequestId(search);
+            if (smsRequestId != null) {
+                parameters.put("smsRequestId", smsRequestId);
+            }
         }
         if (hasText(requestType) && !"all".equals(normalizeFilter(requestType))) {
             parameters.put("requestType", requestType.trim().toUpperCase());
@@ -206,6 +216,29 @@ public class HibernateDispensingDao implements DispensingDao {
 
     private boolean hasText(String value) {
         return value != null && value.trim().length() > 0;
+    }
+
+    private Integer extractSmsRequestId(String search) {
+        if (!hasText(search)) {
+            return null;
+        }
+        String value = search.trim();
+        int lastDash = value.lastIndexOf('-');
+        String candidate = lastDash >= 0 ? value.substring(lastDash + 1) : value;
+        if (candidate.length() == 0) {
+            return null;
+        }
+        for (int i = 0; i < candidate.length(); i++) {
+            if (!Character.isDigit(candidate.charAt(i))) {
+                return null;
+            }
+        }
+        try {
+            return Integer.valueOf(candidate);
+        }
+        catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private org.hibernate.Criteria pendingRequestCriteria(Integer pharmacyLocationId) {
@@ -275,6 +308,42 @@ public class HibernateDispensingDao implements DispensingDao {
                 .createQuery("select count(r.patientDispensingRequestId) from PatientDispensingRequest r where r.voided = false and r.patient = :patient and (r.requestType is null or r.requestType = :requestType)")
                 .setParameter("patient", patient)
                 .setParameter("requestType", RequestType.PRESCRIPTION)
+                .uniqueResult();
+        return count instanceof Number ? ((Number) count).longValue() : 0L;
+    }
+
+    @Override
+    public List<PatientDispensingRequest> getPatientConsumableHistory(Integer patientId, int firstResult, int maxResults) {
+        if (patientId == null) {
+            return java.util.Collections.emptyList();
+        }
+        org.openmrs.Patient patient = Context.getPatientService().getPatient(patientId);
+        if (patient == null) {
+            return java.util.Collections.emptyList();
+        }
+        return sessionFactory.getCurrentSession().createCriteria(PatientDispensingRequest.class)
+                .add(Restrictions.eq("voided", false))
+                .add(Restrictions.eq("patient", patient))
+                .add(Restrictions.eq("requestType", RequestType.CONSUMABLE))
+                .addOrder(Order.desc("patientDispensingRequestId"))
+                .setFirstResult(Math.max(0, firstResult))
+                .setMaxResults(Math.max(1, maxResults))
+                .list();
+    }
+
+    @Override
+    public long countPatientConsumableHistory(Integer patientId) {
+        if (patientId == null) {
+            return 0L;
+        }
+        org.openmrs.Patient patient = Context.getPatientService().getPatient(patientId);
+        if (patient == null) {
+            return 0L;
+        }
+        Object count = sessionFactory.getCurrentSession()
+                .createQuery("select count(r.patientDispensingRequestId) from PatientDispensingRequest r where r.voided = false and r.patient = :patient and r.requestType = :requestType")
+                .setParameter("patient", patient)
+                .setParameter("requestType", RequestType.CONSUMABLE)
                 .uniqueResult();
         return count instanceof Number ? ((Number) count).longValue() : 0L;
     }
@@ -604,7 +673,12 @@ public class HibernateDispensingDao implements DispensingDao {
                 .setParameter("patientBillId", patientBillId)
                 .uniqueResult();
         BigDecimal paidAmount = bigDecimalValue(paidAmountResult);
-        return paidAmount != null && paidAmount.compareTo(billAmount) >= 0;
+        if (paidAmount == null) {
+            return Boolean.FALSE;
+        }
+        BigDecimal remainder = billAmount.subtract(paidAmount);
+        return paidAmount.compareTo(billAmount) >= 0
+                || (remainder.compareTo(BigDecimal.ZERO) > 0 && remainder.compareTo(BigDecimal.ONE) < 0);
     }
 
     private Boolean isPatientBillPaidByStatus(Integer patientBillId, String billIdColumn) {
@@ -726,6 +800,41 @@ public class HibernateDispensingDao implements DispensingDao {
         }
         criteria.addOrder(Order.desc("paymentExceptionApprovedDate"));
         criteria.addOrder(Order.desc("patientDispensingRequestId"));
+        return criteria.list();
+    }
+
+    @Override
+    public List<PatientDispensingRequestLine> getNotBillableRequestLines(Date fromInclusive,
+                                                                         Date toExclusive,
+                                                                         Integer pharmacyLocationId,
+                                                                         RequestType requestType) {
+        org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(PatientDispensingRequestLine.class);
+        criteria.add(Restrictions.eq("voided", false));
+        criteria.add(Restrictions.eq("billable", false));
+        criteria.createAlias("patientDispensingRequest", "request");
+        criteria.add(Restrictions.eq("request.voided", false));
+        if (fromInclusive != null) {
+            criteria.add(Restrictions.ge("request.dateCreated", fromInclusive));
+        }
+        if (toExclusive != null) {
+            criteria.add(Restrictions.lt("request.dateCreated", toExclusive));
+        }
+        if (requestType != null) {
+            criteria.add(Restrictions.eq("request.requestType", requestType));
+        }
+        if (pharmacyLocationId != null) {
+            criteria.createAlias("request.targetPharmacyLocation", "targetPharmacyLocation",
+                    org.hibernate.sql.JoinType.LEFT_OUTER_JOIN);
+            criteria.createAlias("routedPharmacyLocation", "routedPharmacyLocation",
+                    org.hibernate.sql.JoinType.LEFT_OUTER_JOIN);
+            Disjunction pharmacyMatch = Restrictions.disjunction();
+            pharmacyMatch.add(Restrictions.eq("targetPharmacyLocation.pharmacyLocationId", pharmacyLocationId));
+            pharmacyMatch.add(Restrictions.eq("routedPharmacyLocation.pharmacyLocationId", pharmacyLocationId));
+            pharmacyMatch.add(Restrictions.isNull("request.targetPharmacyLocation"));
+            criteria.add(pharmacyMatch);
+        }
+        criteria.addOrder(Order.desc("request.dateCreated"));
+        criteria.addOrder(Order.desc("patientDispensingRequestLineId"));
         return criteria.list();
     }
 

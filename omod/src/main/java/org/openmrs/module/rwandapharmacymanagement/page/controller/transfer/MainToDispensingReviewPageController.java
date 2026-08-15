@@ -4,6 +4,7 @@ import org.openmrs.api.context.Context;
 import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
+import org.openmrs.module.rwandapharmacymanagement.api.dto.TransferBatchAllocationCommand;
 import org.openmrs.module.rwandapharmacymanagement.model.InterPharmacyTransfer;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
@@ -39,10 +40,15 @@ public class MainToDispensingReviewPageController {
             return;
         }
         List<InventoryBalance> mainStock = inventoryService.getInventoryForPharmacy(mainStore.getPharmacyLocationId());
+        List<InventoryBalance> requestingStock = transfer.getDestinationPharmacyLocation() == null
+                || transfer.getDestinationPharmacyLocation().getPharmacyLocationId() == null
+                ? new ArrayList<InventoryBalance>()
+                : inventoryService.getInventoryForPharmacy(transfer.getDestinationPharmacyLocation().getPharmacyLocationId());
         model.addAttribute("transfer", transfer);
         model.addAttribute("mainStore", mainStore);
         model.addAttribute("mainStockByItem", buildStockByItem(mainStock));
         model.addAttribute("mainStockSummary", buildStockSummary(mainStock));
+        model.addAttribute("requestingStockSummary", buildStockSummary(requestingStock));
         model.addAttribute("canApproveMainToDispensingTransfer",
                 Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER));
         model.addAttribute("canTransferMainToDispensing",
@@ -55,9 +61,16 @@ public class MainToDispensingReviewPageController {
                        @RequestParam(value = "quantity", required = false) BigDecimal[] quantities,
                        @RequestParam(value = "batchNumber", required = false) String[] batchNumbers,
                        @RequestParam(value = "expiryDate", required = false) String[] expiryDates,
+                       @RequestParam(value = "allocationLineId", required = false) Integer[] allocationLineIds,
+                       @RequestParam(value = "allocationBatchNumber", required = false) String[] allocationBatchNumbers,
+                       @RequestParam(value = "allocationQuantity", required = false) BigDecimal[] allocationQuantities,
+                       @RequestParam(value = "transferLineId", required = false) Integer transferLineId,
+                       @RequestParam(value = "lineVoidReason", required = false) String lineVoidReason,
                        @RequestParam(value = "rejectionReason", required = false) String rejectionReason,
                        UiUtils ui) throws ParseException {
-        if ("reject".equalsIgnoreCase(action)) {
+        if ("removeLine".equalsIgnoreCase(action)) {
+            inventoryService.removeTransferLine(transferId, transferLineId, lineVoidReason);
+        } else if ("reject".equalsIgnoreCase(action)) {
             Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER);
             inventoryService.rejectTransfer(transferId, rejectionReason);
         } else if ("approve".equalsIgnoreCase(action)) {
@@ -65,7 +78,8 @@ public class MainToDispensingReviewPageController {
             inventoryService.approveTransfer(transferId);
         } else if ("transfer".equalsIgnoreCase(action) || "serve".equalsIgnoreCase(action)) {
             Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK);
-            inventoryService.serveTransfer(transferId, quantities, batchNumbers, parseDates(expiryDates));
+            inventoryService.serveTransfer(transferId, quantities, batchNumbers, parseDates(expiryDates),
+                    parseAllocations(allocationLineIds, allocationBatchNumbers, allocationQuantities));
         }
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "transfer/mainToDispensingReview",
                 java.util.Collections.<String, Object>singletonMap("transferId", transferId));
@@ -124,5 +138,27 @@ public class MainToDispensingReviewPageController {
             }
         }
         return parsedDates;
+    }
+
+    private List<TransferBatchAllocationCommand> parseAllocations(Integer[] allocationLineIds,
+                                                                  String[] allocationBatchNumbers,
+                                                                  BigDecimal[] allocationQuantities) {
+        List<TransferBatchAllocationCommand> allocations = new ArrayList<TransferBatchAllocationCommand>();
+        if (allocationLineIds == null || allocationBatchNumbers == null || allocationQuantities == null) {
+            return allocations;
+        }
+        int count = Math.min(allocationLineIds.length, Math.min(allocationBatchNumbers.length, allocationQuantities.length));
+        for (int i = 0; i < count; i++) {
+            if (allocationLineIds[i] == null || allocationQuantities[i] == null
+                    || allocationQuantities[i].compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            TransferBatchAllocationCommand allocation = new TransferBatchAllocationCommand();
+            allocation.setTransferLineId(allocationLineIds[i]);
+            allocation.setBatchNumber(allocationBatchNumbers[i]);
+            allocation.setQuantity(allocationQuantities[i]);
+            allocations.add(allocation);
+        }
+        return allocations;
     }
 }

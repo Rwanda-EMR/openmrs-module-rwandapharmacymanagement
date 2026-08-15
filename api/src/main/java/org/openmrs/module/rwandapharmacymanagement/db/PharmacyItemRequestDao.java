@@ -5,6 +5,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.PharmacyItemRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyItemRequestLine;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 
+import java.util.Date;
 import java.util.List;
 
 public interface PharmacyItemRequestDao {
@@ -16,6 +17,9 @@ public interface PharmacyItemRequestDao {
     List<PharmacyItemRequest> getRequestsByCreator(User creator, int offset, int limit);
 
     long countRequestsByCreator(User creator);
+
+    List<PharmacyItemRequest> getRequestsForPharmacy(PharmacyLocation pharmacyLocation, Date fromInclusive,
+                                                     Date toExclusive, String status, String itemName, int maxResults);
 
     PharmacyItemRequest getRequest(Integer requestId);
 

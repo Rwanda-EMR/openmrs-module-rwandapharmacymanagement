@@ -7,6 +7,7 @@
 	    def canManageSettings = context.hasPrivilege("Task: rwandapharmacymanagement.manageSettings")
 	    def canTransferStock = context.hasPrivilege("Task: rwandapharmacymanagement.transferStock")
 	    def canApproveMainToDispensingTransfer = context.hasPrivilege("Task: rwandapharmacymanagement.approveMainToDispensingTransfer")
+	    def canAdjustStock = context.hasPrivilege("Task: rwandapharmacymanagement.adjustStock")
 %>
 <h2>${ ui.message("rwandapharmacymanagement.dashboard.title") }</h2>
 <div class="home-section-title">Quick Actions</div>
@@ -18,6 +19,18 @@
     <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "pharmacyorder/request") }">
         <span class="tile-icon">↘</span>
         <span class="tile-label">Pharmacy Item Request</span>
+    </a>
+    <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "department/request") }">
+        <span class="tile-icon">▥</span>
+        <span class="tile-label">Department Bulk Request</span>
+    </a>
+    <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "department/finance") }">
+        <span class="tile-icon">✓</span>
+        <span class="tile-label">Department Finance Approval <% if ((queueCounts['department/finance'] ?: 0) > 0) { %><span class="tile-count-badge">${ queueCounts['department/finance'] }</span><% } %></span>
+    </a>
+    <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "department/dispense") }">
+        <span class="tile-icon">⇢</span>
+        <span class="tile-label">Department Pharmacy Dispense <% if ((queueCounts['department/dispense'] ?: 0) > 0) { %><span class="tile-count-badge">${ queueCounts['department/dispense'] }</span><% } %></span>
     </a>
     <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "pharmacyorder/queue") }">
         <span class="tile-icon">☷</span>
@@ -55,6 +68,12 @@
         <span class="tile-icon">!</span>
         <span class="tile-label">Alerts Dashboard <% if ((queueCounts['alerts/dashboard'] ?: 0) > 0) { %><span class="tile-count-badge">${ queueCounts['alerts/dashboard'] }</span><% } %></span>
     </a>
+    <% if (canAdjustStock) { %>
+    <a class="tile tile-admin" href="${ ui.pageLink("rwandapharmacymanagement", "admin/expiryControl") }">
+        <span class="tile-icon">⌁</span>
+        <span class="tile-label">Batch Expiry Control</span>
+    </a>
+    <% } %>
     <% if (canManageSettings) { %>
     <a class="tile tile-admin" href="${ ui.pageLink("rwandapharmacymanagement", "admin/missingBillingMappings") }">
         <span class="tile-icon">?</span>
@@ -68,5 +87,13 @@
     <a class="tile tile-dispense" href="${ ui.pageLink("rwandapharmacymanagement", "report/paymentExceptionReport") }">
         <span class="tile-icon">⚑</span>
         <span class="tile-label">Payment Exception Report</span>
+    </a>
+    <a class="tile tile-dispense" href="${ ui.pageLink("rwandapharmacymanagement", "report/notBillableItemsReport") }">
+        <span class="tile-icon">○</span>
+        <span class="tile-label">Not Billable Items Report</span>
+    </a>
+    <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "report/writeOffDisposalReport") }">
+        <span class="tile-icon">⌧</span>
+        <span class="tile-label">Write-off and Disposal Report</span>
     </a>
 </div>

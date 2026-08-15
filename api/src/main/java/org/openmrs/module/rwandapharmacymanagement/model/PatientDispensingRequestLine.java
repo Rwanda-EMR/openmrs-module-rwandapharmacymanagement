@@ -13,8 +13,11 @@ public class PatientDispensingRequestLine extends BaseTrackedEntity {
     private Item item;
     private BigDecimal requestedQuantity;
     private String unitOfMeasure;
+    private Boolean billable = Boolean.TRUE;
+    private String billingExclusionReason;
     private PharmacyLocation routedPharmacyLocation;
     private RequestStatus lineStatus;
+    private String hieMedicationRequestId;
 
     public Integer getPatientDispensingRequestLineId() {
         return patientDispensingRequestLineId;
@@ -64,6 +67,22 @@ public class PatientDispensingRequestLine extends BaseTrackedEntity {
         this.unitOfMeasure = unitOfMeasure;
     }
 
+    public Boolean getBillable() {
+        return billable;
+    }
+
+    public void setBillable(Boolean billable) {
+        this.billable = billable;
+    }
+
+    public String getBillingExclusionReason() {
+        return billingExclusionReason;
+    }
+
+    public void setBillingExclusionReason(String billingExclusionReason) {
+        this.billingExclusionReason = billingExclusionReason;
+    }
+
     public PharmacyLocation getRoutedPharmacyLocation() {
         return routedPharmacyLocation;
     }
@@ -78,5 +97,13 @@ public class PatientDispensingRequestLine extends BaseTrackedEntity {
 
     public void setLineStatus(RequestStatus lineStatus) {
         this.lineStatus = lineStatus;
+    }
+
+    public String getHieMedicationRequestId() {
+        return hieMedicationRequestId;
+    }
+
+    public void setHieMedicationRequestId(String hieMedicationRequestId) {
+        this.hieMedicationRequestId = hieMedicationRequestId;
     }
 }

@@ -31,6 +31,8 @@ public interface PharmacyDao {
 
     List<Item> searchItems(String searchTerm, Integer limit);
 
+    List<Item> searchItemsForVisibilityControl(String searchTerm, String visibilityFilter, Integer limit);
+
     Item saveItem(Item item);
 
     ItemProductMasterMapping getItemProductMasterMapping(Integer productMasterItemId);

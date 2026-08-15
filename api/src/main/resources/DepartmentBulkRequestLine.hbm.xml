@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="DepartmentBulkRequestLine" table="rpm_department_bulk_request_line">
+        <id name="departmentBulkRequestLineId" type="int" column="department_bulk_request_line_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <many-to-one name="departmentBulkRequest" class="org.openmrs.module.rwandapharmacymanagement.model.DepartmentBulkRequest" column="department_bulk_request_id"/>
+        <many-to-one name="item" class="org.openmrs.module.rwandapharmacymanagement.model.Item" column="item_id"/>
+        <property name="previousRequestedQuantity" column="previous_requested_quantity" type="big_decimal"/>
+        <property name="previousReceivedQuantity" column="previous_received_quantity" type="big_decimal"/>
+        <property name="previousUsedQuantity" column="previous_used_quantity" type="big_decimal"/>
+        <property name="currentRemainingQuantity" column="current_remaining_quantity" type="big_decimal"/>
+        <property name="requestedQuantity" column="requested_quantity" type="big_decimal"/>
+        <property name="approvedQuantity" column="approved_quantity" type="big_decimal"/>
+        <property name="dispensedQuantity" column="dispensed_quantity" type="big_decimal"/>
+        <property name="batchNumber" column="batch_number" type="string"/>
+        <property name="lineJustification" column="line_justification" type="string"/>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+        <property name="uuid" column="uuid" type="string"/>
+    </class>
+</hibernate-mapping>

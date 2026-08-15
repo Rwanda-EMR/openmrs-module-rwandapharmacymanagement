@@ -28,6 +28,9 @@ import java.util.Set;
 @Controller("pharmacyOrderQueuePageController")
 public class QueuePageController {
     private static final String FLASH_APPROVED = "rpm.pharmacyOrderQueue.approved";
+    private static final String FLASH_REJECTED = "rpm.pharmacyOrderQueue.rejected";
+    private static final String FLASH_LINE_REMOVED = "rpm.pharmacyOrderQueue.lineRemoved";
+    private static final String FLASH_ERROR_MESSAGE = "rpm.pharmacyOrderQueue.errorMessage";
 
     public void get(PageModel model,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
@@ -44,11 +47,18 @@ public class QueuePageController {
         model.addAttribute("availableByItemId", buildAvailableByItemId(activePharmacy, inventoryService));
         model.addAttribute("batchOptionsByItemId", buildBatchOptionsByItemId(activePharmacy, inventoryService));
         model.addAttribute("approved", FlashMessageSupport.consumeBoolean(session, FLASH_APPROVED));
+        model.addAttribute("rejected", FlashMessageSupport.consumeBoolean(session, FLASH_REJECTED));
+        model.addAttribute("lineRemoved", FlashMessageSupport.consumeBoolean(session, FLASH_LINE_REMOVED));
+        model.addAttribute("errorMessage", FlashMessageSupport.consumeString(session, FLASH_ERROR_MESSAGE));
     }
 
     public String post(@SpringBean("pharmacyService") PharmacyService pharmacyService,
                        @SpringBean("pharmacyItemRequestService") PharmacyItemRequestService pharmacyItemRequestService,
                        @RequestParam("requestId") Integer requestId,
+                       @RequestParam(value = "action", required = false) String action,
+                       @RequestParam(value = "requestLineId", required = false) Integer requestLineId,
+                       @RequestParam(value = "rejectionReason", required = false) String rejectionReason,
+                       @RequestParam(value = "lineVoidReason", required = false) String lineVoidReason,
                        @RequestParam(value = "lineId", required = false) Integer[] lineIds,
                        @RequestParam(value = "approvedQuantity", required = false) BigDecimal[] approvedQuantities,
                        @RequestParam(value = "batchNumber", required = false) String[] batchNumbers,
@@ -58,8 +68,21 @@ public class QueuePageController {
         if (activePharmacy == null) {
             throw new IllegalArgumentException("No pharmacy is selected for the current session");
         }
-        pharmacyItemRequestService.approveRequest(requestId, activePharmacy, lineIds, approvedQuantities, batchNumbers);
-        FlashMessageSupport.set(session, FLASH_APPROVED, Boolean.TRUE);
+        try {
+            if ("reject".equalsIgnoreCase(action)) {
+                pharmacyItemRequestService.rejectRequest(requestId, activePharmacy, rejectionReason);
+                FlashMessageSupport.set(session, FLASH_REJECTED, Boolean.TRUE);
+            } else if ("removeLine".equalsIgnoreCase(action)) {
+                pharmacyItemRequestService.removeRequestLine(requestId, activePharmacy, requestLineId, lineVoidReason);
+                FlashMessageSupport.set(session, FLASH_LINE_REMOVED, Boolean.TRUE);
+            } else {
+                pharmacyItemRequestService.approveRequest(requestId, activePharmacy, lineIds, approvedQuantities, batchNumbers);
+                FlashMessageSupport.set(session, FLASH_APPROVED, Boolean.TRUE);
+            }
+        }
+        catch (IllegalArgumentException e) {
+            FlashMessageSupport.set(session, FLASH_ERROR_MESSAGE, e.getMessage());
+        }
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "pharmacyorder/queue");
     }
 

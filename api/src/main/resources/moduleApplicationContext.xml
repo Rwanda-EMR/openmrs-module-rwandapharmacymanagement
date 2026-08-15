@@ -23,6 +23,10 @@
         <property name="sessionFactory" ref="sessionFactory"/>
     </bean>
 
+    <bean id="departmentBulkRequestDao" class="org.openmrs.module.rwandapharmacymanagement.db.hibernate.HibernateDepartmentBulkRequestDao">
+        <property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
     <bean id="clinicalSafetyDao" class="org.openmrs.module.rwandapharmacymanagement.db.hibernate.HibernateClinicalSafetyDao">
         <property name="sessionFactory" ref="sessionFactory"/>
     </bean>
@@ -117,6 +121,13 @@
         <property name="pharmacyItemRequestDao" ref="pharmacyItemRequestDao"/>
         <property name="inventoryDao" ref="inventoryDao"/>
         <property name="pharmacyService" ref="pharmacyService"/>
+    </bean>
+
+    <bean id="departmentBulkRequestServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.DepartmentBulkRequestServiceImpl">
+        <property name="departmentBulkRequestDao" ref="departmentBulkRequestDao"/>
+        <property name="inventoryDao" ref="inventoryDao"/>
+        <property name="pharmacyService" ref="pharmacyService"/>
+        <property name="administrationService" ref="adminService"/>
     </bean>
 
     <bean id="rwandaPharmacyAlertServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.AlertServiceImpl">
@@ -241,6 +252,15 @@
         </property>
     </bean>
 
+    <bean id="departmentBulkRequestService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="departmentBulkRequestServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
     <bean parent="serviceContext">
         <property name="moduleService">
             <list merge="true">
@@ -270,6 +290,8 @@
                 <ref bean="labSupplyService"/>
                 <value>org.openmrs.module.rwandapharmacymanagement.api.PharmacyItemRequestService</value>
                 <ref bean="pharmacyItemRequestService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.DepartmentBulkRequestService</value>
+                <ref bean="departmentBulkRequestService"/>
             </list>
         </property>
     </bean>

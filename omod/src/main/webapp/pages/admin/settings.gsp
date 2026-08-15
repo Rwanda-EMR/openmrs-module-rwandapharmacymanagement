@@ -13,6 +13,14 @@
         </select>
         <br/><span style="color:#666;font-size:12px;">Strict mode prevents prescriptions from being marked paid using another bill from the same patient.</span>
     </p>
+    <p>
+        <label>Department Bulk Request Workflow</label><br/>
+        <select name="departmentBulkRequestWorkflowMode">
+            <option value="PERIODIC_ACCOUNTABILITY" ${ departmentBulkRequestWorkflowMode != 'FULL_VISIBILITY' ? 'selected="selected"' : '' }>Periodic accountability</option>
+            <option value="FULL_VISIBILITY" ${ departmentBulkRequestWorkflowMode == 'FULL_VISIBILITY' ? 'selected="selected"' : '' }>Full visibility with internal issue recording</option>
+        </select>
+        <br/><span style="color:#666;font-size:12px;">Periodic accountability reports usage during each new request. Full visibility requires departments to record internal issues.</span>
+    </p>
     <h3>Intouch SMS Settings</h3>
     <p><label><input type="checkbox" name="smsEnabled" value="true" ${ smsEnabled == 'true' ? 'checked="checked"' : '' }/> Enable prescription SMS</label></p>
     <p><label>Post URL</label><br/><input type="text" name="smsPostUrl" value="${ smsPostUrl ?: 'http://41.186.44.171:1401/send' }" size="80"/></p>

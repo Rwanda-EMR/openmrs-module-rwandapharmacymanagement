@@ -1,6 +1,8 @@
 package org.openmrs.module.rwandapharmacymanagement.page.controller.report;
 
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
+import org.openmrs.module.rwandapharmacymanagement.api.DepartmentBulkRequestService;
+import org.openmrs.module.rwandapharmacymanagement.api.PharmacyItemRequestService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.reporting.StockReportExcelRenderer;
@@ -24,6 +26,8 @@ import java.util.List;
 public class ItemMovementExportPageController {
 
     public void get(@SpringBean("inventoryService") InventoryService inventoryService,
+                    @SpringBean("departmentBulkRequestService") DepartmentBulkRequestService departmentBulkRequestService,
+                    @SpringBean("pharmacyItemRequestService") PharmacyItemRequestService pharmacyItemRequestService,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @RequestParam("format") String format,
                     @RequestParam("itemId") Integer itemId,
@@ -42,16 +46,23 @@ public class ItemMovementExportPageController {
             return;
         }
         List<ItemMovementReportSupport.Row> rows = ItemMovementReportSupport.buildRows(inventoryService, selectedItem,
-                startDate, ItemMovementReportSupport.nextDay(endDate), pharmacyLocationId);
+                startDate, ItemMovementReportSupport.nextDay(endDate), pharmacyLocationId, departmentBulkRequestService,
+                pharmacyItemRequestService);
         List<String> headers = Arrays.asList("Date of movement", "Receiving pharmacy / user", "Issuing pharmacy",
-                "Batch number", "Expiry date", "Quantity received", "Quantity issued", "Balance in stock",
-                "Months of stock", "Movement type", "Reference", "Remarks");
+                "Performed by", "Requested by", "Requested where", "Served by", "Served where", "Batch number",
+                "Expiry date", "Quantity received", "Quantity issued", "Balance in stock", "Months of stock",
+                "Movement type", "Reference", "Remarks");
         List<List<String>> body = new ArrayList<List<String>>();
         for (ItemMovementReportSupport.Row row : rows) {
             body.add(Arrays.asList(
                     row.getMovementDate(),
                     row.getReceivingPharmacyOrUser(),
                     row.getIssuingPharmacy(),
+                    row.getPerformedBy(),
+                    row.getRequestedBy(),
+                    row.getRequestedWhere(),
+                    row.getServedBy(),
+                    row.getServedWhere(),
                     row.getBatchNumber(),
                     row.getExpiryDate(),
                     decimal(row.getQuantityReceived()),

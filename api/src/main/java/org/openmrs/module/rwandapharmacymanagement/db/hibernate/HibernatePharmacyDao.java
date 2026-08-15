@@ -108,6 +108,29 @@ public class HibernatePharmacyDao implements PharmacyDao {
     }
 
     @Override
+    public List<Item> searchItemsForVisibilityControl(String searchTerm, String visibilityFilter, Integer limit) {
+        org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(Item.class)
+                .add(notVoided());
+        if ("hidden".equalsIgnoreCase(visibilityFilter)) {
+            criteria.add(Restrictions.eq("visibleToRequesters", Boolean.FALSE));
+        } else if ("visible".equalsIgnoreCase(visibilityFilter)) {
+            criteria.add(Restrictions.or(Restrictions.isNull("visibleToRequesters"),
+                    Restrictions.eq("visibleToRequesters", Boolean.TRUE)));
+        }
+        if (hasText(searchTerm)) {
+            String likeValue = "%" + searchTerm.trim() + "%";
+            Disjunction matches = Restrictions.disjunction();
+            matches.add(Restrictions.ilike("name", likeValue));
+            matches.add(Restrictions.ilike("code", likeValue));
+            criteria.add(matches);
+        }
+        criteria.addOrder(Order.asc("visibleToRequesters"));
+        criteria.addOrder(Order.asc("name"));
+        criteria.setMaxResults(limit == null || limit.intValue() <= 0 ? 200 : limit.intValue());
+        return criteria.list();
+    }
+
+    @Override
     public Item saveItem(Item item) {
         sessionFactory.getCurrentSession().saveOrUpdate(item);
         return item;

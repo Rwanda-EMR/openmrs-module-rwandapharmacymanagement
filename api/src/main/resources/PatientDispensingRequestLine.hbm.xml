@@ -12,6 +12,8 @@
         <many-to-one name="item" class="org.openmrs.module.rwandapharmacymanagement.model.Item" column="item_id"/>
         <property name="requestedQuantity" column="requested_quantity" type="big_decimal"/>
         <property name="unitOfMeasure" column="unit_of_measure" type="string"/>
+        <property name="billable" column="billable" type="boolean"/>
+        <property name="billingExclusionReason" column="billing_exclusion_reason" type="string"/>
         <many-to-one name="routedPharmacyLocation" class="org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation" column="routed_pharmacy_location_id"/>
         <property name="lineStatus" column="line_status">
             <type name="org.hibernate.type.EnumType">
@@ -26,5 +28,6 @@
         <property name="dateVoided" column="date_voided"/>
         <property name="voidReason" column="void_reason" type="string"/>
         <property name="uuid" column="uuid" type="string"/>
+        <property name="hieMedicationRequestId" column="hie_medication_request_id" type="string"/>
     </class>
 </hibernate-mapping>

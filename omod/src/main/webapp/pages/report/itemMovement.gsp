@@ -66,6 +66,11 @@
         <th>Date of movement</th>
         <th>Receiving pharmacy / user</th>
         <th>Issuing pharmacy</th>
+        <th>Performed by</th>
+        <th>Requested by</th>
+        <th>Requested where</th>
+        <th>Served by</th>
+        <th>Served where</th>
         <th>Batch number</th>
         <th>Expiry date</th>
         <th>Quantity received</th>
@@ -79,14 +84,19 @@
     </thead>
     <tbody>
     <% if (!selectedItem) { %>
-    <tr><td colspan="12">Select an item to load the movement report.</td></tr>
+    <tr><td colspan="17">Select an item to load the movement report.</td></tr>
     <% } else if (!rows) { %>
-    <tr><td colspan="12">No movements found for the selected item and period.</td></tr>
+    <tr><td colspan="17">No movements found for the selected item and period.</td></tr>
     <% } else { rows.each { row -> %>
     <tr>
         <td>${ row.movementDate ?: '' }</td>
         <td>${ row.receivingPharmacyOrUser ?: '' }</td>
         <td>${ row.issuingPharmacy ?: '' }</td>
+        <td>${ row.performedBy ?: '' }</td>
+        <td>${ row.requestedBy ?: '' }</td>
+        <td>${ row.requestedWhere ?: '' }</td>
+        <td>${ row.servedBy ?: '' }</td>
+        <td>${ row.servedWhere ?: '' }</td>
         <td>${ row.batchNumber ?: '' }</td>
         <td>${ row.expiryDate ?: '' }</td>
         <td>${ row.quantityReceived }</td>

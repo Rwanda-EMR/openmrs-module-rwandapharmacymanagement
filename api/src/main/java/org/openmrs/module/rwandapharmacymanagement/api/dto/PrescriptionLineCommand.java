@@ -14,6 +14,8 @@ public class PrescriptionLineCommand {
     private BigDecimal quantity;
     private String instructions;
     private Date startDate;
+    private Boolean billable = Boolean.TRUE;
+    private String billingExclusionReason;
 
     public Integer getProductMasterItemId() {
         return productMasterItemId;
@@ -85,5 +87,21 @@ public class PrescriptionLineCommand {
 
     public void setStartDate(Date startDate) {
         this.startDate = startDate;
+    }
+
+    public Boolean getBillable() {
+        return billable;
+    }
+
+    public void setBillable(Boolean billable) {
+        this.billable = billable;
+    }
+
+    public String getBillingExclusionReason() {
+        return billingExclusionReason;
+    }
+
+    public void setBillingExclusionReason(String billingExclusionReason) {
+        this.billingExclusionReason = billingExclusionReason;
     }
 }

@@ -7,6 +7,8 @@ public class ConsumableOrderLineCommand {
     private Integer productMasterItemId;
     private BigDecimal quantity;
     private String unitOfMeasure;
+    private Boolean billable = Boolean.TRUE;
+    private String billingExclusionReason;
 
     public Integer getProductMasterItemId() {
         return productMasterItemId;
@@ -30,5 +32,21 @@ public class ConsumableOrderLineCommand {
 
     public void setUnitOfMeasure(String unitOfMeasure) {
         this.unitOfMeasure = unitOfMeasure;
+    }
+
+    public Boolean getBillable() {
+        return billable;
+    }
+
+    public void setBillable(Boolean billable) {
+        this.billable = billable;
+    }
+
+    public String getBillingExclusionReason() {
+        return billingExclusionReason;
+    }
+
+    public void setBillingExclusionReason(String billingExclusionReason) {
+        this.billingExclusionReason = billingExclusionReason;
     }
 }

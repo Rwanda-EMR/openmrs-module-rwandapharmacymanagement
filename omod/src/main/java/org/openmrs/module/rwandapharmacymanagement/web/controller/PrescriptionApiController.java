@@ -72,6 +72,7 @@ public class PrescriptionApiController {
                 for (InventoryBalance balance : inventoryService.getAvailableInventoryForPharmacy(pharmacyLocation.getPharmacyLocationId())) {
                     if (balance == null || balance.getItem() == null
                             || balance.getQuantityOnHand() == null
+                            || Boolean.FALSE.equals(balance.getItem().getVisibleToRequesters())
                             || !matchesProductMasterItem(balance.getItem(), productMasterItem)) {
                         continue;
                     }
@@ -104,6 +105,16 @@ public class PrescriptionApiController {
         String itemCode = normalizeKey(item.getCode());
         String productCode = normalizeKey(productMasterItem.getNpcCode());
         if (!itemCode.isEmpty() && itemCode.equals(productCode)) {
+            return true;
+        }
+        Item mappedItem = pharmacyService.getMappedItemForProductMasterItem(productMasterItem);
+        if (mappedItem != null && mappedItem.getItemId() != null
+                && item.getItemId() != null && item.getItemId().equals(mappedItem.getItemId())) {
+            return true;
+        }
+        String itemName = normalizeKey(item.getName());
+        String productName = normalizeKey(productMasterItem.getItemName());
+        if (!itemName.isEmpty() && itemName.equals(productName)) {
             return true;
         }
         return item.getDrug() != null && productMasterItem.getDrug() != null

@@ -37,7 +37,7 @@ public class DispensingReportExportPageController {
         List<DispensingReportSupport.Row> rows = DispensingReportSupport.buildRows(records);
         List<String> headers = Arrays.asList("Dispense date", "Patient", "Identifier", "Pharmacy", "Item dispensed",
                 "Item code", "Batch", "Expiry", "Quantity", "Unit price", "Total", "Prescription / request",
-                "Bill", "Status", "Dispensed by");
+                "Bill", "Status", "Requested by", "Requested where", "Target pharmacy", "Served by", "Served where");
         List<List<String>> body = new ArrayList<List<String>>();
         for (DispensingReportSupport.Row row : rows) {
             body.add(Arrays.asList(
@@ -55,7 +55,11 @@ public class DispensingReportExportPageController {
                     prescriptionInfo(row),
                     row.patientBillId == null ? "" : String.valueOf(row.patientBillId),
                     string(row.requestStatus),
-                    string(row.dispensedBy)
+                    string(row.requestedBy),
+                    string(row.requestedWhere),
+                    string(row.targetPharmacy),
+                    string(row.servedBy),
+                    string(row.servedWhere)
             ));
         }
         String title = "Dispensing Report " + DispensingReportSupport.formatDate(startDate) + " to "

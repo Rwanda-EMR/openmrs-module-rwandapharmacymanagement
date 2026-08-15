@@ -7,6 +7,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.PharmacyItemRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 
 import java.math.BigDecimal;
+import java.util.Date;
 import java.util.List;
 
 public interface PharmacyItemRequestService extends OpenmrsService {
@@ -22,8 +23,16 @@ public interface PharmacyItemRequestService extends OpenmrsService {
 
     long countRequestsByCreator(User creator);
 
+    List<PharmacyItemRequest> getRequestsForPharmacy(PharmacyLocation pharmacyLocation, Date fromInclusive,
+                                                     Date toExclusive, String status, String itemName, int maxResults);
+
     PharmacyItemRequest getRequest(Integer requestId);
 
     PharmacyItemRequest approveRequest(Integer requestId, PharmacyLocation activePharmacy,
                                        Integer[] lineIds, BigDecimal[] approvedQuantities, String[] batchNumbers);
+
+    PharmacyItemRequest rejectRequest(Integer requestId, PharmacyLocation activePharmacy, String reason);
+
+    PharmacyItemRequest removeRequestLine(Integer requestId, PharmacyLocation activePharmacy, Integer requestLineId,
+                                          String reason);
 }

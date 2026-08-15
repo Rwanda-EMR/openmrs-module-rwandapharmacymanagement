@@ -204,6 +204,9 @@ public class DispensingStorePageController {
         if (item == null) {
             return;
         }
+        if (!Boolean.TRUE.equals(item.getVisibleToRequesters())) {
+            throw new IllegalArgumentException("Requested item is hidden from requesters");
+        }
         BigDecimal available = availableInPharmacy(inventoryService, mainStore, itemId);
         if (available.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Requested item is not currently available in the main pharmacy");
@@ -299,7 +302,8 @@ public class DispensingStorePageController {
         List<Map<String, Object>> itemRows = new ArrayList<Map<String, Object>>();
         Map<Integer, Map<String, Object>> byItem = new LinkedHashMap<Integer, Map<String, Object>>();
         for (InventoryBalance balance : balances) {
-            if (balance == null || balance.getItem() == null || balance.getItem().getItemId() == null) {
+            if (balance == null || balance.getItem() == null || balance.getItem().getItemId() == null
+                    || !Boolean.TRUE.equals(balance.getItem().getVisibleToRequesters())) {
                 continue;
             }
             Integer itemId = balance.getItem().getItemId();

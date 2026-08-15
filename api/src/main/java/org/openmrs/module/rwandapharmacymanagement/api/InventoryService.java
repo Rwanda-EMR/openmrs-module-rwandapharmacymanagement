@@ -7,6 +7,8 @@ import org.openmrs.module.rwandapharmacymanagement.model.InterPharmacyTransfer;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.StockAdjustment;
 import org.openmrs.module.rwandapharmacymanagement.model.StockTransaction;
+import org.openmrs.module.rwandapharmacymanagement.api.dto.TransferPreviousInfo;
+import org.openmrs.module.rwandapharmacymanagement.api.dto.TransferBatchAllocationCommand;
 
 import java.util.Date;
 import java.util.List;
@@ -19,9 +21,18 @@ public interface InventoryService extends OpenmrsService {
 
     InventoryBalance getInventoryBalance(Integer itemId, Integer pharmacyLocationId, String batchNumber);
 
+    InventoryBalance updateBatchExpiryDate(Integer inventoryBalanceId, Integer pharmacyLocationId, Date expiryDate);
+
+    StockTransaction writeOffInventoryBalance(Integer inventoryBalanceId, Integer pharmacyLocationId,
+                                              java.math.BigDecimal quantity, String reason);
+
+    StockTransaction recordWrittenOffStockDisposal(Integer writeOffStockTransactionId, String disposalMethod, String notes);
+
     List<DeliveryReceiptLine> getRecentDeliveryReceiptLines();
 
     List<StockTransaction> getRecentStockTransactions();
+
+    StockTransaction getStockTransaction(Integer stockTransactionId);
 
     List<StockTransaction> getStockTransactions(Date fromInclusive, Date toExclusive, Integer pharmacyLocationId);
 
@@ -36,6 +47,8 @@ public interface InventoryService extends OpenmrsService {
 
     InterPharmacyTransfer getTransfer(Integer transferId);
 
+    TransferPreviousInfo getTransferPreviousInfo(Integer transferId, Integer transferLineId);
+
     DeliveryReceipt getDeliveryReceipt(Integer deliveryReceiptId);
 
     DeliveryReceipt receiveDelivery(DeliveryReceipt deliveryReceipt);
@@ -46,11 +59,16 @@ public interface InventoryService extends OpenmrsService {
 
     InterPharmacyTransfer approveTransfer(Integer transferId, java.math.BigDecimal[] quantities, String[] batchNumbers, java.util.Date[] expiryDates);
 
+    InterPharmacyTransfer removeTransferLine(Integer transferId, Integer transferLineId, String reason);
+
     InterPharmacyTransfer rejectTransfer(Integer transferId, String rejectionReason);
 
     InterPharmacyTransfer serveTransfer(Integer transferId);
 
     InterPharmacyTransfer serveTransfer(Integer transferId, java.math.BigDecimal[] quantities, String[] batchNumbers, java.util.Date[] expiryDates);
+
+    InterPharmacyTransfer serveTransfer(Integer transferId, java.math.BigDecimal[] quantities, String[] batchNumbers,
+                                        java.util.Date[] expiryDates, List<TransferBatchAllocationCommand> batchAllocations);
 
     InterPharmacyTransfer transferStock(InterPharmacyTransfer transfer);
 

@@ -72,8 +72,26 @@ public class PharmacyServiceImpl extends BaseOpenmrsService implements PharmacyS
     }
 
     @Override
+    public List<Item> searchItemsForVisibilityControl(String searchTerm, String visibilityFilter, Integer limit) {
+        return pharmacyDao.searchItemsForVisibilityControl(searchTerm, visibilityFilter, limit);
+    }
+
+    @Override
     public Item saveItem(Item item) {
         preventDuplicateNewItem(item);
+        return pharmacyDao.saveItem(item);
+    }
+
+    @Override
+    public Item setItemVisibleToRequesters(Integer itemId, Boolean visibleToRequesters) {
+        if (itemId == null) {
+            throw new IllegalArgumentException("Item is required");
+        }
+        Item item = pharmacyDao.getItem(itemId);
+        if (item == null || Boolean.TRUE.equals(item.getVoided())) {
+            throw new IllegalArgumentException("Item not found");
+        }
+        item.setVisibleToRequesters(Boolean.TRUE.equals(visibleToRequesters));
         return pharmacyDao.saveItem(item);
     }
 

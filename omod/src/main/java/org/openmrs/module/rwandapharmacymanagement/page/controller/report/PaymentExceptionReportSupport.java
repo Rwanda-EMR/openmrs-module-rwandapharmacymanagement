@@ -120,6 +120,7 @@ public final class PaymentExceptionReportSupport {
         row.exceptionReason = safe(request.getPaymentExceptionReason());
         row.exceptionNote = safe(request.getPaymentExceptionNote());
         row.approvedBy = userName(request.getPaymentExceptionApprovedBy());
+        row.requestedBy = firstNonBlank(providerName(request.getOrderingProvider()), userName(request.getCreator()));
         row.requestReference = safe(request.getMedicalActReference());
         row.requestingLocation = request.getRequestingLocation() == null ? "" : safe(request.getRequestingLocation().getName());
         row.targetPharmacy = pharmacyName(request.getTargetPharmacyLocation());
@@ -151,7 +152,8 @@ public final class PaymentExceptionReportSupport {
             summary.dispensed = true;
             summary.dispenseDates = appendUnique(summary.dispenseDates, formatDateTime(record.getDateCreated()));
             summary.dispensingPharmacies = appendUnique(summary.dispensingPharmacies, pharmacyName(record.getDispensingPharmacyLocation()));
-            summary.dispensedBy = appendUnique(summary.dispensedBy, providerName(record.getDispensedBy()));
+            summary.dispensedBy = appendUnique(summary.dispensedBy,
+                    firstNonBlank(providerName(record.getDispensedBy()), userName(record.getCreator())));
         }
         return summaries;
     }
@@ -230,6 +232,10 @@ public final class PaymentExceptionReportSupport {
         return value == null ? "" : value;
     }
 
+    private static String firstNonBlank(String first, String second) {
+        return first != null && !first.trim().isEmpty() ? first : safe(second);
+    }
+
     public static class Row {
         public Integer requestId;
         public String requestDate;
@@ -245,6 +251,7 @@ public final class PaymentExceptionReportSupport {
         public String exceptionReason;
         public String exceptionNote;
         public String approvedBy;
+        public String requestedBy;
         public String requestReference;
         public String requestingLocation;
         public String targetPharmacy;

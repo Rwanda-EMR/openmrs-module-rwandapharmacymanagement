@@ -7,7 +7,7 @@
     ui.includeCss("appui", "bootstrap.min.css")
     ui.includeCss("appui", "header.css")
 	    def queueCounts = context.loadClass("org.openmrs.module.rwandapharmacymanagement.web.support.QueueNotificationSupport").counts(session)
-	    def monitoredCountLinks = ["queue/patientQueue", "pharmacyorder/queue", "lab/queue", "pharmacyorder/approve", "purchaseorder/management", "alerts/dashboard"]
+		    def monitoredCountLinks = ["queue/patientQueue", "pharmacyorder/queue", "lab/queue", "pharmacyorder/approve", "department/finance", "department/dispense", "purchaseorder/management", "alerts/dashboard"]
 	    def hasAnyPrivilege = { required ->
 	        if (!required) {
 	            return true
@@ -17,6 +17,18 @@
 	        }
 	        return context.hasPrivilege(required)
 	    }
+        def notificationCount = { link ->
+            if (!link || !monitoredCountLinks.contains(link.path)) {
+                return 0
+            }
+            return queueCounts[link.path] ?: 0
+        }
+        def notificationTotal = { links ->
+            if (!links) {
+                return 0
+            }
+            return links.collect { link -> notificationCount(link) }.sum() ?: 0
+        }
 	    def navSections = [
             [title: "Overview", links: [
                     [path: "index", label: "Dashboard"]
@@ -25,19 +37,36 @@
                     [path: "queue/patientQueue", label: "Patient queue"],
                     [path: "dispense/history", label: "Dispensing history"],
                     [path: "pharmacyorder/queue", label: "Pharmacy item request queue"],
+	                    [path: "pharmacyorder/history", label: "Pharmacy item request history", privilegeAny: ["Task: rwandapharmacymanagement.transferStock", "Task: rwandapharmacymanagement.approveMainToDispensingTransfer"]],
                     [path: "lab/queue", label: "Lab dispensing queue"],
                     [path: "lab/history", label: "Lab dispensing history"]
             ]],
-            [title: "Stock", links: [
-                    [path: "inventory/mainStore", label: "Main pharmacy"],
-                    [path: "inventory/dispensingStore", label: "Dispensing pharmacies"],
-                    [path: "inventory/receiptHistory", label: "Receipt history"],
-                    [path: "inventory/valuation", label: "Stock valuation"],
+	            [title: "Stock", groups: [
+                    [title: "Stores", links: [
+                            [path: "inventory/mainStore", label: "Main pharmacy"],
+                            [path: "inventory/dispensingStore", label: "Dispensing pharmacies"],
+	                            [path: "inventory/valuation", label: "Stock valuation"],
+	                            [path: "admin/reconciliation", label: "Reconciliation", privilege: "Task: rwandapharmacymanagement.adjustStock"],
+	                            [path: "admin/expiryControl", label: "Batch expiry control", privilege: "Task: rwandapharmacymanagement.adjustStock"],
+	                            [path: "admin/itemVisibility", label: "Item visibility control", privilege: "Task: rwandapharmacymanagement.adjustStock"]
+	                    ]],
+                    [title: "Transfers", links: [
 	                    [path: "pharmacyorder/approve", label: "Pharmacy transfer approval", privilegeAny: ["Task: rwandapharmacymanagement.transferStock", "Task: rwandapharmacymanagement.approveMainToDispensingTransfer"]],
-		                    [path: "transfer/mainToDispensing", label: "Main to dispensing", privilegeAny: ["Task: rwandapharmacymanagement.transferStock", "Task: rwandapharmacymanagement.approveMainToDispensingTransfer"]],
-	                    [path: "transfer/returnToMain", label: "Return to main pharmacy", privilege: "Task: rwandapharmacymanagement.transferStock"],
-                    [path: "transfer/interPharmacy", label: "Dispensing to dispensing"],
-                    [path: "admin/reconciliation", label: "Reconciliation", privilege: "Task: rwandapharmacymanagement.adjustStock"]
+	                    [path: "transfer/mainToDispensing", label: "Main to dispensing", privilegeAny: ["Task: rwandapharmacymanagement.transferStock", "Task: rwandapharmacymanagement.approveMainToDispensingTransfer"]],
+                            [path: "transfer/returnToMain", label: "Return to main pharmacy", privilege: "Task: rwandapharmacymanagement.transferStock"],
+                            [path: "transfer/interPharmacy", label: "Dispensing to dispensing"]
+                    ]],
+                    [title: "Department Requests", links: [
+                            [path: "department/store", label: "Department store workspace", privilege: "Task: rwandapharmacymanagement.departmentStore"],
+                            [path: "department/request", label: "Department bulk request"],
+                            [path: "department/finance", label: "Department finance approval"],
+                            [path: "department/financeHistory", label: "Department finance history"],
+                            [path: "department/dispense", label: "Department pharmacy dispense"],
+                            [path: "department/issue", label: "Department stock issue"]
+                    ]],
+                    [title: "Receipts", links: [
+                            [path: "inventory/receiptHistory", label: "Receipt history"]
+                    ]]
             ]],
             [title: "Supplier", links: [
                     [path: "supplier/settings", label: "Configuration"],
@@ -61,10 +90,12 @@
             ]],
             [title: "Reports", links: [
                     [path: "report/pharmacyStock", label: "Individual pharmacy report"],
-	                    [path: "report/overallStock", label: "Overall hospital stock report"],
-	                    [path: "report/inventoryMovement", label: "Inventory movement report"],
-	                    [path: "report/dispensingReport", label: "Dispensing report"],
+		                    [path: "report/overallStock", label: "Overall hospital stock report"],
+		                    [path: "report/inventoryMovement", label: "Inventory movement report"],
+		                    [path: "report/writeOffDisposalReport", label: "Write-off and disposal report"],
+		                    [path: "report/dispensingReport", label: "Dispensing report"],
 	                    [path: "report/paymentExceptionReport", label: "Payment exception report"],
+	                    [path: "report/notBillableItemsReport", label: "Not billable items report"],
 	                    [path: "report/itemMovement", label: "Item movement report"]
 	            ]]
     ]
@@ -165,6 +196,12 @@
             font-size: 11px;
             transition: transform 0.2s ease;
         }
+        .lnav-toggle-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            min-width: 0;
+        }
         .lnav-section-links {
             display: none;
             padding: 0 0 3px;
@@ -175,6 +212,43 @@
         .lnav-section.is-open .lnav-section-caret {
             transform: rotate(90deg);
         }
+        .lnav-group {
+            border-top: 1px solid #f2f2f2;
+        }
+        .lnav-group-toggle {
+            width: 100%;
+            border: 0;
+            background: #fbfbfb;
+            padding: 5px 11px 5px 19px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            text-align: left;
+        }
+        .lnav-group-toggle:hover {
+            background: #f5f5f5;
+        }
+        .lnav-group-title {
+            font-size: 11px;
+            color: #666666;
+            font-weight: bold;
+        }
+        .lnav-group-caret {
+            color: #999999;
+            font-size: 10px;
+            transition: transform 0.2s ease;
+        }
+        .lnav-group-links {
+            display: none;
+            padding: 1px 0 3px;
+        }
+        .lnav-group.is-open .lnav-group-links {
+            display: block;
+        }
+        .lnav-group.is-open .lnav-group-caret {
+            transform: rotate(90deg);
+        }
         .lnav-link {
             display: flex;
             align-items: center;
@@ -183,6 +257,10 @@
             padding: 5px 11px 5px 19px;
             color: var(--rpm-link);
             font-size: 12px;
+        }
+        .lnav-group .lnav-link {
+            padding-left: 31px;
+            font-size: 11px;
         }
         .nav-count-badge {
             display: inline-flex;
@@ -209,6 +287,9 @@
             padding-left: 16px;
             color: var(--rpm-link-dark);
             font-weight: bold;
+        }
+        .lnav-group .lnav-link.active {
+            padding-left: 28px;
         }
         .module-main {
             flex: 1;
@@ -546,13 +627,45 @@
 <div class="module-wrap">
     <div class="module-left">
         <div class="module-left-hdr">Rwanda Pharmacy</div>
-	        <% navSections.each { section -> def visibleLinks = section.links.findAll { link -> hasAnyPrivilege(link.privilegeAny ?: link.privilege) }; if (visibleLinks) { %>
+	        <% navSections.each { section ->
+                def visibleGroups = section.groups ? section.groups.collect { group ->
+                    [title: group.title, links: group.links.findAll { link -> hasAnyPrivilege(link.privilegeAny ?: link.privilege) }]
+                }.findAll { group -> group.links } : []
+                def visibleLinks = section.links ? section.links.findAll { link -> hasAnyPrivilege(link.privilegeAny ?: link.privilege) } : []
+                def sectionCount = notificationTotal(visibleLinks) + (visibleGroups.collect { group -> notificationTotal(group.links) }.sum() ?: 0)
+                if (visibleLinks || visibleGroups) {
+            %>
         <div class="lnav-section">
             <button type="button" class="lnav-section-toggle" aria-expanded="false">
-                <span class="lnav-section-title">${ section.title }</span>
+                <span class="lnav-toggle-label">
+                    <span class="lnav-section-title">${ section.title }</span>
+                    <% if (sectionCount > 0) { %><span class="nav-count-badge">${ sectionCount }</span><% } %>
+                </span>
                 <span class="lnav-section-caret">&#9656;</span>
             </button>
             <div class="lnav-section-links">
+                <% visibleGroups.each { group -> def groupCount = notificationTotal(group.links) %>
+                <div class="lnav-group">
+                    <button type="button" class="lnav-group-toggle" aria-expanded="false">
+                        <span class="lnav-toggle-label">
+                            <span class="lnav-group-title">${ group.title }</span>
+                            <% if (groupCount > 0) { %><span class="nav-count-badge">${ groupCount }</span><% } %>
+                        </span>
+                        <span class="lnav-group-caret">&#9656;</span>
+                    </button>
+                    <div class="lnav-group-links">
+                        <% group.links.each { link -> %>
+                        <%
+                            def linkCount = queueCounts[link.path] ?: 0
+                        %>
+                        <a class="lnav-link" href="${ ui.pageLink("rwandapharmacymanagement", link.path) }">
+                            <span>${ link.label }</span>
+                            <% if (monitoredCountLinks.contains(link.path) && linkCount > 0) { %><span class="nav-count-badge">${ linkCount }</span><% } %>
+                        </a>
+                        <% } %>
+                    </div>
+                </div>
+                <% } %>
 	                <% visibleLinks.each { link -> %>
                 <%
                     def linkCount = queueCounts[link.path] ?: 0
@@ -619,6 +732,7 @@
                 (function(section) {
                     var toggle = section.querySelector('.lnav-section-toggle');
                     var linkNodes = section.querySelectorAll('.lnav-link');
+                    var groups = section.querySelectorAll('.lnav-group');
                     var hasActiveLink = false;
 
                     for (var index = 0; index < linkNodes.length; index++) {
@@ -630,6 +744,30 @@
                         }
                     }
 
+                    for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+                        (function(group) {
+                            var groupToggle = group.querySelector('.lnav-group-toggle');
+                            var groupLinks = group.querySelectorAll('.lnav-link');
+                            var hasActiveGroupLink = false;
+
+                            for (var groupLinkIndex = 0; groupLinkIndex < groupLinks.length; groupLinkIndex++) {
+                                if (groupLinks[groupLinkIndex].classList.contains('active')) {
+                                    hasActiveGroupLink = true;
+                                }
+                            }
+
+                            setGroupOpen(group, hasActiveGroupLink);
+                            if (groupToggle) {
+                                groupToggle.addEventListener('click', function(event) {
+                                    event.stopPropagation();
+                                    var shouldOpen = !group.classList.contains('is-open');
+                                    closeOtherGroups(section, group);
+                                    setGroupOpen(group, shouldOpen);
+                                });
+                            }
+                        })(groups[groupIndex]);
+                    }
+
                     setSectionOpen(section, hasActiveLink);
                     if (toggle) {
                         toggle.addEventListener('click', function() {
@@ -639,6 +777,30 @@
                         });
                     }
                 })(sections[i]);
+            }
+        }
+
+        function setGroupOpen(group, isOpen) {
+            if (!group) {
+                return;
+            }
+            var toggle = group.querySelector('.lnav-group-toggle');
+            var links = group.querySelector('.lnav-group-links');
+            group.classList.toggle('is-open', isOpen);
+            if (toggle) {
+                toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            }
+            if (links) {
+                links.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+            }
+        }
+
+        function closeOtherGroups(section, openGroup) {
+            var groups = section.querySelectorAll('.lnav-group');
+            for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+                if (groups[groupIndex] !== openGroup) {
+                    setGroupOpen(groups[groupIndex], false);
+                }
             }
         }
 

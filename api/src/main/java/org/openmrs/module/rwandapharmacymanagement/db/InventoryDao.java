@@ -20,13 +20,20 @@ public interface InventoryDao {
 
     InventoryBalance getInventoryBalance(Integer itemId, Integer pharmacyLocationId, String batchNumber);
 
+    InventoryBalance getInventoryBalance(Integer inventoryBalanceId);
+
     List<DeliveryReceiptLine> getRecentDeliveryReceiptLines();
 
     List<StockTransaction> getRecentStockTransactions();
 
+    StockTransaction getStockTransaction(Integer stockTransactionId);
+
     List<StockTransaction> getStockTransactions(Date fromInclusive, Date toExclusive, Integer pharmacyLocationId);
 
     List<StockTransaction> getStockTransactions(Integer itemId, Date fromInclusive, Date toExclusive, Integer pharmacyLocationId);
+
+    List<StockTransaction> getStockTransactions(Integer itemId, Date fromInclusive, Date toExclusive, Integer pharmacyLocationId,
+                                                Integer maxResults);
 
     List<InterPharmacyTransfer> getTransfers();
 
@@ -36,6 +43,11 @@ public interface InventoryDao {
     long countTransfers(String transferStatus, Integer sourcePharmacyLocationId, Integer destinationPharmacyLocationId);
 
     InterPharmacyTransfer getTransfer(Integer transferId);
+
+    InterPharmacyTransferLine getLatestTransferLineBefore(Integer destinationPharmacyLocationId,
+                                                          Integer itemId,
+                                                          Date beforeDate,
+                                                          Integer excludeTransferId);
 
     DeliveryReceipt getDeliveryReceipt(Integer deliveryReceiptId);
 

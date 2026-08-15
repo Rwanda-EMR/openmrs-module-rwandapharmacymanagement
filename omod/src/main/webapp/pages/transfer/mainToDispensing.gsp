@@ -138,6 +138,7 @@
                 <span style="color:#777;">Awaiting main store transfer</span>
                 <% } else if (request.transferStatus == 'SERVED') { %>
                 <span style="color:#777;">Transferred</span>
+                <a href="${ ui.pageLink('rwandapharmacymanagement', 'transfer/pdf', [transferId: request.interPharmacyTransferId]) }">Download PDF</a>
                 <% } else if (request.transferStatus == 'REJECTED') { %>
                 <span style="color:#777;">Rejected</span>
                 <% } %>

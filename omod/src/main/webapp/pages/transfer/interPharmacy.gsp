@@ -109,6 +109,9 @@
         <td>
             <div class="po-action-row">
                 <a href="${ ui.pageLink('rwandapharmacymanagement', 'transfer/interPharmacyReview', [transferId: request.interPharmacyTransferId]) }">View</a>
+                <% if (request.transferStatus == 'SERVED') { %>
+                <a href="${ ui.pageLink('rwandapharmacymanagement', 'transfer/pdf', [transferId: request.interPharmacyTransferId]) }">Download PDF</a>
+                <% } %>
             </div>
         </td>
     </tr>

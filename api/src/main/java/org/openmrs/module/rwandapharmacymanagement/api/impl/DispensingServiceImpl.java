@@ -327,7 +327,7 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
                     || line.getLineStatus() == RequestStatus.PARTIALLY_DISPENSED) {
                 continue;
             }
-            line.setLineStatus(status);
+            line.setLineStatus(Boolean.TRUE.equals(line.getBillable()) ? status : RequestStatus.PENDING_DISPENSE);
             dispensingDao.saveRequestLine(line);
         }
     }
@@ -339,6 +339,9 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
         }
         for (PatientDispensingRequestLine line : request.getLines()) {
             if (line == null) {
+                continue;
+            }
+            if (!Boolean.TRUE.equals(line.getBillable())) {
                 continue;
             }
             if (line.getItem() != null) {
@@ -543,6 +546,14 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
     }
 
     @Override
+    public List<PatientDispensingRequestLine> getNotBillableRequestLines(Date fromInclusive,
+                                                                         Date toExclusive,
+                                                                         Integer pharmacyLocationId,
+                                                                         RequestType requestType) {
+        return dispensingDao.getNotBillableRequestLines(fromInclusive, toExclusive, pharmacyLocationId, requestType);
+    }
+
+    @Override
     public List<DispenseRecord> getDispenseRecordsForRequests(List<Integer> requestIds) {
         return dispensingDao.getDispenseRecordsForRequests(requestIds);
     }
@@ -555,6 +566,16 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
     @Override
     public long countPatientPrescriptionHistory(Integer patientId) {
         return dispensingDao.countPatientPrescriptionHistory(patientId);
+    }
+
+    @Override
+    public List<PatientDispensingRequest> getPatientConsumableHistory(Integer patientId, int firstResult, int maxResults) {
+        return dispensingDao.getPatientConsumableHistory(patientId, firstResult, maxResults);
+    }
+
+    @Override
+    public long countPatientConsumableHistory(Integer patientId) {
+        return dispensingDao.countPatientConsumableHistory(patientId);
     }
 
     @Override
@@ -639,9 +660,14 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
     }
 
     private void persistDispense(DispenseRecord dispenseRecord, boolean withoutOrder) {
+        PatientDispensingRequest request = resolveDispensingRequest(dispenseRecord, withoutOrder);
+        validateDispenseAgainstActiveRequestLines(request, dispenseRecord.getLines(), withoutOrder);
         dispenseRecord.setCreator(Context.getAuthenticatedUser());
         dispenseRecord.setDateCreated(new Date());
         dispenseRecord.setDispensedWithoutOrder(withoutOrder);
+        if (request != null) {
+            dispenseRecord.setPatientDispensingRequest(request);
+        }
         enforceClinicalSafety(dispenseRecord);
         Date now = new Date();
         if (dispenseRecord.getLines() != null) {
@@ -652,17 +678,6 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
             }
         }
         dispensingDao.saveDispenseRecord(dispenseRecord);
-        if (dispenseRecord.getPatientDispensingRequest() != null) {
-            PatientDispensingRequest request = dispensingDao.getRequest(dispenseRecord.getPatientDispensingRequest().getPatientDispensingRequestId());
-            request.setRequestStatus(RequestStatus.DISPENSED);
-            if (request.getLines() != null) {
-                for (PatientDispensingRequestLine requestLine : request.getLines()) {
-                    requestLine.setLineStatus(RequestStatus.DISPENSED);
-                    dispensingDao.saveRequestLine(requestLine);
-                }
-            }
-            dispensingDao.saveRequest(request);
-        }
         if (dispenseRecord.getLines() != null) {
             for (DispenseRecordLine line : dispenseRecord.getLines()) {
                 InventoryBalance balance = inventoryDao.getInventoryBalance(line.getItem().getItemId(),
@@ -699,6 +714,117 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
                 && dispenseRecord.getPatientDispensingRequest().getPatientDispensingRequestId() != null) {
             refreshRequestDispenseStatus(dispenseRecord.getPatientDispensingRequest().getPatientDispensingRequestId());
         }
+    }
+
+    private PatientDispensingRequest resolveDispensingRequest(DispenseRecord dispenseRecord, boolean withoutOrder) {
+        if (withoutOrder || dispenseRecord == null || dispenseRecord.getPatientDispensingRequest() == null
+                || dispenseRecord.getPatientDispensingRequest().getPatientDispensingRequestId() == null) {
+            return null;
+        }
+        PatientDispensingRequest request = dispensingDao.getRequest(
+                dispenseRecord.getPatientDispensingRequest().getPatientDispensingRequestId());
+        if (request == null) {
+            throw new IllegalArgumentException("Prescription request not found");
+        }
+        return request;
+    }
+
+    private void validateDispenseAgainstActiveRequestLines(PatientDispensingRequest request,
+                                                           List<DispenseRecordLine> dispenseLines,
+                                                           boolean withoutOrder) {
+        if (withoutOrder || request == null) {
+            return;
+        }
+        if (request.getRequestStatus() == RequestStatus.CANCELLED || request.getRequestStatus() == RequestStatus.DISPENSED
+                || Boolean.TRUE.equals(request.getVoided())) {
+            throw new IllegalArgumentException("Cancelled or completed prescription requests cannot be dispensed");
+        }
+        if (!isPaymentSatisfied(request)) {
+            throw new IllegalArgumentException("This prescription has not been paid yet");
+        }
+        rejectHiddenDispenseLines(dispenseLines);
+        Map<Integer, BigDecimal> requestedByActiveItemId = requestedQuantitiesByActiveItem(request);
+        if (requestedByActiveItemId.isEmpty()) {
+            throw new IllegalArgumentException("This prescription has no active lines to dispense");
+        }
+        Map<Integer, BigDecimal> dispensedByItemId = calculateDispensedQuantitiesByItem(request.getPatientDispensingRequestId());
+        Map<Integer, BigDecimal> submittedByItemId = submittedQuantitiesByItem(dispenseLines);
+        if (submittedByItemId.isEmpty()) {
+            throw new IllegalArgumentException("At least one active prescription line quantity is required to dispense");
+        }
+        for (Map.Entry<Integer, BigDecimal> entry : submittedByItemId.entrySet()) {
+            Integer itemId = entry.getKey();
+            BigDecimal activeRequested = requestedByActiveItemId.containsKey(itemId)
+                    ? requestedByActiveItemId.get(itemId) : BigDecimal.ZERO;
+            if (activeRequested.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("Cannot dispense a cancelled or unavailable prescription line");
+            }
+            BigDecimal alreadyDispensed = dispensedByItemId.containsKey(itemId)
+                    ? dispensedByItemId.get(itemId) : BigDecimal.ZERO;
+            BigDecimal remaining = activeRequested.subtract(alreadyDispensed);
+            if (entry.getValue().compareTo(remaining.max(BigDecimal.ZERO)) > 0) {
+                throw new IllegalArgumentException("Dispense quantity cannot exceed active prescription quantity");
+            }
+        }
+    }
+
+    private void rejectHiddenDispenseLines(List<DispenseRecordLine> dispenseLines) {
+        if (dispenseLines == null) {
+            return;
+        }
+        for (DispenseRecordLine line : dispenseLines) {
+            if (line == null || line.getItem() == null || line.getQuantityDispensed() == null
+                    || line.getQuantityDispensed().compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            if (Boolean.FALSE.equals(line.getItem().getVisibleToRequesters())) {
+                throw new IllegalArgumentException("Hidden prescription items cannot be dispensed");
+            }
+        }
+    }
+
+    private Map<Integer, BigDecimal> requestedQuantitiesByActiveItem(PatientDispensingRequest request) {
+        Map<Integer, BigDecimal> requestedByItemId = new LinkedHashMap<Integer, BigDecimal>();
+        if (request == null || request.getLines() == null) {
+            return requestedByItemId;
+        }
+        for (PatientDispensingRequestLine line : request.getLines()) {
+            if (!isActiveDispensingLine(line) || line.getItem() == null || line.getItem().getItemId() == null) {
+                continue;
+            }
+            Integer itemId = line.getItem().getItemId();
+            BigDecimal existing = requestedByItemId.containsKey(itemId) ? requestedByItemId.get(itemId) : BigDecimal.ZERO;
+            requestedByItemId.put(itemId, existing.add(line.getRequestedQuantity() == null ? BigDecimal.ZERO : line.getRequestedQuantity()));
+        }
+        return requestedByItemId;
+    }
+
+    private boolean isActiveDispensingLine(PatientDispensingRequestLine line) {
+        return line != null
+                && !Boolean.TRUE.equals(line.getVoided())
+                && line.getLineStatus() != RequestStatus.CANCELLED
+                && line.getLineStatus() != RequestStatus.UNAVAILABLE
+                && line.getLineStatus() != RequestStatus.DISPENSED;
+    }
+
+    private Map<Integer, BigDecimal> submittedQuantitiesByItem(List<DispenseRecordLine> dispenseLines) {
+        Map<Integer, BigDecimal> submittedByItemId = new LinkedHashMap<Integer, BigDecimal>();
+        if (dispenseLines == null) {
+            return submittedByItemId;
+        }
+        for (DispenseRecordLine line : dispenseLines) {
+            if (line == null || line.getQuantityDispensed() == null
+                    || line.getQuantityDispensed().compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            if (line.getItem() == null || line.getItem().getItemId() == null) {
+                throw new IllegalArgumentException("Dispensed drug is required");
+            }
+            Integer itemId = line.getItem().getItemId();
+            BigDecimal existing = submittedByItemId.containsKey(itemId) ? submittedByItemId.get(itemId) : BigDecimal.ZERO;
+            submittedByItemId.put(itemId, existing.add(line.getQuantityDispensed()));
+        }
+        return submittedByItemId;
     }
 
     private void refreshRequestDispenseStatus(Integer requestId) {

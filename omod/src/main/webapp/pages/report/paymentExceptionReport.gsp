@@ -79,6 +79,7 @@
         <td>
             #${ row.requestId ?: '' }<br/>
             <span style="color:#666;">Created: ${ row.requestDate ?: '' }</span><br/>
+            <span style="color:#666;">Requested by: ${ row.requestedBy ?: '' }</span><br/>
             <span style="color:#666;">Reference: ${ row.requestReference ?: '' }</span><br/>
             <span style="color:#666;">Bill: ${ row.billId ?: '' } | Paid: ${ row.paymentConfirmed ? 'Yes' : 'No' }</span>
         </td>

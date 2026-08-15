@@ -32,10 +32,14 @@
         ClinicalSafetyRule.hbm.xml
         DeliveryReceipt.hbm.xml
         DeliveryReceiptLine.hbm.xml
+        DepartmentBulkRequest.hbm.xml
+        DepartmentBulkRequestLine.hbm.xml
+        DepartmentStockIssue.hbm.xml
         DispenseRecord.hbm.xml
         DispenseRecordLine.hbm.xml
         IntegrationLog.hbm.xml
         InterPharmacyTransfer.hbm.xml
+        InterPharmacyTransferLineBatch.hbm.xml
         InterPharmacyTransferLine.hbm.xml
         InventoryBalance.hbm.xml
         Item.hbm.xml

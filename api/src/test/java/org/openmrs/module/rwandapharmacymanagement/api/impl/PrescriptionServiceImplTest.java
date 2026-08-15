@@ -93,6 +93,16 @@ public class PrescriptionServiceImplTest {
         assertCalculatedQuantity("8 TIMES A DAY", 1, "Day(s)", "8");
     }
 
+    @Test
+    public void isPerNeedFrequencyShouldRecognizePrnLabels() {
+        PrescriptionServiceImpl service = new PrescriptionServiceImpl();
+
+        Assert.assertTrue(service.isPerNeedFrequency("Per need"));
+        Assert.assertTrue(service.isPerNeedFrequency("As needed"));
+        Assert.assertTrue(service.isPerNeedFrequency("PRN"));
+        Assert.assertFalse(service.isPerNeedFrequency("Once a day"));
+    }
+
     private void assertCalculatedQuantity(String frequency, int duration, String durationUnit, String expectedQuantity) {
         PrescriptionLineCommand line = new PrescriptionLineCommand();
         line.setDose(BigDecimal.ONE);

@@ -10,6 +10,7 @@ import org.openmrs.DrugOrder;
 import org.openmrs.Encounter;
 import org.openmrs.EncounterRole;
 import org.openmrs.EncounterType;
+import org.openmrs.FreeTextDosingInstructions;
 import org.openmrs.Location;
 import org.openmrs.Order;
 import org.openmrs.OrderFrequency;
@@ -137,14 +138,23 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         Order firstSavedOrder = null;
         boolean hasBillableLine = false;
         int sortWeight = 1;
+        String inheritedHiePrescriptionGroupId = null;
         for (PrescriptionLineCommand line : lines) {
             if (line == null || line.getProductMasterItemId() == null) {
                 continue;
             }
             ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(line.getProductMasterItemId());
             validateProductMasterDrug(productMasterItem);
+            requireDoseInstructions(line);
             org.openmrs.module.rwandapharmacymanagement.model.Item localItem = ensureLocalItem(productMasterItem);
             BigDecimal requestedQuantity = calculateRequestedQuantity(line);
+            Date orderStartDate = resolveOrderStartDate(savedEncounter, line.getStartDate());
+            HiePrescriptionIdentity inheritedIdentity = replaceActiveSameDrugOrder(patient, productMasterItem.getDrug(),
+                    savedEncounter, orderingProvider, orderStartDate);
+            if (inheritedHiePrescriptionGroupId == null && inheritedIdentity != null
+                    && hasText(inheritedIdentity.getHiePrescriptionGroupId())) {
+                inheritedHiePrescriptionGroupId = inheritedIdentity.getHiePrescriptionGroupId();
+            }
             DrugOrder order = buildDrugOrder(patient, savedEncounter, orderingProvider, productMasterItem.getDrug(), line,
                     requestedQuantity, sortWeight++);
             Order savedOrder = Context.getOrderService().saveOrder(order, (OrderContext) null);
@@ -157,7 +167,12 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             requestLine.setOrder(savedOrder instanceof DrugOrder ? (DrugOrder) savedOrder : order);
             requestLine.setItem(localItem);
             requestLine.setRequestedQuantity(requestedQuantity);
-            boolean billableLine = isAvailableInHospitalStock(localItem);
+            if (inheritedIdentity != null && hasText(inheritedIdentity.getHieMedicationRequestId())) {
+                requestLine.setHieMedicationRequestId(inheritedIdentity.getHieMedicationRequestId());
+            }
+            applyLineBillingControl(requestLine, line);
+            applyHiddenItemBillingControl(requestLine);
+            boolean billableLine = Boolean.TRUE.equals(requestLine.getBillable()) && isAvailableInHospitalStock(localItem);
             hasBillableLine = hasBillableLine || billableLine;
             requestLine.setLineStatus(billableLine ? RequestStatus.PENDING_PAYMENT : RequestStatus.PENDING_DISPENSE);
             requestLines.add(requestLine);
@@ -187,6 +202,8 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         request.setEncounter(savedEncounter);
         request.setLines(requestLines);
         PatientDispensingRequest savedRequest = dispensingService.saveRequest(request);
+        initializeHiePrescriptionIdentity(savedRequest, inheritedHiePrescriptionGroupId);
+        savedRequest = dispensingService.saveRequest(savedRequest);
         notifyPrescriptionSavedAfterCommit(savedRequest, true);
         return savedRequest;
     }
@@ -210,6 +227,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         PrescriptionLineCommand line = lines.get(0);
         ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(line.getProductMasterItemId());
         validateProductMasterDrug(productMasterItem);
+        requireDoseInstructions(line);
         org.openmrs.module.rwandapharmacymanagement.model.Item localItem = ensureLocalItem(productMasterItem);
         BigDecimal requestedQuantity = calculateRequestedQuantity(line);
         DrugOrder matchingOrder = findMatchingOrder(request, requestLine);
@@ -219,30 +237,161 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         if (requestLine.getOrder() == null) {
             requestLine.setOrder(matchingOrder);
         }
+        initializeHiePrescriptionIdentity(request, null);
+        PatientDispensingRequestLine previousBillableLine = billingMatchSnapshot(requestLine, matchingOrder);
+        boolean wasBillableLine = Boolean.TRUE.equals(requestLine.getBillable());
+        boolean billingOnlyEdit = Boolean.FALSE.equals(line.getBillable());
 
-        DrugOrder revisedOrder = matchingOrder.cloneForRevision();
-        applyLineChanges(revisedOrder, request.getEncounter(), orderingProvider, productMasterItem.getDrug(), line, requestedQuantity);
-        Order savedOrder = Context.getOrderService().saveOrder(revisedOrder, (OrderContext) null);
-        DrugOrder savedDrugOrder = savedOrder instanceof DrugOrder ? (DrugOrder) savedOrder : revisedOrder;
-        requestLine.setOrder(savedDrugOrder);
-        if (request.getOrder() != null && request.getOrder().getOrderId() != null
-                && matchingOrder.getOrderId() != null
-                && request.getOrder().getOrderId().equals(matchingOrder.getOrderId())) {
-            request.setOrder(savedDrugOrder);
+        if (!billingOnlyEdit) {
+            if (!canReviseOrder(matchingOrder)) {
+                throw new IllegalArgumentException("This OpenMRS drug order is already stopped or expired. Only billing exclusion can be changed for this line.");
+            }
+            DrugOrder revisedOrder = matchingOrder.cloneForRevision();
+            applyLineChanges(revisedOrder, request.getEncounter(), orderingProvider, productMasterItem.getDrug(), line, requestedQuantity);
+            Order savedOrder = Context.getOrderService().saveOrder(revisedOrder, (OrderContext) null);
+            DrugOrder savedDrugOrder = savedOrder instanceof DrugOrder ? (DrugOrder) savedOrder : revisedOrder;
+            requestLine.setOrder(savedDrugOrder);
+            if (request.getOrder() != null && request.getOrder().getOrderId() != null
+                    && matchingOrder.getOrderId() != null
+                    && request.getOrder().getOrderId().equals(matchingOrder.getOrderId())) {
+                request.setOrder(savedDrugOrder);
+            }
         }
 
-        requestLine.setItem(localItem);
-        requestLine.setRequestedQuantity(requestedQuantity);
-        if (!isAvailableInHospitalStock(localItem)) {
+        if (!billingOnlyEdit) {
+            requestLine.setItem(localItem);
+            requestLine.setRequestedQuantity(requestedQuantity);
+        }
+        applyLineBillingControl(requestLine, line);
+        applyHiddenItemBillingControl(requestLine);
+        org.openmrs.module.rwandapharmacymanagement.model.Item statusItem = requestLine.getItem();
+        if (!Boolean.TRUE.equals(requestLine.getBillable()) || !isAvailableInHospitalStock(statusItem)) {
             requestLine.setLineStatus(RequestStatus.PENDING_DISPENSE);
         } else if (!Boolean.TRUE.equals(request.getPaymentConfirmed())) {
             requestLine.setLineStatus(RequestStatus.PENDING_PAYMENT);
         } else if (!isFinalStatus(requestLine.getLineStatus())) {
             requestLine.setLineStatus(RequestStatus.PENDING_DISPENSE);
         }
+        refreshBillingStateAfterLineChange(request);
+        reconcileEditedPrescriptionBilling(request, previousBillableLine, matchingOrder, wasBillableLine, requestLine);
         dispensingService.saveRequest(request);
         notifyPrescriptionLineUpdatedAfterCommit(request, requestLine);
         return request;
+    }
+
+    private boolean canReviseOrder(DrugOrder order) {
+        if (order == null || Boolean.TRUE.equals(order.getVoided())) {
+            return false;
+        }
+        Date now = new Date();
+        return order.isActive(now);
+    }
+
+    private PatientDispensingRequestLine billingMatchSnapshot(PatientDispensingRequestLine source, DrugOrder matchingOrder) {
+        PatientDispensingRequestLine snapshot = new PatientDispensingRequestLine();
+        if (source != null) {
+            snapshot.setPatientDispensingRequestLineId(source.getPatientDispensingRequestLineId());
+            snapshot.setItem(source.getItem());
+            snapshot.setRequestedQuantity(source.getRequestedQuantity());
+            snapshot.setUnitOfMeasure(source.getUnitOfMeasure());
+            snapshot.setBillable(source.getBillable());
+            snapshot.setOrder(source.getOrder());
+        }
+        if (matchingOrder != null) {
+            snapshot.setOrder(matchingOrder);
+        }
+        return snapshot;
+    }
+
+    private void reconcileEditedPrescriptionBilling(PatientDispensingRequest request,
+                                                    PatientDispensingRequestLine previousBillableLine,
+                                                    DrugOrder previousOrder,
+                                                    boolean wasBillableLine,
+                                                    PatientDispensingRequestLine currentLine) {
+        if (!wasBillableLine || request == null || currentLine == null) {
+            return;
+        }
+        boolean nowBillable = Boolean.TRUE.equals(currentLine.getBillable());
+        if (nowBillable) {
+            return;
+        }
+        String reason = "Prescription billing reconciliation: item marked not billable"
+                + (hasText(currentLine.getBillingExclusionReason())
+                ? " - " + currentLine.getBillingExclusionReason() : "");
+        boolean reconciled = voidRelatedBillingItems(request, previousBillableLine, previousOrder, reason)
+                || reconcileNotBillablePrescriptionBilling(request, request.getDateCreated());
+        if (!reconciled) {
+            log.warn("Prescription billing reconciliation did not find a matching bill item. requestId="
+                    + request.getPatientDispensingRequestId() + ", requestLineId="
+                    + currentLine.getPatientDispensingRequestLineId() + ", reason=" + reason);
+        }
+    }
+
+    private void applyLineBillingControl(PatientDispensingRequestLine requestLine, PrescriptionLineCommand command) {
+        boolean billable = command == null || !Boolean.FALSE.equals(command.getBillable());
+        String reason = command == null ? null : trimToNull(command.getBillingExclusionReason());
+        if (!billable && reason == null) {
+            throw new IllegalArgumentException("Reason is required when a prescription item is marked not billable");
+        }
+        requestLine.setBillable(Boolean.valueOf(billable));
+        requestLine.setBillingExclusionReason(billable ? null : reason);
+    }
+
+    private void applyHiddenItemBillingControl(PatientDispensingRequestLine requestLine) {
+        if (requestLine == null || requestLine.getItem() == null
+                || Boolean.TRUE.equals(requestLine.getItem().getVisibleToRequesters())) {
+            return;
+        }
+        requestLine.setBillable(Boolean.FALSE);
+        if (!hasText(requestLine.getBillingExclusionReason())) {
+            requestLine.setBillingExclusionReason("Item hidden from requesters");
+        }
+    }
+
+    private void refreshBillingStateAfterLineChange(PatientDispensingRequest request) {
+        if (request == null || request.getLines() == null) {
+            return;
+        }
+        boolean hasActiveLine = false;
+        boolean hasBillableLine = false;
+        for (PatientDispensingRequestLine line : request.getLines()) {
+            if (line == null || Boolean.TRUE.equals(line.getVoided()) || isFinalStatus(line.getLineStatus())) {
+                continue;
+            }
+            hasActiveLine = true;
+            boolean billableLine = Boolean.TRUE.equals(line.getBillable())
+                    && line.getItem() != null && isAvailableInHospitalStock(line.getItem());
+            hasBillableLine = hasBillableLine || billableLine;
+        }
+        if (!hasActiveLine) {
+            return;
+        }
+        request.setBillable(Boolean.valueOf(hasBillableLine));
+        if (!hasBillableLine) {
+            request.setPaymentConfirmed(Boolean.TRUE);
+            request.setRequestStatus(RequestStatus.PENDING_DISPENSE);
+            updateEditableLineStatuses(request, RequestStatus.PENDING_DISPENSE);
+            return;
+        }
+        Boolean paid = request.getPatientBillId() == null ? Boolean.FALSE
+                : dispensingService.isPatientBillPaid(request.getPatientBillId());
+        request.setPaymentConfirmed(Boolean.TRUE.equals(paid));
+        request.setRequestStatus(Boolean.TRUE.equals(paid) ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
+        updateEditableLineStatuses(request, Boolean.TRUE.equals(paid) ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
+    }
+
+    private void updateEditableLineStatuses(PatientDispensingRequest request, RequestStatus billableStatus) {
+        if (request == null || request.getLines() == null) {
+            return;
+        }
+        for (PatientDispensingRequestLine line : request.getLines()) {
+            if (line == null || Boolean.TRUE.equals(line.getVoided()) || isFinalStatus(line.getLineStatus())) {
+                continue;
+            }
+            boolean billableLine = Boolean.TRUE.equals(line.getBillable())
+                    && line.getItem() != null && isAvailableInHospitalStock(line.getItem());
+            line.setLineStatus(billableLine ? billableStatus : RequestStatus.PENDING_DISPENSE);
+        }
     }
 
     private void notifyPrescriptionSavedAfterCommit(final PatientDispensingRequest request, final boolean sendSms) {
@@ -362,6 +511,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             if (requestDate == null && persistedRequest.getEncounter() != null) {
                 requestDate = persistedRequest.getEncounter().getEncounterDatetime();
             }
+            boolean reconciledNotBillable = reconcileNotBillablePrescriptionBilling(persistedRequest, requestDate);
             Set<String> itemNames = billingLookupNames(persistedRequest);
             if (itemNames.isEmpty()) {
                 persistedRequest.setBillable(Boolean.FALSE);
@@ -369,7 +519,8 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
                 persistedRequest.setRequestStatus(RequestStatus.PENDING_DISPENSE);
                 PatientDispensingRequest savedRequest = dispensingService.saveRequest(persistedRequest);
                 log.info("Prescription request has no available billable lines. requestId="
-                        + savedRequest.getPatientDispensingRequestId());
+                        + savedRequest.getPatientDispensingRequestId() + ", reconciledNotBillable="
+                        + reconciledNotBillable);
                 return savedRequest;
             }
             Integer patientBillId = null;
@@ -407,7 +558,8 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             PatientDispensingRequest savedRequest = dispensingService.saveRequest(persistedRequest);
             log.info("Linked prescription request to patient bill. requestId="
                     + savedRequest.getPatientDispensingRequestId() + ", patientBillId=" + patientBillId
-                    + ", paid=" + Boolean.TRUE.equals(paid) + ", attempt=" + attempt);
+                    + ", paid=" + Boolean.TRUE.equals(paid) + ", attempt=" + attempt
+                    + ", reconciledNotBillable=" + reconciledNotBillable);
             return savedRequest;
         }
         catch (Exception e) {
@@ -422,6 +574,179 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
                 || status == RequestStatus.PARTIALLY_DISPENSED
                 || status == RequestStatus.UNAVAILABLE
                 || status == RequestStatus.CANCELLED;
+    }
+
+    private HiePrescriptionIdentity replaceActiveSameDrugOrder(Patient patient,
+                                                               Drug drug,
+                                                               Encounter encounter,
+                                                               Provider provider,
+                                                               Date replacementDate) {
+        DrugOrder activeOrder = findActiveSameDrugOrder(patient, drug, replacementDate);
+        if (activeOrder == null) {
+            return null;
+        }
+        HiePrescriptionIdentity identity = findOpenRequestLineHieIdentity(activeOrder);
+        String reason = "Replaced by newer pharmacy prescription";
+        Date discontinuedDate = replacementDate == null ? new Date() : replacementDate;
+        Context.getOrderService().discontinueOrder(activeOrder, reason, discontinuedDate, provider, encounter);
+        cancelOpenRequestLinesForReplacedOrder(activeOrder, reason);
+        return identity;
+    }
+
+    private DrugOrder findActiveSameDrugOrder(Patient patient, Drug drug, Date activeDate) {
+        if (patient == null || drug == null || drug.getDrugId() == null) {
+            return null;
+        }
+        Date date = activeDate == null ? new Date() : activeDate;
+        List<Order> activeOrders = Context.getOrderService().getActiveOrders(patient, resolveDrugOrderType(drug),
+                resolveCareSetting(), date);
+        if (activeOrders == null || activeOrders.isEmpty()) {
+            return null;
+        }
+        for (Order order : activeOrders) {
+            if (!(order instanceof DrugOrder) || Boolean.TRUE.equals(order.getVoided()) || !order.isActive(date)) {
+                continue;
+            }
+            DrugOrder drugOrder = (DrugOrder) order;
+            if (drugOrder.getDrug() != null && drugOrder.getDrug().getDrugId() != null
+                    && drug.getDrugId().equals(drugOrder.getDrug().getDrugId())) {
+                return drugOrder;
+            }
+        }
+        return null;
+    }
+
+    private HiePrescriptionIdentity findOpenRequestLineHieIdentity(DrugOrder replacedOrder) {
+        if (replacedOrder == null || replacedOrder.getOrderId() == null) {
+            return null;
+        }
+        List<PatientDispensingRequest> pendingRequests = dispensingService.getPendingRequests();
+        if (pendingRequests == null || pendingRequests.isEmpty()) {
+            return null;
+        }
+        for (PatientDispensingRequest request : pendingRequests) {
+            if (request == null || request.getLines() == null || Boolean.TRUE.equals(request.getVoided())) {
+                continue;
+            }
+            for (PatientDispensingRequestLine line : request.getLines()) {
+                if (isOpenLineForOrder(line, replacedOrder)) {
+                    return new HiePrescriptionIdentity(resolveHiePrescriptionGroupId(request),
+                            resolveHieMedicationRequestId(line));
+                }
+            }
+        }
+        return null;
+    }
+
+    private void initializeHiePrescriptionIdentity(PatientDispensingRequest request, String inheritedGroupId) {
+        if (request == null) {
+            return;
+        }
+        if (!hasText(request.getHiePrescriptionGroupId())) {
+            request.setHiePrescriptionGroupId(hasText(inheritedGroupId) ? inheritedGroupId : resolveHiePrescriptionGroupId(request));
+        }
+        if (request.getLines() == null) {
+            return;
+        }
+        for (PatientDispensingRequestLine line : request.getLines()) {
+            if (line != null && !hasText(line.getHieMedicationRequestId())) {
+                line.setHieMedicationRequestId(resolveHieMedicationRequestId(line));
+            }
+        }
+    }
+
+    private String resolveHiePrescriptionGroupId(PatientDispensingRequest request) {
+        if (request == null) {
+            return null;
+        }
+        if (hasText(request.getHiePrescriptionGroupId())) {
+            return request.getHiePrescriptionGroupId();
+        }
+        if (request.getPatientDispensingRequestId() != null) {
+            return "EP-unknown-" + request.getPatientDispensingRequestId();
+        }
+        return null;
+    }
+
+    private String resolveHieMedicationRequestId(PatientDispensingRequestLine line) {
+        if (line == null) {
+            return null;
+        }
+        if (hasText(line.getHieMedicationRequestId())) {
+            return line.getHieMedicationRequestId();
+        }
+        return line.getUuid();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && value.trim().length() > 0;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private static class HiePrescriptionIdentity {
+        private final String hiePrescriptionGroupId;
+        private final String hieMedicationRequestId;
+
+        private HiePrescriptionIdentity(String hiePrescriptionGroupId, String hieMedicationRequestId) {
+            this.hiePrescriptionGroupId = hiePrescriptionGroupId;
+            this.hieMedicationRequestId = hieMedicationRequestId;
+        }
+
+        private String getHiePrescriptionGroupId() {
+            return hiePrescriptionGroupId;
+        }
+
+        private String getHieMedicationRequestId() {
+            return hieMedicationRequestId;
+        }
+    }
+
+    private void cancelOpenRequestLinesForReplacedOrder(DrugOrder replacedOrder, String reason) {
+        if (replacedOrder == null || replacedOrder.getOrderId() == null) {
+            return;
+        }
+        List<PatientDispensingRequest> pendingRequests = dispensingService.getPendingRequests();
+        if (pendingRequests == null || pendingRequests.isEmpty()) {
+            return;
+        }
+        for (PatientDispensingRequest request : pendingRequests) {
+            if (request == null || request.getLines() == null || Boolean.TRUE.equals(request.getVoided())) {
+                continue;
+            }
+            boolean changed = false;
+            for (PatientDispensingRequestLine line : request.getLines()) {
+                if (!isOpenLineForOrder(line, replacedOrder)) {
+                    continue;
+                }
+                line.setLineStatus(RequestStatus.CANCELLED);
+                line.setVoided(Boolean.TRUE);
+                line.setVoidedBy(Context.getAuthenticatedUser());
+                line.setDateVoided(new Date());
+                line.setVoidReason(reason);
+                voidRelatedBillingItems(request, line, replacedOrder, reason);
+                notifyPrescriptionLineUpdatedAfterCommit(request, line);
+                changed = true;
+            }
+            if (changed) {
+                updateRequestStatusAfterLineChange(request, reason);
+                dispensingService.saveRequest(request);
+            }
+        }
+    }
+
+    private boolean isOpenLineForOrder(PatientDispensingRequestLine line, DrugOrder order) {
+        if (line == null || order == null || order.getOrderId() == null || Boolean.TRUE.equals(line.getVoided())
+                || isFinalStatus(line.getLineStatus()) || line.getOrder() == null || line.getOrder().getOrderId() == null) {
+            return false;
+        }
+        return order.getOrderId().equals(line.getOrder().getOrderId());
     }
 
     private void notifyPrescriptionLineUpdatedAfterCommit(final PatientDispensingRequest request,
@@ -472,6 +797,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         voidRelatedBillingItems(request, requestLine, matchingOrder, reason);
         updateRequestStatusAfterLineChange(request, reason);
         dispensingService.saveRequest(request);
+        notifyPrescriptionLineUpdatedAfterCommit(request, requestLine);
         return request;
     }
 
@@ -626,7 +952,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
                 if (matchingLine == null || !(matchingLine.getOrder() instanceof DrugOrder)) {
                     continue;
                 }
-                String drugFrequency = buildDrugFrequencyDetails(matchingLine, (DrugOrder) matchingLine.getOrder());
+                String drugFrequency = billingInstructionText((DrugOrder) matchingLine.getOrder());
                 if (drugFrequency.isEmpty()) {
                     continue;
                 }
@@ -663,47 +989,15 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         return null;
     }
 
-    private String buildDrugFrequencyDetails(PatientDispensingRequestLine requestLine, DrugOrder order) {
-        List<String> parts = new ArrayList<String>();
-        addDetailPart(parts, "Dose", formatDose(order));
-        addDetailPart(parts, "Frequency", order.getFrequency() == null ? "" : order.getFrequency().getName());
-        addDetailPart(parts, "Route", order.getRoute() == null ? "" : order.getRoute().getDisplayString());
-        addDetailPart(parts, "Duration", formatDuration(order));
-        addDetailPart(parts, "Quantity", requestLine == null || requestLine.getRequestedQuantity() == null
-                ? "" : requestLine.getRequestedQuantity().stripTrailingZeros().toPlainString());
-        StringBuilder value = new StringBuilder();
-        for (String part : parts) {
-            if (value.length() > 0) {
-                value.append("; ");
-            }
-            value.append(part);
-        }
-        return value.toString();
-    }
-
-    private void addDetailPart(List<String> parts, String label, String value) {
-        if (parts == null || value == null || value.trim().isEmpty()) {
-            return;
-        }
-        parts.add(label + ": " + value.trim());
-    }
-
-    private String formatDose(DrugOrder order) {
-        if (order == null || order.getDose() == null) {
+    private String billingInstructionText(DrugOrder order) {
+        if (order == null) {
             return "";
         }
-        String dose = BigDecimal.valueOf(order.getDose()).stripTrailingZeros().toPlainString();
-        String units = order.getDoseUnits() == null ? "" : order.getDoseUnits().getDisplayString();
-        return units == null || units.trim().isEmpty() ? dose : dose + " " + units.trim();
-    }
-
-    private String formatDuration(DrugOrder order) {
-        if (order == null || order.getDuration() == null) {
-            return "";
+        String instructions = safe(order.getDosingInstructions());
+        if (!instructions.isEmpty()) {
+            return instructions;
         }
-        String duration = String.valueOf(order.getDuration());
-        String units = order.getDurationUnits() == null ? "" : order.getDurationUnits().getDisplayString();
-        return units == null || units.trim().isEmpty() ? duration : duration + " " + units.trim();
+        return safe(order.getInstructions());
     }
 
     private boolean setDrugFrequencyOnBillingItem(Class<?> billingServiceClass, Object billingService,
@@ -729,12 +1023,12 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         return value == null ? "" : value.replace("'", "''");
     }
 
-    private void voidRelatedBillingItems(PatientDispensingRequest request,
-                                         PatientDispensingRequestLine requestLine,
-                                         DrugOrder matchingOrder,
-                                         String reason) {
+    private boolean voidRelatedBillingItems(PatientDispensingRequest request,
+                                            PatientDispensingRequestLine requestLine,
+                                            DrugOrder matchingOrder,
+                                            String reason) {
         if (request == null || request.getPatientBillId() == null) {
-            return;
+            return false;
         }
         try {
             Class<?> billingServiceClass = Context.loadClass("org.openmrs.module.mohbilling.service.BillingService");
@@ -743,27 +1037,29 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             Class<?> patientServiceBillClass = Context.loadClass("org.openmrs.module.mohbilling.model.PatientServiceBill");
             Object billingService = Context.getService(billingServiceClass);
             if (billingService == null) {
-                return;
+                return false;
             }
             Object patientBill = billingServiceClass.getMethod("getPatientBill", Integer.class)
                     .invoke(billingService, request.getPatientBillId());
             if (patientBill == null) {
-                return;
+                return false;
             }
             Object consommation = billingServiceClass.getMethod("getConsommationByPatientBill", patientBillClass)
                     .invoke(billingService, patientBill);
             if (consommation == null) {
-                return;
+                return false;
             }
             Set<?> billItems = safeCastSet(invokeNoArg(consommation, "getBillItems"));
             if (billItems == null || billItems.isEmpty()) {
-                return;
+                return false;
             }
             boolean anyVoided = false;
+            BigDecimal voidedTotal = BigDecimal.ZERO;
             for (Object billItem : billItems) {
                 if (!matchesBillingItem(billItem, requestLine, matchingOrder)) {
                     continue;
                 }
+                voidedTotal = voidedTotal.add(billItemTotal(billItem));
                 invokeSetter(billItem, "setVoided", Boolean.TRUE, Boolean.class);
                 invokeSetter(billItem, "setVoidedBy", Context.getAuthenticatedUser(), Context.loadClass("org.openmrs.User"));
                 invokeSetter(billItem, "setVoidedDate", new Date(), Date.class);
@@ -772,8 +1068,10 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
                 anyVoided = true;
             }
             if (!anyVoided) {
-                return;
+                return false;
             }
+            adjustBillingTotalsAfterVoids(billingServiceClass, billingService, patientBillClass, patientBill,
+                    consommation, voidedTotal);
             boolean hasActiveBillItems = false;
             for (Object billItem : billItems) {
                 if (!extractBoolean(billItem, "getVoided")) {
@@ -796,9 +1094,322 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
                     billingServiceClass.getMethod("savePatientBill", patientBillClass).invoke(billingService, patientBill);
                 }
             }
+            return true;
         }
         catch (Exception ignored) {
+            return false;
         }
+    }
+
+    private boolean reconcileNotBillablePrescriptionBilling(PatientDispensingRequest request, Date requestDate) {
+        if (request == null || request.getPatient() == null || request.getLines() == null
+                || request.getLines().isEmpty()) {
+            return false;
+        }
+        List<PatientDispensingRequestLine> notBillableLines = notBillableLines(request);
+        if (notBillableLines.isEmpty()) {
+            return false;
+        }
+        try {
+            Class<?> billingServiceClass = Context.loadClass("org.openmrs.module.mohbilling.service.BillingService");
+            Class<?> patientBillClass = Context.loadClass("org.openmrs.module.mohbilling.model.PatientBill");
+            Class<?> consommationClass = Context.loadClass("org.openmrs.module.mohbilling.model.Consommation");
+            Class<?> patientServiceBillClass = Context.loadClass("org.openmrs.module.mohbilling.model.PatientServiceBill");
+            Object billingService = Context.getService(billingServiceClass);
+            if (billingService == null) {
+                return false;
+            }
+            boolean anyVoided = false;
+            if (request.getPatientBillId() != null) {
+                Object patientBill = billingServiceClass.getMethod("getPatientBill", Integer.class)
+                        .invoke(billingService, request.getPatientBillId());
+                Object consommation = patientBill == null ? null
+                        : billingServiceClass.getMethod("getConsommationByPatientBill", patientBillClass)
+                        .invoke(billingService, patientBill);
+                anyVoided = voidNotBillableLinesFromConsommation(billingServiceClass, billingService,
+                        patientBillClass, consommationClass, patientServiceBillClass, patientBill, consommation,
+                        notBillableLines, "linked bill");
+            }
+
+            Method getPolicies = billingServiceClass.getMethod("getAllInsurancePoliciesByPatient", Patient.class);
+            Object policyResult = getPolicies.invoke(billingService, request.getPatient());
+            if (!(policyResult instanceof Iterable)) {
+                return anyVoided;
+            }
+            Method getConsommationsByBeneficiary = billingServiceClass.getMethod("getConsommationsByBeneficiary",
+                    Context.loadClass("org.openmrs.module.mohbilling.model.Beneficiary"));
+            for (Object policy : (Iterable<?>) policyResult) {
+                Iterable<?> beneficiaries = extractIterable(policy, "getBeneficiaries");
+                if (beneficiaries == null) {
+                    continue;
+                }
+                for (Object beneficiary : beneficiaries) {
+                    if (!matchesPatient(beneficiary, request.getPatient())) {
+                        continue;
+                    }
+                    Object consommations = getConsommationsByBeneficiary.invoke(billingService, beneficiary);
+                    if (!(consommations instanceof Iterable)) {
+                        continue;
+                    }
+                    for (Object consommation : (Iterable<?>) consommations) {
+                        Object patientBill = invokeNoArg(consommation, "getPatientBill");
+                        Integer candidateBillId = extractInteger(patientBill, "getPatientBillId");
+                        if (request.getPatientBillId() != null && request.getPatientBillId().equals(candidateBillId)) {
+                            continue;
+                        }
+                        if (!isRecentBillingCandidate(consommation, patientBill, requestDate)) {
+                            continue;
+                        }
+                        anyVoided = voidNotBillableLinesFromConsommation(billingServiceClass, billingService,
+                                patientBillClass, consommationClass, patientServiceBillClass, patientBill, consommation,
+                                notBillableLines, "recent bill") || anyVoided;
+                    }
+                }
+            }
+            return anyVoided;
+        }
+        catch (Exception e) {
+            log.warn("Failed to reconcile not-billable prescription bill items. requestId="
+                    + request.getPatientDispensingRequestId(), e);
+            return false;
+        }
+    }
+
+    private List<PatientDispensingRequestLine> notBillableLines(PatientDispensingRequest request) {
+        List<PatientDispensingRequestLine> lines = new ArrayList<PatientDispensingRequestLine>();
+        if (request == null || request.getLines() == null) {
+            return lines;
+        }
+        for (PatientDispensingRequestLine line : request.getLines()) {
+            if (line == null || Boolean.TRUE.equals(line.getVoided())) {
+                continue;
+            }
+            if (Boolean.FALSE.equals(line.getBillable()) || isHiddenRequestLine(line)) {
+                lines.add(line);
+            }
+        }
+        return lines;
+    }
+
+    private boolean isHiddenRequestLine(PatientDispensingRequestLine line) {
+        return line != null && line.getItem() != null
+                && !Boolean.TRUE.equals(line.getItem().getVisibleToRequesters());
+    }
+
+    private boolean voidNotBillableLinesFromConsommation(Class<?> billingServiceClass,
+                                                        Object billingService,
+                                                        Class<?> patientBillClass,
+                                                        Class<?> consommationClass,
+                                                        Class<?> patientServiceBillClass,
+                                                        Object patientBill,
+                                                        Object consommation,
+                                                        List<PatientDispensingRequestLine> notBillableLines,
+                                                        String source) throws Exception {
+        if (patientBill == null || consommation == null || notBillableLines == null || notBillableLines.isEmpty()
+                || extractBoolean(patientBill, "getVoided") || extractBoolean(consommation, "getVoided")) {
+            return false;
+        }
+        Set<?> billItems = safeCastSet(invokeNoArg(consommation, "getBillItems"));
+        if (billItems == null || billItems.isEmpty()) {
+            return false;
+        }
+        boolean anyVoided = false;
+        BigDecimal voidedTotal = BigDecimal.ZERO;
+        for (Object billItem : billItems) {
+            if (billItem == null || extractBoolean(billItem, "getVoided")) {
+                continue;
+            }
+            PatientDispensingRequestLine matchingLine = matchingNotBillableLine(billItem, notBillableLines);
+            if (matchingLine == null) {
+                continue;
+            }
+            voidedTotal = voidedTotal.add(billItemTotal(billItem));
+            String reason = "RPM not-billable prescription reconciliation"
+                    + (hasText(matchingLine.getBillingExclusionReason())
+                    ? " - " + matchingLine.getBillingExclusionReason() : "");
+            invokeSetter(billItem, "setVoided", Boolean.TRUE, Boolean.class);
+            invokeSetter(billItem, "setVoidedBy", Context.getAuthenticatedUser(), Context.loadClass("org.openmrs.User"));
+            invokeSetter(billItem, "setVoidedDate", new Date(), Date.class);
+            invokeSetter(billItem, "setVoidReason", reason, String.class);
+            billingServiceClass.getMethod("saveBilledItem", patientServiceBillClass).invoke(billingService, billItem);
+            anyVoided = true;
+            log.info("Voided not-billable prescription bill item from " + source + ". requestLineId="
+                    + matchingLine.getPatientDispensingRequestLineId() + ", patientBillId="
+                    + extractInteger(patientBill, "getPatientBillId") + ", reason=" + reason);
+        }
+        if (anyVoided) {
+            adjustBillingTotalsAfterVoids(billingServiceClass, billingService, patientBillClass, patientBill,
+                    consommation, voidedTotal);
+            voidEmptyBillingContainers(billingServiceClass, billingService, patientBillClass, consommationClass,
+                    patientBill, consommation, "RPM not-billable prescription reconciliation");
+        }
+        return anyVoided;
+    }
+
+    private PatientDispensingRequestLine matchingNotBillableLine(Object billItem,
+                                                                 List<PatientDispensingRequestLine> notBillableLines) {
+        if (billItem == null || notBillableLines == null) {
+            return null;
+        }
+        for (PatientDispensingRequestLine line : notBillableLines) {
+            if (line == null || !matchesBillingItem(billItem, line, line.getOrder())) {
+                continue;
+            }
+            if (!billQuantityMatchesLine(billItem, line)) {
+                continue;
+            }
+            return line;
+        }
+        return null;
+    }
+
+    private boolean billQuantityMatchesLine(Object billItem, PatientDispensingRequestLine line) {
+        BigDecimal billQuantity = extractBigDecimal(billItem, "getQuantity");
+        BigDecimal requestedQuantity = line == null ? null : line.getRequestedQuantity();
+        if (billQuantity == null || requestedQuantity == null) {
+            return true;
+        }
+        return billQuantity.compareTo(requestedQuantity) == 0;
+    }
+
+    private BigDecimal billItemTotal(Object billItem) {
+        BigDecimal quantity = extractBigDecimal(billItem, "getQuantity");
+        BigDecimal unitPrice = extractBigDecimal(billItem, "getUnitPrice");
+        if (quantity == null || unitPrice == null) {
+            return BigDecimal.ZERO;
+        }
+        return quantity.multiply(unitPrice);
+    }
+
+    private void adjustBillingTotalsAfterVoids(Class<?> billingServiceClass,
+                                               Object billingService,
+                                               Class<?> patientBillClass,
+                                               Object patientBill,
+                                               Object consommation,
+                                               BigDecimal voidedTotal) throws Exception {
+        if (voidedTotal == null || voidedTotal.compareTo(BigDecimal.ZERO) <= 0 || patientBill == null) {
+            return;
+        }
+        BigDecimal currentBillAmount = extractBigDecimal(patientBill, "getAmount");
+        if (currentBillAmount != null) {
+            invokeSetter(patientBill, "setAmount", subtractWithoutNegative(currentBillAmount, voidedTotal),
+                    BigDecimal.class);
+            billingServiceClass.getMethod("savePatientBill", patientBillClass).invoke(billingService, patientBill);
+        }
+        adjustNestedBillingAmount(billingServiceClass, billingService, consommation, "getInsuranceBill",
+                "org.openmrs.module.mohbilling.model.InsuranceBill", "saveInsuranceBill", voidedTotal);
+        adjustNestedBillingAmount(billingServiceClass, billingService, consommation, "getThirdPartyBill",
+                "org.openmrs.module.mohbilling.model.ThirdPartyBill", "saveThirdPartyBill", voidedTotal);
+        Object globalBill = consommation == null ? null : invokeNoArg(consommation, "getGlobalBill");
+        if (globalBill != null) {
+            BigDecimal currentGlobalAmount = extractBigDecimal(globalBill, "getGlobalAmount");
+            if (currentGlobalAmount != null) {
+                invokeSetter(globalBill, "setGlobalAmount", subtractWithoutNegative(currentGlobalAmount, voidedTotal),
+                        BigDecimal.class);
+                saveGlobalBillWithBillingUtil(globalBill,
+                        Context.loadClass("org.openmrs.module.mohbilling.model.GlobalBill"));
+            }
+        }
+    }
+
+    private BigDecimal subtractWithoutNegative(BigDecimal currentAmount, BigDecimal amountToSubtract) {
+        BigDecimal result = (currentAmount == null ? BigDecimal.ZERO : currentAmount)
+                .subtract(amountToSubtract == null ? BigDecimal.ZERO : amountToSubtract);
+        return result.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : result;
+    }
+
+    private void adjustNestedBillingAmount(Class<?> billingServiceClass,
+                                           Object billingService,
+                                           Object consommation,
+                                           String getterName,
+                                           String billClassName,
+                                           String saveMethodName,
+                                           BigDecimal voidedTotal) throws Exception {
+        Object nestedBill = consommation == null ? null : invokeNoArg(consommation, getterName);
+        if (nestedBill == null) {
+            return;
+        }
+        BigDecimal currentAmount = extractBigDecimal(nestedBill, "getAmount");
+        if (currentAmount == null) {
+            return;
+        }
+        invokeSetter(nestedBill, "setAmount", subtractWithoutNegative(currentAmount, voidedTotal), BigDecimal.class);
+        billingServiceClass.getMethod(saveMethodName, Context.loadClass(billClassName)).invoke(billingService, nestedBill);
+    }
+
+    private boolean isRecentBillingCandidate(Object consommation, Object patientBill, Date requestDate) {
+        if (requestDate == null) {
+            return true;
+        }
+        Date candidateDate = extractDate(consommation, "getCreatedDate");
+        if (candidateDate == null) {
+            candidateDate = extractDate(patientBill, "getCreatedDate");
+        }
+        if (candidateDate == null) {
+            return false;
+        }
+        Date from = addMinutes(requestDate, -30);
+        Date to = addMinutes(requestDate, 30);
+        return !candidateDate.before(from) && !candidateDate.after(to);
+    }
+
+    private void voidEmptyBillingContainers(Class<?> billingServiceClass,
+                                            Object billingService,
+                                            Class<?> patientBillClass,
+                                            Class<?> consommationClass,
+                                            Object patientBill,
+                                            Object consommation,
+                                            String reason) throws Exception {
+        Set<?> billItems = safeCastSet(invokeNoArg(consommation, "getBillItems"));
+        boolean hasActiveBillItems = false;
+        if (billItems != null) {
+            for (Object billItem : billItems) {
+                if (!extractBoolean(billItem, "getVoided")) {
+                    hasActiveBillItems = true;
+                    break;
+                }
+            }
+        }
+        if (hasActiveBillItems) {
+            return;
+        }
+        invokeSetter(consommation, "setVoided", Boolean.TRUE, boolean.class);
+        invokeSetter(consommation, "setVoidedBy", Context.getAuthenticatedUser(), Context.loadClass("org.openmrs.User"));
+        invokeSetter(consommation, "setVoidedDate", new Date(), Date.class);
+        invokeSetter(consommation, "setVoidReason", reason, String.class);
+        zeroAndVoidNestedBill(billingServiceClass, billingService, consommation, "getInsuranceBill",
+                "org.openmrs.module.mohbilling.model.InsuranceBill", "saveInsuranceBill", reason);
+        zeroAndVoidNestedBill(billingServiceClass, billingService, consommation, "getThirdPartyBill",
+                "org.openmrs.module.mohbilling.model.ThirdPartyBill", "saveThirdPartyBill", reason);
+        billingServiceClass.getMethod("saveConsommation", consommationClass).invoke(billingService, consommation);
+        if (!extractBoolean(patientBill, "getIsPaid")) {
+            invokeSetter(patientBill, "setAmount", BigDecimal.ZERO, BigDecimal.class);
+            invokeSetter(patientBill, "setVoided", Boolean.TRUE, Boolean.class);
+            invokeSetter(patientBill, "setVoidedBy", Context.getAuthenticatedUser(), Context.loadClass("org.openmrs.User"));
+            invokeSetter(patientBill, "setVoidedDate", new Date(), Date.class);
+            invokeSetter(patientBill, "setVoidReason", reason, String.class);
+            invokeSetter(patientBill, "setStatus", "CANCELLED", String.class);
+            billingServiceClass.getMethod("savePatientBill", patientBillClass).invoke(billingService, patientBill);
+        }
+    }
+
+    private void zeroAndVoidNestedBill(Class<?> billingServiceClass,
+                                       Object billingService,
+                                       Object consommation,
+                                       String getterName,
+                                       String billClassName,
+                                       String saveMethodName,
+                                       String reason) throws Exception {
+        Object nestedBill = consommation == null ? null : invokeNoArg(consommation, getterName);
+        if (nestedBill == null) {
+            return;
+        }
+        invokeSetter(nestedBill, "setAmount", BigDecimal.ZERO, BigDecimal.class);
+        invokeSetter(nestedBill, "setVoided", Boolean.TRUE, boolean.class);
+        invokeSetter(nestedBill, "setVoidedBy", Context.getAuthenticatedUser(), Context.loadClass("org.openmrs.User"));
+        invokeSetter(nestedBill, "setVoidedDate", new Date(), Date.class);
+        invokeSetter(nestedBill, "setVoidReason", reason, String.class);
+        billingServiceClass.getMethod(saveMethodName, Context.loadClass(billClassName)).invoke(billingService, nestedBill);
     }
 
     @SuppressWarnings("unchecked")
@@ -1120,6 +1731,13 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         return calendar.getTime();
     }
 
+    private Date addMinutes(Date date, int minutes) {
+        java.util.Calendar calendar = java.util.Calendar.getInstance();
+        calendar.setTime(date == null ? new Date() : date);
+        calendar.add(java.util.Calendar.MINUTE, minutes);
+        return calendar.getTime();
+    }
+
     private Method findMethod(Class<?> type, String name, Class<?>... parameterTypes) {
         if (type == null) {
             return null;
@@ -1156,6 +1774,11 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         }
     }
 
+    private Object saveGlobalBillWithBillingUtil(Object globalBill, Class<?> globalBillClass) throws Exception {
+        Class<?> globalBillUtilClass = Context.loadClass("org.openmrs.module.mohbilling.businesslogic.GlobalBillUtil");
+        return globalBillUtilClass.getMethod("saveGlobalBill", globalBillClass).invoke(null, globalBill);
+    }
+
     private boolean invokeSetterIfPresent(Object target, String methodName, Object value, Class<?> parameterType) {
         if (target == null) {
             return false;
@@ -1178,6 +1801,17 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
     private Integer extractInteger(Object target, String methodName) {
         Object value = invokeNoArg(target, methodName);
         return value instanceof Integer ? (Integer) value : null;
+    }
+
+    private BigDecimal extractBigDecimal(Object target, String methodName) {
+        Object value = invokeNoArg(target, methodName);
+        if (value instanceof BigDecimal) {
+            return (BigDecimal) value;
+        }
+        if (value instanceof Number) {
+            return BigDecimal.valueOf(((Number) value).doubleValue());
+        }
+        return null;
     }
 
     private String safeString(Object value) {
@@ -1209,7 +1843,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         order.setQuantityUnits(resolveQuantityUnits(drug));
         order.setNumRefills(Integer.valueOf(0));
         order.setRoute(resolveRoute(line.getRoute()));
-        order.setFrequency(resolveFrequency(line.getFrequency()));
+        applyFrequencyAndDosingType(order, line);
         order.setDuration(line.getDuration());
         order.setDurationUnits(resolveDurationUnit(line.getDurationUnit()));
         order.setInstructions(buildInstructions(line));
@@ -1239,7 +1873,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         order.setQuantity(requestedQuantity.doubleValue());
         order.setQuantityUnits(resolveQuantityUnits(drug));
         order.setRoute(resolveRoute(line.getRoute()));
-        order.setFrequency(resolveFrequency(line.getFrequency()));
+        applyFrequencyAndDosingType(order, line);
         order.setDuration(line.getDuration());
         order.setDurationUnits(resolveDurationUnit(line.getDurationUnit()));
         order.setInstructions(buildInstructions(line));
@@ -1369,6 +2003,12 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             throw new IllegalArgumentException("Prescription quantity must be greater than zero");
         }
         return normalizeQuantityScale(quantity);
+    }
+
+    private void requireDoseInstructions(PrescriptionLineCommand line) {
+        if (line == null || safe(line.getInstructions()).isEmpty()) {
+            throw new IllegalArgumentException("Dose instructions are required");
+        }
     }
 
     BigDecimal calculateRequestedQuantity(PrescriptionLineCommand line) {
@@ -1546,6 +2186,9 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         if (inventoryService == null || item == null || item.getItemId() == null) {
             return false;
         }
+        if (!Boolean.TRUE.equals(item.getVisibleToRequesters())) {
+            return false;
+        }
         List<InventoryBalance> balances = inventoryService.getInventoryForPharmacy(null);
         if (balances == null) {
             return false;
@@ -1581,6 +2224,11 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
     }
 
     private org.openmrs.module.rwandapharmacymanagement.model.Item ensureLocalItem(ProductMasterItem productMasterItem) {
+        org.openmrs.module.rwandapharmacymanagement.model.Item mappedItem =
+                pharmacyService.getMappedItemForProductMasterItem(productMasterItem);
+        if (mappedItem != null) {
+            return mappedItem;
+        }
         String npcCode = safe(productMasterItem.getNpcCode());
         if (!npcCode.trim().isEmpty()) {
             org.openmrs.module.rwandapharmacymanagement.model.Item existingItem =
@@ -1732,6 +2380,24 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             }
         }
         return null;
+    }
+
+    private void applyFrequencyAndDosingType(DrugOrder order, PrescriptionLineCommand line) {
+        if (isPerNeedFrequency(line == null ? null : line.getFrequency())) {
+            order.setAsNeeded(Boolean.TRUE);
+            order.setAsNeededCondition(safe(line == null ? null : line.getInstructions()));
+            order.setFrequency(null);
+            order.setDosingType(FreeTextDosingInstructions.class);
+            return;
+        }
+        order.setAsNeeded(Boolean.FALSE);
+        order.setAsNeededCondition(null);
+        order.setFrequency(resolveFrequency(line == null ? null : line.getFrequency()));
+    }
+
+    boolean isPerNeedFrequency(String frequencyName) {
+        String text = normalizeFrequencyName(frequencyName);
+        return text.contains("per need") || text.contains("as needed") || "prn".equals(text);
     }
 
     private boolean frequencyNameMatches(OrderFrequency frequency, String desired, boolean exact) {

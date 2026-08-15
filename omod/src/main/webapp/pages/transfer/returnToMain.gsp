@@ -98,11 +98,11 @@
             <td>${ request.destinationPharmacyLocation?.name ?: '' }</td>
             <td>${ request.reason ?: '' }</td>
             <td>
-                <% request.lines?.each { line -> %>
+                <% request.lines?.each { line -> if (line.voided != true) { %>
                 <div>${ line.item?.name ?: '' }: ${ line.quantity ?: 0 }${ line.batchNumber ? ' - ' + line.batchNumber : '' }</div>
-                <% } %>
+                <% } } %>
             </td>
-            <td>${ request.lines?.collect { line -> line.totalAmount ?: ((line.unitPrice ?: 0) * (line.quantity ?: 0)) }?.sum() ?: 0 }</td>
+            <td>${ request.lines?.findAll { line -> line.voided != true }?.collect { line -> line.totalAmount ?: ((line.unitPrice ?: 0) * (line.quantity ?: 0)) }?.sum() ?: 0 }</td>
             <td>
                 <span class="return-chip ${ request.transferStatus == 'APPROVED' ? 'return-chip-approved' : request.transferStatus == 'REJECTED' ? 'return-chip-rejected' : request.transferStatus == 'SERVED' ? 'return-chip-served' : 'return-chip-pending' }">${ request.transferStatus == 'SERVED' ? 'TRANSFERRED' : (request.transferStatus ?: '') }</span>
             </td>
@@ -115,6 +115,8 @@
                     <form method="post"><input type="hidden" name="transferId" value="${ request.interPharmacyTransferId }"/><input type="text" name="rejectionReason" placeholder="Reason"/><button type="submit" name="action" value="reject">Reject</button></form>
                     <% } else if (activePharmacy && request.transferStatus == 'REQUESTED') { %>
                     <span style="color:#777;">Needs stock transfer privilege</span>
+                    <% } else if (request.transferStatus == 'SERVED') { %>
+                    <a href="${ ui.pageLink('rwandapharmacymanagement', 'transfer/pdf', [transferId: request.interPharmacyTransferId]) }">Download PDF</a>
                     <% } %>
                 </div>
             </td>

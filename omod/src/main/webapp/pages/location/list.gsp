@@ -34,6 +34,7 @@
             <select name="locationType" id="locationType">
                 <option value="MAIN_PHARMACY">Main Pharmacy</option>
                 <option value="DISPENSING_PHARMACY">Dispensing Pharmacy</option>
+                <option value="DEPARTMENT_STORE">Department Store</option>
             </select>
         </p>
         <p>

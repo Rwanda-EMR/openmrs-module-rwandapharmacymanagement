@@ -2,6 +2,7 @@ package org.openmrs.module.rwandapharmacymanagement.page.controller.admin;
 
 import org.openmrs.Concept;
 import org.openmrs.api.context.Context;
+import org.openmrs.module.rwandapharmacymanagement.api.DepartmentBulkRequestService;
 import org.openmrs.module.rwandapharmacymanagement.api.PricingService;
 import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.ui.framework.UiUtils;
@@ -23,6 +24,9 @@ public class SettingsPageController {
         model.addAttribute("dispensingMarkupPercentage", pricingService.getDispensingMarkupPercentage());
         model.addAttribute("prescriptionPaymentBillMode", Context.getAdministrationService()
                 .getGlobalProperty(RwandaPharmacyManagementConfig.GP_PRESCRIPTION_PAYMENT_BILL_MODE, "latest"));
+        model.addAttribute("departmentBulkRequestWorkflowMode", Context.getAdministrationService()
+                .getGlobalProperty(DepartmentBulkRequestService.GP_WORKFLOW_MODE,
+                        DepartmentBulkRequestService.MODE_PERIODIC_ACCOUNTABILITY));
         model.addAttribute("smsEnabled", Context.getAdministrationService()
                 .getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_ENABLED, "false"));
         model.addAttribute("smsPostUrl", Context.getAdministrationService()
@@ -67,6 +71,7 @@ public class SettingsPageController {
                        @RequestParam("dispensingMarkupPercentage") BigDecimal dispensingMarkupPercentage,
                        @RequestParam(value = "expiryAlertDays", required = false) String expiryAlertDays,
                        @RequestParam(value = "prescriptionPaymentBillMode", required = false) String prescriptionPaymentBillMode,
+                       @RequestParam(value = "departmentBulkRequestWorkflowMode", required = false) String departmentBulkRequestWorkflowMode,
                        @RequestParam(value = "smsEnabled", required = false) String smsEnabled,
                        @RequestParam(value = "smsPostUrl", required = false) String smsPostUrl,
                        @RequestParam(value = "smsUsername", required = false) String smsUsername,
@@ -92,6 +97,11 @@ public class SettingsPageController {
         Context.getAdministrationService().setGlobalProperty(
                 RwandaPharmacyManagementConfig.GP_PRESCRIPTION_PAYMENT_BILL_MODE,
                 "strict".equalsIgnoreCase(prescriptionPaymentBillMode) ? "strict" : "latest");
+        Context.getAdministrationService().setGlobalProperty(
+                DepartmentBulkRequestService.GP_WORKFLOW_MODE,
+                DepartmentBulkRequestService.MODE_FULL_VISIBILITY.equalsIgnoreCase(departmentBulkRequestWorkflowMode)
+                        ? DepartmentBulkRequestService.MODE_FULL_VISIBILITY
+                        : DepartmentBulkRequestService.MODE_PERIODIC_ACCOUNTABILITY);
         Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_ENABLED,
                 "true".equalsIgnoreCase(smsEnabled) ? "true" : "false");
         Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_POST_URL,

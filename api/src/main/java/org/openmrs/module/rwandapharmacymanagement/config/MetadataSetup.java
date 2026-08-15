@@ -5,6 +5,7 @@ import org.openmrs.Role;
 import org.openmrs.api.AdministrationService;
 import org.openmrs.api.UserService;
 import org.openmrs.api.context.Context;
+import org.openmrs.module.rwandapharmacymanagement.api.DepartmentBulkRequestService;
 import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.springframework.stereotype.Component;
 
@@ -28,6 +29,7 @@ public class MetadataSetup implements Setup {
             "Task: rwandapharmacymanagement.viewStock",
             RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK,
             RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER,
+            RwandaPharmacyManagementConfig.PRIVILEGE_DEPARTMENT_STORE,
             RwandaPharmacyManagementConfig.PRIVILEGE_ADJUST_STOCK,
             RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_PAYMENT_EXCEPTION,
             "Task: rwandapharmacymanagement.viewPatientQueue",
@@ -107,6 +109,10 @@ public class MetadataSetup implements Setup {
                 RwandaPharmacyManagementConfig.PRIVILEGE_DASHBOARD,
                 "Task: rwandapharmacymanagement.viewStock",
                 "Task: rwandapharmacymanagement.receiveDeliveries");
+        saveRole(userService, "Rwanda Pharmacy Department Store",
+                RwandaPharmacyManagementConfig.PRIVILEGE_DASHBOARD,
+                RwandaPharmacyManagementConfig.PRIVILEGE_DEPARTMENT_STORE,
+                "Task: rwandapharmacymanagement.viewStock");
         saveRole(userService, "Rwanda Pharmacy Reports Viewer",
                 RwandaPharmacyManagementConfig.PRIVILEGE_DASHBOARD,
                 "Task: rwandapharmacymanagement.viewStock");
@@ -134,6 +140,7 @@ public class MetadataSetup implements Setup {
                 "Task: rwandapharmacymanagement.viewStock",
                 RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK,
                 RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER,
+                RwandaPharmacyManagementConfig.PRIVILEGE_DEPARTMENT_STORE,
                 RwandaPharmacyManagementConfig.PRIVILEGE_ADJUST_STOCK,
                 RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_PAYMENT_EXCEPTION,
                 "Task: rwandapharmacymanagement.viewPatientQueue",
@@ -217,6 +224,8 @@ public class MetadataSetup implements Setup {
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_RETRY_SCHEDULER_ENABLED, "true");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_RETRY_SCHEDULER_INTERVAL_SECONDS, "1800");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_RETRY_BATCH_SIZE, "50");
+        saveGlobalProperty(administrationService, DepartmentBulkRequestService.GP_WORKFLOW_MODE,
+                DepartmentBulkRequestService.MODE_PERIODIC_ACCOUNTABILITY);
     }
 
     private void saveGlobalProperty(AdministrationService administrationService, String property, String defaultValue) {

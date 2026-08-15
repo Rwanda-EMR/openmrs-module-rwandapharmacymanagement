@@ -102,14 +102,15 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
         if (preparedLines.isEmpty()) {
             throw new IllegalArgumentException("At least one valid consumable line is required");
         }
+        boolean hasBillableLine = hasBillableLines(preparedLines);
 
         PatientDispensingRequest request = new PatientDispensingRequest();
         request.setPatient(patient);
-        request.setBillable(Boolean.TRUE);
-        request.setPaymentConfirmed(Boolean.FALSE);
+        request.setBillable(Boolean.valueOf(hasBillableLine));
+        request.setPaymentConfirmed(Boolean.valueOf(!hasBillableLine));
         request.setPatientBillId(null);
         request.setRequestType(RequestType.CONSUMABLE);
-        request.setRequestStatus(RequestStatus.PENDING_PAYMENT);
+        request.setRequestStatus(hasBillableLine ? RequestStatus.PENDING_PAYMENT : RequestStatus.PENDING_DISPENSE);
         request.setRequestingLocation(requestingLocation);
         request.setMedicalActReference(buildMedicalActReference(requestingLocation));
 
@@ -120,24 +121,72 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
             requestLine.setItem(preparedLine.item);
             requestLine.setRequestedQuantity(preparedLine.quantity);
             requestLine.setUnitOfMeasure(preparedLine.unitOfMeasure);
-            requestLine.setLineStatus(RequestStatus.PENDING_PAYMENT);
+            requestLine.setBillable(Boolean.valueOf(preparedLine.billable));
+            requestLine.setBillingExclusionReason(preparedLine.billable ? null : preparedLine.billingExclusionReason);
+            requestLine.setLineStatus(preparedLine.billable ? RequestStatus.PENDING_PAYMENT : RequestStatus.PENDING_DISPENSE);
             requestLines.add(requestLine);
         }
         request.setLines(requestLines);
 
         request = dispensingService.saveRequest(request);
         request.setMedicalActReference("Consumable request " + request.getPatientDispensingRequestId());
-        Integer patientBillId = createBillingItems(request, preparedLines);
-        request.setPatientBillId(patientBillId);
-        Boolean patientBillPaid = dispensingService.isPatientBillPaid(patientBillId);
-        request.setPaymentConfirmed(Boolean.TRUE.equals(patientBillPaid));
-        request.setRequestStatus(Boolean.TRUE.equals(patientBillPaid) ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
-        updateLineStatuses(request, request.getRequestStatus());
+        if (hasBillableLine) {
+            Integer patientBillId = createBillingItems(request, billablePreparedLines(preparedLines));
+            request.setPatientBillId(patientBillId);
+            Boolean patientBillPaid = dispensingService.isPatientBillPaid(patientBillId);
+            request.setPaymentConfirmed(Boolean.TRUE.equals(patientBillPaid));
+            request.setRequestStatus(Boolean.TRUE.equals(patientBillPaid) ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
+            updateLineStatuses(request, request.getRequestStatus());
+        } else {
+            updateLineStatuses(request, RequestStatus.PENDING_DISPENSE);
+        }
         dispensingService.saveRequest(request);
 
         List<PatientDispensingRequest> savedRequests = new ArrayList<PatientDispensingRequest>();
         savedRequests.add(request);
         return savedRequests;
+    }
+
+    @Override
+    public PatientDispensingRequest updateConsumableLine(Integer requestId, Integer requestLineId,
+                                                         ConsumableOrderLineCommand command) {
+        if (requestId == null || requestLineId == null || command == null) {
+            throw new IllegalArgumentException("Request, request line, and updated consumable are required");
+        }
+        PatientDispensingRequest request = requireEditableConsumableRequest(requestId);
+        PatientDispensingRequestLine requestLine = findEditableConsumableLine(request, requestLineId);
+        if (requestLine == null) {
+            throw new IllegalArgumentException("Consumable request line was not found or cannot be edited");
+        }
+        PreparedLine preparedLine = prepareSingleLine(command);
+        requestLine.setItem(preparedLine.item);
+        requestLine.setRequestedQuantity(preparedLine.quantity);
+        requestLine.setUnitOfMeasure(preparedLine.unitOfMeasure);
+        requestLine.setBillable(Boolean.valueOf(preparedLine.billable));
+        requestLine.setBillingExclusionReason(preparedLine.billable ? null : preparedLine.billingExclusionReason);
+        rebuildConsumableBilling(request);
+        return dispensingService.saveRequest(request);
+    }
+
+    @Override
+    public PatientDispensingRequest voidConsumableLine(Integer requestId, Integer requestLineId, String voidReason) {
+        String reason = voidReason == null ? "" : voidReason.trim();
+        if (reason.isEmpty()) {
+            throw new IllegalArgumentException("A void reason is required");
+        }
+        PatientDispensingRequest request = requireEditableConsumableRequest(requestId);
+        PatientDispensingRequestLine requestLine = findEditableConsumableLine(request, requestLineId);
+        if (requestLine == null) {
+            throw new IllegalArgumentException("Consumable request line was not found or cannot be deleted");
+        }
+        requestLine.setVoided(Boolean.TRUE);
+        requestLine.setVoidReason(reason);
+        requestLine.setVoidedBy(Context.getAuthenticatedUser());
+        requestLine.setDateVoided(new Date());
+        requestLine.setLineStatus(RequestStatus.CANCELLED);
+        rebuildConsumableBilling(request);
+        updateRequestStatusAfterLineChange(request, reason);
+        return dispensingService.saveRequest(request);
     }
 
     private List<PreparedLine> prepareLines(List<ConsumableOrderLineCommand> lines) {
@@ -153,15 +202,68 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
             if (item == null || item.getItemId() == null) {
                 throw new IllegalArgumentException("No local item is linked to " + productMasterItem.getItemName());
             }
+            if (Boolean.FALSE.equals(item.getVisibleToRequesters())) {
+                throw new IllegalArgumentException("Selected consumable item is hidden from requester ordering: "
+                        + productMasterItem.getItemName());
+            }
 
             PreparedLine preparedLine = new PreparedLine();
             preparedLine.productMasterItem = productMasterItem;
             preparedLine.item = item;
             preparedLine.quantity = quantity;
             preparedLine.unitOfMeasure = normalizeUnitOfMeasure(command.getUnitOfMeasure());
+            preparedLine.billable = !Boolean.FALSE.equals(command.getBillable());
+            preparedLine.billingExclusionReason = normalizeBillingExclusionReason(command.getBillingExclusionReason(),
+                    preparedLine.billable);
             preparedLines.add(preparedLine);
         }
         return preparedLines;
+    }
+
+    private PreparedLine prepareSingleLine(ConsumableOrderLineCommand command) {
+        List<ConsumableOrderLineCommand> commands = new ArrayList<ConsumableOrderLineCommand>();
+        commands.add(command);
+        List<PreparedLine> preparedLines = prepareLines(commands);
+        if (preparedLines.isEmpty()) {
+            throw new IllegalArgumentException("Provide one valid consumable item with quantity greater than zero");
+        }
+        return preparedLines.get(0);
+    }
+
+    private boolean hasBillableLines(List<PreparedLine> lines) {
+        if (lines == null) {
+            return false;
+        }
+        for (PreparedLine line : lines) {
+            if (line != null && line.billable) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private List<PreparedLine> billablePreparedLines(List<PreparedLine> lines) {
+        List<PreparedLine> billableLines = new ArrayList<PreparedLine>();
+        if (lines == null) {
+            return billableLines;
+        }
+        for (PreparedLine line : lines) {
+            if (line != null && line.billable) {
+                billableLines.add(line);
+            }
+        }
+        return billableLines;
+    }
+
+    private String normalizeBillingExclusionReason(String reason, boolean billable) {
+        if (billable) {
+            return null;
+        }
+        String normalizedReason = reason == null ? "" : reason.trim();
+        if (normalizedReason.isEmpty()) {
+            throw new IllegalArgumentException("Reason is required when a consumable item is marked not billable");
+        }
+        return normalizedReason;
     }
 
     private void validateConsumable(ProductMasterItem productMasterItem) {
@@ -783,15 +885,231 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
         return "Consumable order" + (locationName.isEmpty() ? "" : " - " + locationName);
     }
 
+    private PatientDispensingRequest requireEditableConsumableRequest(Integer requestId) {
+        PatientDispensingRequest request = dispensingService.getRequest(requestId);
+        if (request == null || Boolean.TRUE.equals(request.getVoided())) {
+            throw new IllegalArgumentException("Consumable request not found");
+        }
+        if (request.getRequestType() != RequestType.CONSUMABLE) {
+            throw new IllegalArgumentException("Only consumable requests can be changed here");
+        }
+        if (request.getRequestStatus() != RequestStatus.PENDING_PAYMENT
+                && request.getRequestStatus() != RequestStatus.PENDING_DISPENSE) {
+            throw new IllegalArgumentException("Only pending consumable requests can be edited or deleted");
+        }
+        if (request.getPatientBillId() != null && Boolean.TRUE.equals(dispensingService.isPatientBillPaid(request.getPatientBillId()))) {
+            throw new IllegalArgumentException("Paid consumable requests cannot be edited or deleted");
+        }
+        return request;
+    }
+
+    private PatientDispensingRequestLine findEditableConsumableLine(PatientDispensingRequest request, Integer requestLineId) {
+        if (request == null || requestLineId == null || request.getLines() == null) {
+            return null;
+        }
+        for (PatientDispensingRequestLine line : request.getLines()) {
+            if (line == null || line.getPatientDispensingRequestLineId() == null
+                    || !requestLineId.equals(line.getPatientDispensingRequestLineId())
+                    || Boolean.TRUE.equals(line.getVoided())) {
+                continue;
+            }
+            if (line.getLineStatus() == RequestStatus.PENDING_PAYMENT
+                    || line.getLineStatus() == RequestStatus.PENDING_DISPENSE) {
+                return line;
+            }
+        }
+        return null;
+    }
+
+    private void rebuildConsumableBilling(PatientDispensingRequest request) {
+        if (request == null) {
+            return;
+        }
+        if (request.getPatientBillId() != null) {
+            voidLinkedConsumableBill(request, "Consumable request changed");
+            request.setPatientBillId(null);
+        }
+        List<PreparedLine> billableLines = activeBillablePreparedLines(request);
+        if (billableLines.isEmpty()) {
+            request.setBillable(Boolean.FALSE);
+            request.setPaymentConfirmed(Boolean.TRUE);
+            request.setRequestStatus(RequestStatus.PENDING_DISPENSE);
+            updateLineStatuses(request, RequestStatus.PENDING_DISPENSE);
+            return;
+        }
+        Integer patientBillId = createBillingItems(request, billableLines);
+        request.setPatientBillId(patientBillId);
+        Boolean patientBillPaid = dispensingService.isPatientBillPaid(patientBillId);
+        request.setBillable(Boolean.TRUE);
+        request.setPaymentConfirmed(Boolean.TRUE.equals(patientBillPaid));
+        request.setRequestStatus(Boolean.TRUE.equals(patientBillPaid) ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
+        updateLineStatuses(request, request.getRequestStatus());
+    }
+
+    private List<PreparedLine> activeBillablePreparedLines(PatientDispensingRequest request) {
+        List<PreparedLine> preparedLines = new ArrayList<PreparedLine>();
+        if (request == null || request.getLines() == null) {
+            return preparedLines;
+        }
+        for (PatientDispensingRequestLine requestLine : request.getLines()) {
+            if (requestLine == null || Boolean.TRUE.equals(requestLine.getVoided())
+                    || !Boolean.TRUE.equals(requestLine.getBillable())) {
+                continue;
+            }
+            ProductMasterItem productMasterItem = resolveProductMasterItem(requestLine.getItem());
+            if (productMasterItem == null) {
+                throw new IllegalArgumentException("Consumable item is not linked to product master: "
+                        + (requestLine.getItem() == null ? "" : requestLine.getItem().getName()));
+            }
+            PreparedLine preparedLine = new PreparedLine();
+            preparedLine.productMasterItem = productMasterItem;
+            preparedLine.item = requestLine.getItem();
+            preparedLine.quantity = normalizeQuantity(requestLine.getRequestedQuantity());
+            preparedLine.unitOfMeasure = normalizeUnitOfMeasure(requestLine.getUnitOfMeasure());
+            preparedLine.billable = true;
+            preparedLines.add(preparedLine);
+        }
+        return preparedLines;
+    }
+
+    private ProductMasterItem resolveProductMasterItem(Item item) {
+        if (item == null) {
+            return null;
+        }
+        for (ProductMasterItem productMasterItem : pharmacyService.getAllProductMasterItems()) {
+            if (!isConsumableProductMasterItem(productMasterItem)) {
+                continue;
+            }
+            Item mappedItem = pharmacyService.getMappedItemForProductMasterItem(productMasterItem);
+            if (mappedItem != null && mappedItem.getItemId() != null && mappedItem.getItemId().equals(item.getItemId())) {
+                return productMasterItem;
+            }
+        }
+        String code = safe(item.getCode()).trim();
+        if (!code.isEmpty()) {
+            ProductMasterItem byCode = pharmacyService.getProductMasterItemByNpcCode(code);
+            if (isConsumableProductMasterItem(byCode)) {
+                return byCode;
+            }
+        }
+        String itemName = safe(item.getName()).trim();
+        if (!itemName.isEmpty()) {
+            for (ProductMasterItem productMasterItem : pharmacyService.getAllProductMasterItems()) {
+                if (isConsumableProductMasterItem(productMasterItem)
+                        && itemName.equalsIgnoreCase(safe(productMasterItem.getItemName()).trim())) {
+                    return productMasterItem;
+                }
+            }
+        }
+        return null;
+    }
+
+    private void updateRequestStatusAfterLineChange(PatientDispensingRequest request, String reason) {
+        boolean hasActiveLine = false;
+        if (request != null && request.getLines() != null) {
+            for (PatientDispensingRequestLine line : request.getLines()) {
+                if (line != null && !Boolean.TRUE.equals(line.getVoided())) {
+                    hasActiveLine = true;
+                    break;
+                }
+            }
+        }
+        if (hasActiveLine) {
+            return;
+        }
+        request.setVoided(Boolean.TRUE);
+        request.setVoidReason(reason);
+        request.setVoidedBy(Context.getAuthenticatedUser());
+        request.setDateVoided(new Date());
+        request.setRequestStatus(RequestStatus.CANCELLED);
+    }
+
+    private void voidLinkedConsumableBill(PatientDispensingRequest request, String reason) {
+        if (request == null || request.getPatientBillId() == null) {
+            return;
+        }
+        try {
+            Class<?> billingServiceClass = Context.loadClass("org.openmrs.module.mohbilling.service.BillingService");
+            Class<?> patientBillClass = Context.loadClass("org.openmrs.module.mohbilling.model.PatientBill");
+            Class<?> consommationClass = Context.loadClass("org.openmrs.module.mohbilling.model.Consommation");
+            Object billingService = Context.getService(billingServiceClass);
+            if (billingService == null) {
+                return;
+            }
+            Object patientBill = billingServiceClass.getMethod("getPatientBill", Integer.class)
+                    .invoke(billingService, request.getPatientBillId());
+            if (patientBill == null || extractBoolean(patientBill, "getIsPaid")) {
+                return;
+            }
+            Object consommation = billingServiceClass.getMethod("getConsommationByPatientBill", patientBillClass)
+                    .invoke(billingService, patientBill);
+            BigDecimal billAmount = extractBigDecimal(patientBill, "getAmount");
+            invokeSetter(patientBill, "setAmount", BigDecimal.ZERO, BigDecimal.class);
+            invokeSetter(patientBill, "setVoided", Boolean.TRUE, Boolean.class);
+            invokeSetter(patientBill, "setVoidedBy", Context.getAuthenticatedUser(), Context.loadClass("org.openmrs.User"));
+            invokeSetter(patientBill, "setVoidedDate", new Date(), Date.class);
+            invokeSetter(patientBill, "setVoidReason", reason, String.class);
+            invokeSetter(patientBill, "setStatus", "CANCELLED", String.class);
+            billingServiceClass.getMethod("savePatientBill", patientBillClass).invoke(billingService, patientBill);
+            if (consommation != null) {
+                invokeSetter(consommation, "setVoided", Boolean.TRUE, boolean.class);
+                invokeSetter(consommation, "setVoidedBy", Context.getAuthenticatedUser(), Context.loadClass("org.openmrs.User"));
+                invokeSetter(consommation, "setVoidedDate", new Date(), Date.class);
+                invokeSetter(consommation, "setVoidReason", reason, String.class);
+                zeroAndVoidNestedBill(billingServiceClass, billingService, consommation, "getInsuranceBill",
+                        "org.openmrs.module.mohbilling.model.InsuranceBill", "saveInsuranceBill", reason);
+                zeroAndVoidNestedBill(billingServiceClass, billingService, consommation, "getThirdPartyBill",
+                        "org.openmrs.module.mohbilling.model.ThirdPartyBill", "saveThirdPartyBill", reason);
+                billingServiceClass.getMethod("saveConsommation", consommationClass).invoke(billingService, consommation);
+                Object globalBill = invokeNoArg(consommation, "getGlobalBill");
+                if (globalBill != null && billAmount != null) {
+                    BigDecimal globalAmount = extractBigDecimal(globalBill, "getGlobalAmount");
+                    BigDecimal adjusted = (globalAmount == null ? BigDecimal.ZERO : globalAmount).subtract(billAmount);
+                    invokeSetter(globalBill, "setGlobalAmount",
+                            adjusted.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : adjusted, BigDecimal.class);
+                    saveGlobalBillWithBillingUtil(globalBill, Context.loadClass("org.openmrs.module.mohbilling.model.GlobalBill"));
+                }
+            }
+        }
+        catch (Exception e) {
+            throw new IllegalStateException("Unable to void existing consumable bill before rebuilding it", e);
+        }
+    }
+
+    private void zeroAndVoidNestedBill(Class<?> billingServiceClass,
+                                       Object billingService,
+                                       Object consommation,
+                                       String getterName,
+                                       String billClassName,
+                                       String saveMethodName,
+                                       String reason) throws Exception {
+        Object nestedBill = consommation == null ? null : invokeNoArg(consommation, getterName);
+        if (nestedBill == null) {
+            return;
+        }
+        invokeSetter(nestedBill, "setAmount", BigDecimal.ZERO, BigDecimal.class);
+        invokeSetter(nestedBill, "setVoided", Boolean.TRUE, boolean.class);
+        invokeSetter(nestedBill, "setVoidedBy", Context.getAuthenticatedUser(), Context.loadClass("org.openmrs.User"));
+        invokeSetter(nestedBill, "setVoidedDate", new Date(), Date.class);
+        invokeSetter(nestedBill, "setVoidReason", reason, String.class);
+        billingServiceClass.getMethod(saveMethodName, Context.loadClass(billClassName)).invoke(billingService, nestedBill);
+    }
+
     private void updateLineStatuses(PatientDispensingRequest request, RequestStatus status) {
         if (request == null || request.getLines() == null) {
             return;
         }
         for (PatientDispensingRequestLine line : request.getLines()) {
             if (line != null) {
-                line.setLineStatus(status);
+                line.setLineStatus(Boolean.TRUE.equals(line.getBillable()) ? status : RequestStatus.PENDING_DISPENSE);
             }
         }
+    }
+
+    private boolean isConsumableProductMasterItem(ProductMasterItem productMasterItem) {
+        return productMasterItem != null
+                && Boolean.TRUE.equals(productMasterItem.getActive())
+                && !MATERIAL_TYPE_DRUG.equalsIgnoreCase(safe(productMasterItem.getMaterialType()));
     }
 
     private String safe(String value) {
@@ -811,6 +1129,8 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
         private Item item;
         private BigDecimal quantity;
         private String unitOfMeasure;
+        private boolean billable = true;
+        private String billingExclusionReason;
     }
 
     private static class RegistrationInsurance {

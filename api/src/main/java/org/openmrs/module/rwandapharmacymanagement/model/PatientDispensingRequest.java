@@ -36,6 +36,7 @@ public class PatientDispensingRequest extends BaseTrackedEntity {
     private RequestStatus requestStatus;
     private RequestType requestType = RequestType.PRESCRIPTION;
     private String medicalActReference;
+    private String hiePrescriptionGroupId;
     private List<PatientDispensingRequestLine> lines;
 
     public Integer getPatientDispensingRequestId() {
@@ -196,6 +197,14 @@ public class PatientDispensingRequest extends BaseTrackedEntity {
 
     public void setMedicalActReference(String medicalActReference) {
         this.medicalActReference = medicalActReference;
+    }
+
+    public String getHiePrescriptionGroupId() {
+        return hiePrescriptionGroupId;
+    }
+
+    public void setHiePrescriptionGroupId(String hiePrescriptionGroupId) {
+        this.hiePrescriptionGroupId = hiePrescriptionGroupId;
     }
 
     public List<PatientDispensingRequestLine> getLines() {

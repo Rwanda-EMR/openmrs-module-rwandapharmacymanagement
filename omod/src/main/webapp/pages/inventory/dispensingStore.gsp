@@ -526,6 +526,7 @@
                 <th>Approved</th>
                 <th>Served</th>
                 <th>Items</th>
+                <th>Download</th>
             </tr>
             </thead>
             <tbody>
@@ -542,11 +543,18 @@
                     <div>${ line.item?.name ?: '' } - ${ line.quantity ?: 0 }</div>
                     <% } %>
                 </td>
+                <td>
+                    <% if (request.transferStatus == 'SERVED') { %>
+                    <a class="stock-btn" href="${ ui.pageLink('rwandapharmacymanagement', 'transfer/pdf', [transferId: request.interPharmacyTransferId]) }">PDF</a>
+                    <% } else { %>
+                    <span style="color:#777;">Available after transfer</span>
+                    <% } %>
+                </td>
             </tr>
             <% } %>
             <% if (!requests) { %>
             <tr>
-                <td colspan="7" style="text-align:center;color:#777;">No requests found for this pharmacy yet.</td>
+                <td colspan="8" style="text-align:center;color:#777;">No requests found for this pharmacy yet.</td>
             </tr>
             <% } %>
             </tbody>

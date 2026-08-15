@@ -42,7 +42,7 @@ public class PaymentExceptionReportExportPageController {
         List<PaymentExceptionReportSupport.Row> rows = PaymentExceptionReportSupport.buildRows(requests, dispenseRecords);
         List<String> headers = Arrays.asList("Approval date", "Request date", "Request ID", "Patient", "Identifier",
                 "Request type", "Request status", "Bill", "Payment confirmed", "Exception type", "Reason", "Note",
-                "Approved by", "Requesting location", "Target pharmacy", "Items", "Item count", "Dispensed",
+                "Approved by", "Requested by", "Requesting location", "Target pharmacy", "Items", "Item count", "Dispensed",
                 "Dispense date(s)", "Dispensing pharmacy", "Dispensed by", "Reference");
         List<List<String>> body = new ArrayList<List<String>>();
         for (PaymentExceptionReportSupport.Row row : rows) {
@@ -60,6 +60,7 @@ public class PaymentExceptionReportExportPageController {
                     string(row.exceptionReason),
                     string(row.exceptionNote),
                     string(row.approvedBy),
+                    string(row.requestedBy),
                     string(row.requestingLocation),
                     string(row.targetPharmacy),
                     string(row.items),

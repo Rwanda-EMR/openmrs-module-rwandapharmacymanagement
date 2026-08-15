@@ -20,7 +20,7 @@
         border-radius: 4px;
     }
     .review-card {
-        max-width: 860px;
+        max-width: 1180px;
         margin: 0 auto;
         background: #fff;
         border: 1px solid #d8d8d8;
@@ -77,6 +77,7 @@
     .review-status-served { background: #337ab7; }
     .review-table {
         width: 100%;
+        min-width: 1080px;
         border-collapse: collapse;
         margin-bottom: 14px;
         font-size: 12px;
@@ -109,6 +110,19 @@
         margin-top: 14px;
         align-items: center;
     }
+    .review-item-title { display:block; color:#222; font-weight:bold; margin-bottom:5px; }
+    .review-remove-link { background:#fff1f2; border:1px solid #fecdd3; border-radius:999px; color:#be123c; cursor:pointer; font-size:11px; padding:5px 9px; text-decoration:none; white-space:nowrap; }
+    .review-remove-link:hover, .review-remove-link:focus { background:#ffe4e6; color:#9f1239; }
+    .review-line-remove { display:flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap; min-width:210px; }
+    .review-line-remove input { width:150px; border:1px solid #cbd5e1; border-radius:4px; font-size:12px; padding:5px 7px; }
+    .review-batch-split { margin-top:6px; border:1px solid #e2e8f0; border-radius:5px; padding:6px; background:#f8fafc; min-width:260px; }
+    .review-batch-split-title { display:flex; justify-content:space-between; gap:8px; align-items:center; font-size:11px; font-weight:bold; color:#475569; margin-bottom:5px; }
+    .review-batch-add { border:1px solid #bfdbfe; background:#eff6ff; color:#1d4ed8; border-radius:999px; padding:3px 8px; font-size:11px; cursor:pointer; }
+    .review-batch-row { display:grid; grid-template-columns:minmax(110px, 1fr) 70px 24px; gap:5px; margin-top:5px; align-items:center; }
+    .review-batch-row select, .review-batch-row input { width:100%; box-sizing:border-box; padding:4px 5px; font-size:11px; }
+    .review-batch-remove { border:0; background:#fee2e2; color:#b91c1c; border-radius:50%; width:22px; height:22px; cursor:pointer; }
+    .review-batch-note { display:block; color:#64748b; font-size:10px; margin-top:4px; }
+    .review-batch-readonly { margin:4px 0 0 0; padding-left:16px; color:#475569; font-size:11px; }
 </style>
 
 <h2>Main To Dispensing Review</h2>
@@ -128,31 +142,58 @@
 
             <form method="post">
                 <input type="hidden" name="transferId" value="${ transfer.interPharmacyTransferId }"/>
+                <input type="hidden" name="transferLineId" value=""/>
+                <input type="hidden" name="lineVoidReason" value=""/>
                 <div class="review-table-wrap">
                     <table class="review-table">
                         <thead>
-                        <tr><th>Item</th><th>Qty</th><th>Unit cost</th><th>Line value</th><th>Batch</th><th>Expiry</th><th>Available</th></tr>
+                        <tr><th>Item</th><th>Qty</th><th>Current qty in requesting pharmacy</th><th>Unit cost</th><th>Line value</th><th>Batch</th><th>Expiry</th><th>Available in main</th></tr>
                         </thead>
                         <tbody>
-                        <% transfer.lines?.each { line -> %>
+                        <% transfer.lines?.each { line -> if (line.voided != true) { %>
                         <% def canEditLine = transfer.transferStatus == 'APPROVED' && canTransferItems %>
-                        <tr class="review-main-line" data-item-id="${ line.item?.itemId ?: '' }" data-batch-number="${ line.batchNumber?.replace('\\', '\\\\')?.replace('"', '&quot;') ?: '' }" data-stored-unit-price="${ line.unitPrice ?: 0 }">
-                            <td>${ line.item?.name ?: '' }</td>
+                        <tr class="review-main-line" data-line-id="${ line.interPharmacyTransferLineId ?: '' }" data-item-id="${ line.item?.itemId ?: '' }" data-batch-number="${ line.batchNumber?.replace('\\', '\\\\')?.replace('"', '&quot;') ?: '' }" data-stored-unit-price="${ line.unitPrice ?: 0 }">
+                            <td>
+                                <span class="review-item-title">${ line.item?.name ?: '' }</span>
+                                <% if ((transfer.transferStatus == 'REQUESTED' && canApproveTransfer) || (transfer.transferStatus == 'APPROVED' && canTransferItems)) { %>
+                                <span class="review-line-remove">
+                                    <input type="text" class="review-line-remove-reason" placeholder="Reason for removing"/>
+                                    <button type="submit" class="review-remove-link" name="action" value="removeLine" data-line-id="${ line.interPharmacyTransferLineId }" onclick="return prepareTransferLineRemoval(this)">Remove line</button>
+                                </span>
+                                <% } %>
+                            </td>
                             <td><input type="number" step="0.01" min="0.01" name="quantity" value="${ line.quantity }" ${ canEditLine ? '' : 'readonly="readonly"' }/></td>
+                            <td>${ requestingStockSummary ? (requestingStockSummary[line.item?.itemId] ?: 0) : 0 }</td>
                             <td class="review-main-unit-price">${ line.unitPrice ?: 0 }</td>
                             <td class="review-main-line-value">${ line.totalAmount ?: ((line.unitPrice ?: 0) * (line.quantity ?: 0)) }</td>
                             <td>
                                 <select name="batchNumber" ${ canEditLine ? '' : 'disabled="disabled"' }>
                                     <option value="">Select batch</option>
                                 </select>
+                                <% if (canEditLine) { %>
+                                <div class="review-batch-split">
+                                    <div class="review-batch-split-title">
+                                        <span>Split into batches</span>
+                                        <button type="button" class="review-batch-add" onclick="addReviewMainAllocation(this)">Add batch</button>
+                                    </div>
+                                    <div class="review-batch-rows"></div>
+                                    <span class="review-batch-note">Use this when one batch cannot cover the full quantity.</span>
+                                </div>
+                                <% } else if (line.batchAllocations?.findAll { allocation -> allocation.voided != true }) { %>
+                                <ul class="review-batch-readonly">
+                                    <% line.batchAllocations.findAll { allocation -> allocation.voided != true }.each { allocation -> %>
+                                    <li>${ allocation.batchNumber ?: 'No batch' } - ${ allocation.quantity ?: 0 }${ allocation.expiryDate ? ' (exp ' + ui.formatDatePretty(allocation.expiryDate) + ')' : '' }</li>
+                                    <% } %>
+                                </ul>
+                                <% } %>
                             </td>
                             <td><input type="date" class="openmrs-date-field" name="expiryDate" value="${ line.expiryDate ? new java.text.SimpleDateFormat('yyyy-MM-dd').format(line.expiryDate) : '' }" ${ canEditLine ? '' : 'readonly="readonly"' }/></td>
                             <td class="review-main-available"></td>
                         </tr>
-                        <% } %>
+                        <% } } %>
                         <tr>
-                            <td colspan="3" style="text-align:right;font-weight:bold;background:#f5f5f5;">Total transfer value</td>
-                            <td id="review-main-transfer-total" style="font-weight:bold;background:#f5f5f5;">${ transfer.lines?.collect { line -> line.totalAmount ?: ((line.unitPrice ?: 0) * (line.quantity ?: 0)) }?.sum() ?: 0 }</td>
+                            <td colspan="4" style="text-align:right;font-weight:bold;background:#f5f5f5;">Total transfer value</td>
+                            <td id="review-main-transfer-total" style="font-weight:bold;background:#f5f5f5;">${ transfer.lines?.findAll { line -> line.voided != true }?.collect { line -> line.totalAmount ?: ((line.unitPrice ?: 0) * (line.quantity ?: 0)) }?.sum() ?: 0 }</td>
                             <td colspan="3" style="background:#f5f5f5;"></td>
                         </tr>
                         </tbody>
@@ -198,6 +239,32 @@
         "${ entry.key }": "${ entry.value }"${ idx + 1 < mainStockSummary.size() ? ',' : '' }
         <% } %>
     };
+    function prepareTransferLineRemoval(button) {
+        var form = button ? button.form : null;
+        if (!form) {
+            return false;
+        }
+        var container = button.closest('.review-line-remove');
+        var reasonInput = container ? container.querySelector('.review-line-remove-reason') : null;
+        var reason = reasonInput ? reasonInput.value : '';
+        if (!reason || !reason.trim()) {
+            alert('Enter a reason before removing this line.');
+            if (reasonInput) {
+                reasonInput.focus();
+            }
+            return false;
+        }
+        form.querySelector('input[name="transferLineId"]').value = button.getAttribute('data-line-id');
+        form.querySelector('input[name="lineVoidReason"]').value = reason.trim();
+        form.noValidate = true;
+        Array.prototype.slice.call(form.querySelectorAll('input[name="quantity"], input[name="allocationQuantity"]')).forEach(function(input) {
+            input.disabled = true;
+        });
+        Array.prototype.slice.call(form.querySelectorAll('select[name="batchNumber"], select[name="allocationBatchNumber"], input[name="expiryDate"]')).forEach(function(input) {
+            input.disabled = true;
+        });
+        return true;
+    }
     function reviewMainNumber(value) {
         var parsed = parseFloat(value || '0');
         return isNaN(parsed) ? 0 : parsed;
@@ -228,6 +295,154 @@
             totalCell.textContent = reviewMainMoney(total);
         }
     }
+    function createReviewMainBatchOption(batch) {
+        return new Option((batch.batchNumber || 'No batch') + ' (' + batch.available + ')', batch.batchNumber || '');
+    }
+    function findReviewMainBatch(batches, batchNumber) {
+        return batches.find(function(batch) { return (batch.batchNumber || '') === (batchNumber || ''); });
+    }
+    function hasReviewMainSplitRows(lineRow) {
+        return lineRow && lineRow.querySelectorAll('.review-batch-row').length > 0;
+    }
+    function refreshReviewMainSplitMode(lineRow) {
+        if (!lineRow) {
+            return;
+        }
+        var itemId = lineRow.getAttribute('data-item-id');
+        var batchSelect = lineRow.querySelector('select[name="batchNumber"]');
+        var expiryInput = lineRow.querySelector('input[name="expiryDate"]');
+        var quantityInput = lineRow.querySelector('input[name="quantity"]');
+        var availableLabel = lineRow.querySelector('.review-main-available');
+        var batches = reviewMainStockByItem[itemId] || [];
+        var totalAvailable = reviewMainStockSummary[itemId] || '';
+        var storedUnitPrice = lineRow.getAttribute('data-stored-unit-price') || '0';
+        if (!batchSelect || !quantityInput) {
+            return;
+        }
+        if (hasReviewMainSplitRows(lineRow)) {
+            batchSelect.value = '';
+            batchSelect.style.pointerEvents = 'none';
+            batchSelect.tabIndex = -1;
+            batchSelect.setAttribute('aria-disabled', 'true');
+            if (expiryInput) {
+                expiryInput.value = '';
+                expiryInput.readOnly = true;
+            }
+            quantityInput.max = totalAvailable;
+            if (availableLabel) {
+                availableLabel.textContent = totalAvailable ? totalAvailable + ' total; split by batch below' : '';
+            }
+            updateReviewMainLineCost(lineRow, storedUnitPrice);
+            return;
+        }
+        batchSelect.style.pointerEvents = '';
+        batchSelect.tabIndex = 0;
+        batchSelect.removeAttribute('aria-disabled');
+        if (expiryInput) {
+            expiryInput.readOnly = false;
+        }
+        var selectedBatch = findReviewMainBatch(batches, batchSelect.value);
+        if (selectedBatch) {
+            if (expiryInput) {
+                expiryInput.value = selectedBatch.expiryDate || '';
+            }
+            quantityInput.max = selectedBatch.available || totalAvailable;
+            if (availableLabel) {
+                availableLabel.textContent = selectedBatch.available || totalAvailable;
+            }
+            updateReviewMainLineCost(lineRow, selectedBatch.unitPrice);
+        } else {
+            quantityInput.max = totalAvailable;
+            if (availableLabel) {
+                availableLabel.textContent = totalAvailable;
+            }
+            updateReviewMainLineCost(lineRow, storedUnitPrice);
+        }
+    }
+    function addReviewMainAllocation(button) {
+        var lineRow = button ? button.closest('.review-main-line') : null;
+        if (!lineRow) {
+            return;
+        }
+        addReviewMainAllocationRow(lineRow, '', '');
+    }
+    function addReviewMainAllocationRow(lineRow, batchNumber, quantity) {
+        var rows = lineRow.querySelector('.review-batch-rows');
+        if (!rows) {
+            return;
+        }
+        var itemId = lineRow.getAttribute('data-item-id');
+        var lineId = lineRow.getAttribute('data-line-id');
+        var batches = reviewMainStockByItem[itemId] || [];
+        var row = document.createElement('div');
+        row.className = 'review-batch-row';
+        var lineInput = document.createElement('input');
+        lineInput.type = 'hidden';
+        lineInput.name = 'allocationLineId';
+        lineInput.value = lineId;
+        var batchSelect = document.createElement('select');
+        batchSelect.name = 'allocationBatchNumber';
+        batchSelect.appendChild(new Option('Select batch', ''));
+        batches.forEach(function(batch) {
+            batchSelect.appendChild(createReviewMainBatchOption(batch));
+        });
+        batchSelect.value = batchNumber || '';
+        var quantityInput = document.createElement('input');
+        quantityInput.type = 'number';
+        quantityInput.name = 'allocationQuantity';
+        quantityInput.step = '0.01';
+        quantityInput.min = '0.01';
+        quantityInput.value = quantity || '';
+        var removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'review-batch-remove';
+        removeButton.textContent = '×';
+        removeButton.onclick = function() {
+            row.parentNode.removeChild(row);
+            refreshReviewMainSplitMode(lineRow);
+        };
+        batchSelect.onchange = function() {
+            var selectedBatch = findReviewMainBatch(batches, batchSelect.value);
+            quantityInput.max = selectedBatch ? selectedBatch.available : '';
+        };
+        row.appendChild(lineInput);
+        row.appendChild(batchSelect);
+        row.appendChild(quantityInput);
+        row.appendChild(removeButton);
+        rows.appendChild(row);
+        batchSelect.onchange();
+        refreshReviewMainSplitMode(lineRow);
+    }
+    function validateReviewMainAllocations(form) {
+        var activeElement = document.activeElement;
+        if (!activeElement || activeElement.name !== 'action' || activeElement.value !== 'transfer') {
+            return true;
+        }
+        var lines = Array.prototype.slice.call(form.querySelectorAll('.review-main-line'));
+        for (var i = 0; i < lines.length; i++) {
+            var lineRow = lines[i];
+            var allocationRows = Array.prototype.slice.call(lineRow.querySelectorAll('.review-batch-row'));
+            if (!allocationRows.length) {
+                continue;
+            }
+            var lineQuantity = reviewMainNumber(lineRow.querySelector('input[name="quantity"]').value);
+            var allocated = 0;
+            for (var j = 0; j < allocationRows.length; j++) {
+                var batchValue = allocationRows[j].querySelector('select[name="allocationBatchNumber"]').value;
+                var allocationQuantity = reviewMainNumber(allocationRows[j].querySelector('input[name="allocationQuantity"]').value);
+                if (!batchValue || allocationQuantity <= 0) {
+                    alert('Every split batch row needs a batch and quantity.');
+                    return false;
+                }
+                allocated += allocationQuantity;
+            }
+            if (Math.abs(allocated - lineQuantity) > 0.0001) {
+                alert('Split batch quantities must equal the line quantity.');
+                return false;
+            }
+        }
+        return true;
+    }
     Array.prototype.slice.call(document.querySelectorAll('.review-main-line')).forEach(function(lineRow) {
         var itemId = lineRow.getAttribute('data-item-id');
         var batchSelect = lineRow.querySelector('select[name="batchNumber"]');
@@ -241,28 +456,27 @@
         batchSelect.innerHTML = '';
         batchSelect.appendChild(new Option('Select batch', ''));
         batches.forEach(function(batch) {
-            batchSelect.appendChild(new Option((batch.batchNumber || 'No batch') + ' (' + batch.available + ')', batch.batchNumber || ''));
+            batchSelect.appendChild(createReviewMainBatchOption(batch));
         });
         batchSelect.value = currentBatchNumber;
         availableLabel.textContent = reviewMainStockSummary[itemId] || '';
         quantityInput.max = reviewMainStockSummary[itemId] || '';
         updateReviewMainLineCost(lineRow, storedUnitPrice);
         quantityInput.addEventListener('input', function() {
-            var selectedBatch = batches.find(function(batch) { return (batch.batchNumber || '') === batchSelect.value; });
+            var selectedBatch = hasReviewMainSplitRows(lineRow) ? null : findReviewMainBatch(batches, batchSelect.value);
             updateReviewMainLineCost(lineRow, selectedBatch ? selectedBatch.unitPrice : storedUnitPrice);
         });
         batchSelect.addEventListener('change', function() {
-            var selectedBatch = batches.find(function(batch) { return (batch.batchNumber || '') === batchSelect.value; });
-            if (selectedBatch) {
-                expiryInput.value = selectedBatch.expiryDate || '';
-                quantityInput.max = selectedBatch.available || reviewMainStockSummary[itemId] || '';
-                availableLabel.textContent = selectedBatch.available || reviewMainStockSummary[itemId] || '';
-                updateReviewMainLineCost(lineRow, selectedBatch.unitPrice);
-            } else {
-                updateReviewMainLineCost(lineRow, storedUnitPrice);
-            }
+            refreshReviewMainSplitMode(lineRow);
         });
+        refreshReviewMainSplitMode(lineRow);
     });
+    var reviewMainForm = document.querySelector('.review-card form');
+    if (reviewMainForm) {
+        reviewMainForm.onsubmit = function() {
+            return validateReviewMainAllocations(reviewMainForm);
+        };
+    }
     updateReviewMainTotal();
 </script>
 <% } %>

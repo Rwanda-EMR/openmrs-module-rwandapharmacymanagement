@@ -4,6 +4,7 @@ import org.openmrs.Location;
 import org.openmrs.Patient;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.rwandapharmacymanagement.api.ConsumableOrderService;
+import org.openmrs.module.rwandapharmacymanagement.api.DispensingService;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.ConsumableBillingReadiness;
@@ -35,15 +36,24 @@ public class EnterPageController {
     private static final String DEFAULT_UNIT_OF_MEASURE = "EA";
     private static final String FLASH_ORDERED = "rpm.consumableEnter.ordered";
     private static final String FLASH_REQUEST_COUNT = "rpm.consumableEnter.requestCount";
+    private static final String FLASH_ERROR_MESSAGE = "rpm.consumableEnter.errorMessage";
 
     public void get(PageModel model,
                     @SpringBean("consumableOrderService") ConsumableOrderService consumableOrderService,
+                    @SpringBean("dispensingService") DispensingService dispensingService,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @RequestParam(value = "patientId", required = false) String patientIdOrUuid,
+                    @RequestParam(value = "historyPage", required = false) Integer historyPage,
                     HttpSession session) {
         Patient patient = resolvePatient(patientIdOrUuid);
         Location currentLocation = Context.getUserContext() == null ? null : Context.getUserContext().getLocation();
+        int pageSize = 8;
+        int currentHistoryPage = historyPage == null || historyPage.intValue() < 1 ? 1 : historyPage.intValue();
+        List<org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest> historyRequests = patient == null
+                ? Collections.<org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest>emptyList()
+                : dispensingService.getPatientConsumableHistory(patient.getPatientId(), (currentHistoryPage - 1) * pageSize, pageSize);
+        long historyTotalCount = patient == null ? 0L : dispensingService.countPatientConsumableHistory(patient.getPatientId());
 
         model.addAttribute("patient", patient);
         model.addAttribute("currentLocation", currentLocation);
@@ -57,15 +67,28 @@ public class EnterPageController {
         model.addAttribute("canAddConsumables", patient != null && currentLocation != null && billingReadiness.isReady());
         Integer requestCount = FlashMessageSupport.consumeInteger(session, FLASH_REQUEST_COUNT);
         model.addAttribute("ordered", FlashMessageSupport.consumeBoolean(session, FLASH_ORDERED));
+        model.addAttribute("errorMessage", FlashMessageSupport.consumeString(session, FLASH_ERROR_MESSAGE));
         model.addAttribute("requestCount", requestCount == null || requestCount.intValue() < 1 ? 0 : requestCount.intValue());
+        model.addAttribute("historyEntries", buildHistoryEntries(historyRequests, dispensingService));
+        model.addAttribute("historyPage", currentHistoryPage);
+        model.addAttribute("historyPageSize", pageSize);
+        model.addAttribute("historyTotalCount", historyTotalCount);
+        model.addAttribute("historyTotalPages", historyTotalCount == 0L ? 1L : (long) Math.ceil((double) historyTotalCount / (double) pageSize));
     }
 
     public String post(@SpringBean("consumableOrderService") ConsumableOrderService consumableOrderService,
                        @RequestParam(value = "patientId", required = false) String patientIdOrUuid,
                        @RequestParam(value = "patientUuid", required = false) String patientUuid,
+                       @RequestParam(value = "action", required = false) String action,
+                       @RequestParam(value = "requestId", required = false) Integer requestId,
+                       @RequestParam(value = "requestLineId", required = false) Integer requestLineId,
+                       @RequestParam(value = "historyPage", required = false) Integer historyPage,
+                       @RequestParam(value = "voidReason", required = false) String voidReason,
                        @RequestParam(value = "productMasterItemId", required = false) Integer[] productMasterItemIds,
                        @RequestParam(value = "quantity", required = false) BigDecimal[] quantities,
                        @RequestParam(value = "unitOfMeasure", required = false) String[] unitOfMeasures,
+                       @RequestParam(value = "billable", required = false) Boolean[] billables,
+                       @RequestParam(value = "billingExclusionReason", required = false) String[] billingExclusionReasons,
                        HttpSession session,
                        UiUtils ui) {
         Patient patient = resolvePatient(patientIdOrUuid);
@@ -80,12 +103,44 @@ public class EnterPageController {
             throw new IllegalArgumentException(billingReadiness.getMessage());
         }
         Location currentLocation = Context.getUserContext() == null ? null : Context.getUserContext().getLocation();
-        List<ConsumableOrderLineCommand> commands = buildCommands(productMasterItemIds, quantities, unitOfMeasures);
+        List<ConsumableOrderLineCommand> commands = buildCommands(productMasterItemIds, quantities, unitOfMeasures,
+                billables, billingExclusionReasons);
+        String normalizedAction = action == null ? "" : action.trim();
+        if ("updateLine".equalsIgnoreCase(normalizedAction)) {
+            try {
+                if (commands.size() != 1) {
+                    throw new IllegalArgumentException("Exactly one consumable item is required for update");
+                }
+                consumableOrderService.updateConsumableLine(requestId, requestLineId, commands.get(0));
+            }
+            catch (IllegalArgumentException e) {
+                FlashMessageSupport.set(session, FLASH_ERROR_MESSAGE, e.getMessage());
+            }
+            return redirectToConsumablePage(ui, patient, historyPage);
+        }
+        if ("voidLine".equalsIgnoreCase(normalizedAction)) {
+            try {
+                consumableOrderService.voidConsumableLine(requestId, requestLineId, voidReason);
+            }
+            catch (IllegalArgumentException e) {
+                FlashMessageSupport.set(session, FLASH_ERROR_MESSAGE, e.getMessage());
+            }
+            return redirectToConsumablePage(ui, patient, historyPage);
+        }
         int createdRequests = consumableOrderService.createConsumableOrders(patient, currentLocation, commands).size();
         FlashMessageSupport.set(session, FLASH_ORDERED, Boolean.TRUE);
         FlashMessageSupport.set(session, FLASH_REQUEST_COUNT, Integer.valueOf(createdRequests));
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "consumable/enter",
                 Collections.<String, Object>singletonMap("patientId", patient.getUuid()));
+    }
+
+    private String redirectToConsumablePage(UiUtils ui, Patient patient, Integer historyPage) {
+        Map<String, Object> redirectParams = new LinkedHashMap<String, Object>();
+        redirectParams.put("patientId", patient.getUuid());
+        if (historyPage != null && historyPage.intValue() > 1) {
+            redirectParams.put("historyPage", historyPage);
+        }
+        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "consumable/enter", redirectParams);
     }
 
     private Patient resolvePatient(String patientIdOrUuid) {
@@ -106,7 +161,9 @@ public class EnterPageController {
 
     private List<ConsumableOrderLineCommand> buildCommands(Integer[] productMasterItemIds,
                                                            BigDecimal[] quantities,
-                                                           String[] unitOfMeasures) {
+                                                           String[] unitOfMeasures,
+                                                           Boolean[] billables,
+                                                           String[] billingExclusionReasons) {
         List<ConsumableOrderLineCommand> commands = new ArrayList<ConsumableOrderLineCommand>();
         if (productMasterItemIds == null) {
             return commands;
@@ -121,6 +178,9 @@ public class EnterPageController {
             command.setProductMasterItemId(productMasterItemId);
             command.setQuantity(quantity);
             command.setUnitOfMeasure(unitOfMeasures != null && unitOfMeasures.length > i ? unitOfMeasures[i] : DEFAULT_UNIT_OF_MEASURE);
+            command.setBillable(billables != null && billables.length > i ? billables[i] : Boolean.TRUE);
+            command.setBillingExclusionReason(billingExclusionReasons != null && billingExclusionReasons.length > i
+                    ? billingExclusionReasons[i] : null);
             commands.add(command);
         }
         return commands;
@@ -160,6 +220,9 @@ public class EnterPageController {
             row.put("npcCode", productMasterItem.getNpcCode());
             row.put("materialType", productMasterItem.getMaterialType());
             row.put("defaultUnitOfMeasure", DEFAULT_UNIT_OF_MEASURE);
+            AvailabilitySummary availabilitySummary = availabilitySummary(productMasterItem, inventoryService);
+            row.put("stockSites", Integer.valueOf(availabilitySummary.stockSites));
+            row.put("stockTotal", availabilitySummary.totalQuantity);
             rows.add(row);
             addedProductMasterIds.add(productMasterItem.getProductMasterItemId());
         }
@@ -173,6 +236,55 @@ public class EnterPageController {
             }
         });
         return rows;
+    }
+
+    private List<Map<String, Object>> buildHistoryEntries(List<org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest> requests,
+                                                          DispensingService dispensingService) {
+        List<Map<String, Object>> entries = new ArrayList<Map<String, Object>>();
+        if (requests == null || requests.isEmpty()) {
+            return entries;
+        }
+        for (org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest request : requests) {
+            if (request == null || request.getLines() == null) {
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<String, Object>();
+            entry.put("requestId", request.getPatientDispensingRequestId());
+            entry.put("dateCreated", request.getDateCreated());
+            entry.put("patientBillId", request.getPatientBillId());
+            entry.put("paymentConfirmed", request.getPaymentConfirmed());
+            entry.put("requestStatus", request.getRequestStatus());
+            entry.put("medicalActReference", request.getMedicalActReference());
+            boolean paidBill = request.getPatientBillId() != null
+                    && Boolean.TRUE.equals(dispensingService.isPatientBillPaid(request.getPatientBillId()));
+            entry.put("paidBill", paidBill);
+            List<Map<String, Object>> lineEntries = new ArrayList<Map<String, Object>>();
+            for (org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine line : request.getLines()) {
+                if (line == null || Boolean.TRUE.equals(line.getVoided())) {
+                    continue;
+                }
+                boolean editable = !paidBill
+                        && (line.getLineStatus() == org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.PENDING_PAYMENT
+                        || line.getLineStatus() == org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.PENDING_DISPENSE);
+                Map<String, Object> lineEntry = new LinkedHashMap<String, Object>();
+                lineEntry.put("requestLineId", line.getPatientDispensingRequestLineId());
+                lineEntry.put("itemName", line.getItem() == null ? "" : line.getItem().getName());
+                lineEntry.put("requestedQuantity", line.getRequestedQuantity());
+                lineEntry.put("unitOfMeasure", line.getUnitOfMeasure());
+                lineEntry.put("lineStatus", String.valueOf(line.getLineStatus()));
+                lineEntry.put("billable", !Boolean.FALSE.equals(line.getBillable()));
+                lineEntry.put("billingExclusionReason", line.getBillingExclusionReason());
+                lineEntry.put("editable", editable);
+                lineEntry.put("productMasterItemId", findProductMasterItemId(line.getItem()));
+                lineEntries.add(lineEntry);
+            }
+            if (lineEntries.isEmpty()) {
+                continue;
+            }
+            entry.put("lines", lineEntries);
+            entries.add(entry);
+        }
+        return entries;
     }
 
     private boolean isConsumableProductMasterItem(ProductMasterItem productMasterItem) {
@@ -189,6 +301,7 @@ public class EnterPageController {
                     || !Boolean.TRUE.equals(balance.getPharmacyLocation().getActive())
                     || !supportsConsumableOrderingSource(balance.getPharmacyLocation())
                     || balance.getItem() == null || balance.getItem().getItemId() == null
+                    || Boolean.FALSE.equals(balance.getItem().getVisibleToRequesters())
                     || balance.getQuantityOnHand() == null
                     || balance.getQuantityOnHand().compareTo(BigDecimal.ZERO) <= 0
                     || containsItem(stockedItems, balance.getItem().getItemId())) {
@@ -232,11 +345,91 @@ public class EnterPageController {
         return null;
     }
 
+    private AvailabilitySummary availabilitySummary(ProductMasterItem productMasterItem, InventoryService inventoryService) {
+        AvailabilitySummary summary = new AvailabilitySummary();
+        List<Integer> pharmacyLocationIds = new ArrayList<Integer>();
+        for (InventoryBalance balance : inventoryService.getInventoryForPharmacy(null)) {
+            if (balance == null || balance.getPharmacyLocation() == null
+                    || balance.getPharmacyLocation().getPharmacyLocationId() == null
+                    || !Boolean.TRUE.equals(balance.getPharmacyLocation().getActive())
+                    || !supportsConsumableOrderingSource(balance.getPharmacyLocation())
+                    || balance.getItem() == null
+                    || Boolean.FALSE.equals(balance.getItem().getVisibleToRequesters())
+                    || balance.getQuantityOnHand() == null
+                    || balance.getQuantityOnHand().compareTo(BigDecimal.ZERO) <= 0
+                    || !matchesProductMasterItem(balance.getItem(), productMasterItem)) {
+                continue;
+            }
+            summary.totalQuantity = summary.totalQuantity.add(balance.getQuantityOnHand());
+            Integer pharmacyLocationId = balance.getPharmacyLocation().getPharmacyLocationId();
+            if (!pharmacyLocationIds.contains(pharmacyLocationId)) {
+                pharmacyLocationIds.add(pharmacyLocationId);
+            }
+        }
+        summary.stockSites = pharmacyLocationIds.size();
+        return summary;
+    }
+
+    private boolean matchesProductMasterItem(Item item, ProductMasterItem productMasterItem) {
+        if (item == null || productMasterItem == null) {
+            return false;
+        }
+        String itemCode = normalizeKey(item.getCode());
+        String productCode = normalizeKey(productMasterItem.getNpcCode());
+        if (!itemCode.isEmpty() && itemCode.equals(productCode)) {
+            return true;
+        }
+        String itemName = normalizeKey(item.getName());
+        String productName = normalizeKey(productMasterItem.getItemName());
+        return !itemName.isEmpty() && itemName.equals(productName);
+    }
+
+    private Integer findProductMasterItemId(Item item) {
+        if (item == null) {
+            return null;
+        }
+        PharmacyService pharmacyService = Context.getService(PharmacyService.class);
+        if (pharmacyService == null) {
+            return null;
+        }
+        for (ProductMasterItem productMasterItem : pharmacyService.getAllProductMasterItems()) {
+            if (!isConsumableProductMasterItem(productMasterItem)) {
+                continue;
+            }
+            Item mappedItem = pharmacyService.getMappedItemForProductMasterItem(productMasterItem);
+            if (mappedItem != null && mappedItem.getItemId() != null && mappedItem.getItemId().equals(item.getItemId())) {
+                return productMasterItem.getProductMasterItemId();
+            }
+        }
+        String itemCode = normalizeKey(item.getCode());
+        if (!itemCode.isEmpty()) {
+            ProductMasterItem byCode = pharmacyService.getProductMasterItemByNpcCode(item.getCode());
+            if (isConsumableProductMasterItem(byCode)) {
+                return byCode.getProductMasterItemId();
+            }
+        }
+        String itemName = normalizeKey(item.getName());
+        if (!itemName.isEmpty()) {
+            for (ProductMasterItem productMasterItem : pharmacyService.getAllProductMasterItems()) {
+                if (isConsumableProductMasterItem(productMasterItem)
+                        && itemName.equals(normalizeKey(productMasterItem.getItemName()))) {
+                    return productMasterItem.getProductMasterItemId();
+                }
+            }
+        }
+        return null;
+    }
+
     private String normalizeKey(String value) {
         return safe(value).trim().toLowerCase();
     }
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private static class AvailabilitySummary {
+        private int stockSites;
+        private BigDecimal totalQuantity = BigDecimal.ZERO;
     }
 }

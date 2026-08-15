@@ -67,6 +67,9 @@ public class PharmacyItemRequestServiceImpl extends BaseOpenmrsService implement
             if (item == null) {
                 throw new IllegalArgumentException("Selected item was not found");
             }
+            if (!Boolean.TRUE.equals(item.getVisibleToRequesters())) {
+                throw new IllegalArgumentException("Selected item is hidden from requesters");
+            }
             PharmacyItemRequestLine line = new PharmacyItemRequestLine();
             line.setPharmacyItemRequest(request);
             line.setItem(item);
@@ -99,6 +102,14 @@ public class PharmacyItemRequestServiceImpl extends BaseOpenmrsService implement
     }
 
     @Override
+    public List<PharmacyItemRequest> getRequestsForPharmacy(PharmacyLocation pharmacyLocation, Date fromInclusive,
+                                                            Date toExclusive, String status, String itemName,
+                                                            int maxResults) {
+        return pharmacyItemRequestDao.getRequestsForPharmacy(pharmacyLocation, fromInclusive, toExclusive, status,
+                itemName, maxResults);
+    }
+
+    @Override
     public PharmacyItemRequest getRequest(Integer requestId) {
         return pharmacyItemRequestDao.getRequest(requestId);
     }
@@ -106,27 +117,18 @@ public class PharmacyItemRequestServiceImpl extends BaseOpenmrsService implement
     @Override
     public PharmacyItemRequest approveRequest(Integer requestId, PharmacyLocation activePharmacy,
                                               Integer[] lineIds, BigDecimal[] approvedQuantities, String[] batchNumbers) {
-        if (activePharmacy == null || activePharmacy.getPharmacyLocationId() == null) {
-            throw new IllegalArgumentException("Active pharmacy is required");
-        }
-        PharmacyItemRequest request = pharmacyItemRequestDao.getRequest(requestId);
-        if (request == null) {
-            throw new IllegalArgumentException("Pharmacy item request not found");
-        }
-        if (request.getRequestedPharmacyLocation() == null || request.getRequestedPharmacyLocation().getPharmacyLocationId() == null
-                || !activePharmacy.getPharmacyLocationId().equals(request.getRequestedPharmacyLocation().getPharmacyLocationId())) {
-            throw new IllegalArgumentException("Selected request does not belong to the active pharmacy");
-        }
-        if (!"REQUESTED".equalsIgnoreCase(request.getRequestStatus())) {
-            throw new IllegalArgumentException("Only requested pharmacy item requests can be approved");
-        }
+        PharmacyItemRequest request = requireRequestedRequest(requestId, activePharmacy);
         Map<Integer, BigDecimal> approvedByLineId = quantitiesByLineId(lineIds, approvedQuantities);
         Map<Integer, String> batchNumberByLineId = batchNumbersByLineId(lineIds, batchNumbers);
         Map<Integer, List<InventoryBalance>> balancesByItemId = balancesByItemId(activePharmacy);
         User currentUser = Context.getAuthenticatedUser();
         Date now = new Date();
+        boolean hasActiveApprovedLine = false;
         for (PharmacyItemRequestLine line : request.getLines()) {
             if (line == null || line.getItem() == null || line.getItem().getItemId() == null) {
+                continue;
+            }
+            if (Boolean.TRUE.equals(line.getVoided())) {
                 continue;
             }
             BigDecimal requestedQuantity = line.getRequestedQuantity() == null ? BigDecimal.ZERO : line.getRequestedQuantity();
@@ -135,14 +137,63 @@ public class PharmacyItemRequestServiceImpl extends BaseOpenmrsService implement
             if (approvedQuantity.compareTo(BigDecimal.ZERO) < 0 || approvedQuantity.compareTo(requestedQuantity) > 0) {
                 throw new IllegalArgumentException("Approved quantity must be between zero and requested quantity");
             }
+            if (approvedQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                hasActiveApprovedLine = true;
+            }
             line.setApprovedQuantity(approvedQuantity);
             pharmacyItemRequestDao.saveRequestLine(line);
             consumeStock(balancesByItemId.get(line.getItem().getItemId()), approvedQuantity,
                     batchNumberByLineId.get(line.getPharmacyItemRequestLineId()), line, request, activePharmacy, currentUser, now);
         }
+        if (!hasActiveApprovedLine) {
+            throw new IllegalArgumentException("At least one active request line must have an approved quantity");
+        }
         request.setApprovedBy(currentUser);
         request.setApprovedDate(now);
         request.setRequestStatus("APPROVED");
+        return pharmacyItemRequestDao.saveRequest(request);
+    }
+
+    @Override
+    public PharmacyItemRequest rejectRequest(Integer requestId, PharmacyLocation activePharmacy, String reason) {
+        PharmacyItemRequest request = requireRequestedRequest(requestId, activePharmacy);
+        String trimmedReason = trimToNull(reason);
+        if (trimmedReason == null) {
+            throw new IllegalArgumentException("Reason is required when rejecting a request");
+        }
+        User currentUser = Context.getAuthenticatedUser();
+        request.setRequestStatus("REJECTED");
+        request.setApprovedBy(currentUser);
+        request.setApprovedDate(new Date());
+        request.setVoidReason(trimmedReason);
+        return pharmacyItemRequestDao.saveRequest(request);
+    }
+
+    @Override
+    public PharmacyItemRequest removeRequestLine(Integer requestId, PharmacyLocation activePharmacy,
+                                                 Integer requestLineId, String reason) {
+        PharmacyItemRequest request = requireRequestedRequest(requestId, activePharmacy);
+        String trimmedReason = trimToNull(reason);
+        if (trimmedReason == null) {
+            throw new IllegalArgumentException("Reason is required when removing a request line");
+        }
+        PharmacyItemRequestLine line = findRequestLine(request, requestLineId);
+        if (line == null) {
+            throw new IllegalArgumentException("Pharmacy item request line not found");
+        }
+        if (!Boolean.TRUE.equals(line.getVoided())) {
+            line.setVoided(Boolean.TRUE);
+            line.setVoidedBy(Context.getAuthenticatedUser());
+            line.setDateVoided(new Date());
+            line.setVoidReason(trimmedReason);
+            pharmacyItemRequestDao.saveRequestLine(line);
+        }
+        if (!hasActiveRequestLines(request)) {
+            request.setRequestStatus("REJECTED");
+            request.setApprovedBy(Context.getAuthenticatedUser());
+            request.setApprovedDate(new Date());
+            request.setVoidReason("All request lines removed. " + trimmedReason);
+        }
         return pharmacyItemRequestDao.saveRequest(request);
     }
 
@@ -212,6 +263,56 @@ public class PharmacyItemRequestServiceImpl extends BaseOpenmrsService implement
             }
         }
         return batchNumbersByLineId;
+    }
+
+    private PharmacyItemRequest requireRequestedRequest(Integer requestId, PharmacyLocation activePharmacy) {
+        if (activePharmacy == null || activePharmacy.getPharmacyLocationId() == null) {
+            throw new IllegalArgumentException("Active pharmacy is required");
+        }
+        PharmacyItemRequest request = pharmacyItemRequestDao.getRequest(requestId);
+        if (request == null) {
+            throw new IllegalArgumentException("Pharmacy item request not found");
+        }
+        if (request.getRequestedPharmacyLocation() == null || request.getRequestedPharmacyLocation().getPharmacyLocationId() == null
+                || !activePharmacy.getPharmacyLocationId().equals(request.getRequestedPharmacyLocation().getPharmacyLocationId())) {
+            throw new IllegalArgumentException("Selected request does not belong to the active pharmacy");
+        }
+        if (!"REQUESTED".equalsIgnoreCase(request.getRequestStatus())) {
+            throw new IllegalArgumentException("Only requested pharmacy item requests can be served, changed, or rejected");
+        }
+        return request;
+    }
+
+    private PharmacyItemRequestLine findRequestLine(PharmacyItemRequest request, Integer requestLineId) {
+        if (request == null || requestLineId == null || request.getLines() == null) {
+            return null;
+        }
+        for (PharmacyItemRequestLine line : request.getLines()) {
+            if (line != null && requestLineId.equals(line.getPharmacyItemRequestLineId())) {
+                return line;
+            }
+        }
+        return null;
+    }
+
+    private boolean hasActiveRequestLines(PharmacyItemRequest request) {
+        if (request == null || request.getLines() == null) {
+            return false;
+        }
+        for (PharmacyItemRequestLine line : request.getLines()) {
+            if (line != null && !Boolean.TRUE.equals(line.getVoided())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private void consumeStock(List<InventoryBalance> itemBalances, BigDecimal quantityToConsume, String selectedBatchNumber,

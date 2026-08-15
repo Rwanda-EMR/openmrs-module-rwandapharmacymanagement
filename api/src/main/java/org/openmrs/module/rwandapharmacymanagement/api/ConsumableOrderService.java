@@ -15,5 +15,10 @@ public interface ConsumableOrderService extends OpenmrsService {
                                                           Location requestingLocation,
                                                           List<ConsumableOrderLineCommand> lines);
 
+    PatientDispensingRequest updateConsumableLine(Integer requestId, Integer requestLineId,
+                                                  ConsumableOrderLineCommand command);
+
+    PatientDispensingRequest voidConsumableLine(Integer requestId, Integer requestLineId, String voidReason);
+
     ConsumableBillingReadiness getBillingReadiness(Patient patient);
 }

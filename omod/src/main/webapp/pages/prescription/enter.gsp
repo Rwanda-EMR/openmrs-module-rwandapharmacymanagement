@@ -93,6 +93,14 @@
     .rx-dialog-actions .rx-btn-primary { background:#7ac943; border-color:#66b136; }
     .rx-inline-form { margin-top:10px; padding:12px; border:1px solid #dbe5f0; border-radius:4px; background:#fff; }
     .rx-inline-form.is-hidden { display:none; }
+    .rx-view-panel { padding:12px; border:1px solid #dbe5f0; border-radius:4px; background:#f8fbff; }
+    .rx-view-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; margin-bottom:12px; }
+    .rx-view-card { border:1px solid #e2e8f0; border-radius:4px; padding:8px 10px; background:#fff; }
+    .rx-view-label { display:block; font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:#64748b; }
+    .rx-view-value { display:block; margin-top:3px; color:#0f172a; font-size:12px; }
+    .rx-view-dispensed { width:100%; border-collapse:collapse; margin-top:8px; }
+    .rx-view-dispensed th, .rx-view-dispensed td { border:1px solid #e2e8f0; padding:7px 8px; font-size:12px; text-align:left; }
+    .rx-view-dispensed th { background:#edf4fb; color:#334155; }
     .rx-inline-actions { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
     .rx-status-void { color:#b91c1c; font-weight:600; }
     .rx-pagination { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
@@ -102,7 +110,7 @@
         .rx-shell { grid-template-columns:1fr; }
         .rx-grid-3, .rx-total { grid-template-columns:1fr; }
         .rx-summary-actions { align-items:flex-start; }
-        .rx-history-grid, .rx-history-line-grid { grid-template-columns:1fr; }
+        .rx-history-grid, .rx-history-line-grid, .rx-view-grid { grid-template-columns:1fr; }
     }
 </style>
 
@@ -290,7 +298,15 @@
             </div>
             <div class="rx-field">
                 <label>Dose instructions</label>
-                <textarea id="rx-instructions"></textarea>
+                <textarea id="rx-instructions" required="required"></textarea>
+            </div>
+            <div class="rx-field">
+                <label class="rx-check-row">
+                    <input type="checkbox" id="rx-not-billable"/>
+                    <span>Do not bill this item</span>
+                </label>
+                <textarea id="rx-billing-exclusion-reason" placeholder="Reason this item should not be billed"></textarea>
+                <div class="rx-inline-note">Reason is required when the item should not be billed.</div>
             </div>
             <% if (patient && activeVisit && candidatePharmacies) { %>
             <button type="button" class="rx-btn rx-btn-add" onclick="addToPrescription()">Add drug to list</button>
@@ -315,7 +331,7 @@
                 <div id="rx-hidden-fields"></div>
                 <table class="rx-summary-table" id="rx-summary-table" style="display:none;">
                     <thead>
-                    <tr><th>Drug</th><th>Start date</th><th>Qty</th><th>Frequency</th><th>Duration</th><th></th></tr>
+                    <tr><th>Drug</th><th>Start date</th><th>Qty</th><th>Frequency</th><th>Duration</th><th>Billing</th><th></th></tr>
                     </thead>
                     <tbody id="rx-summary-body"></tbody>
                 </table>
@@ -359,18 +375,77 @@
                 <td>${ line.provider ?: '' }</td>
                 <td class="${ line.lineStatus == 'VOIDED' ? 'rx-status-void' : '' }">${ line.lineStatus ?: '' }</td>
                 <td>
-                    <% if (line.editable) { %>
                     <div class="rx-line-actions">
+                        <a href="#" class="rx-icon-action" onclick="toggleLineView('${ line.requestLineId }'); return false;" title="View prescribed and dispensed details">
+                            <i class="icon-eye-open"></i>
+                        </a>
+                    <% if (line.editable) { %>
                         <a href="#" class="rx-icon-action" onclick="toggleLineEdit('${ line.requestLineId }'); return false;" title="Edit prescribed drug">
                             <i class="icon-pencil"></i>
                         </a>
                         <a href="#" class="rx-icon-action rx-danger" onclick="openVoidPrescriptionDialog('${ entry.requestId }', '${ line.requestLineId }', '${ historyPage }', '${ ui.encodeJavaScript(line.itemName ?: '') }'); return false;" title="Delete prescribed drug">
                             <i class="icon-trash"></i>
                         </a>
-                    </div>
                     <% } else { %>
-                    <span class="rx-muted">Locked</span>
+                        <span class="rx-muted">Locked</span>
                     <% } %>
+                    </div>
+                </td>
+            </tr>
+            <tr id="rx-view-row-${ line.requestLineId }" class="rx-inline-form is-hidden">
+                <td colspan="7">
+                    <div class="rx-view-panel">
+                        <div class="rx-view-grid">
+                            <div class="rx-view-card"><span class="rx-view-label">Drug</span><span class="rx-view-value">${ line.itemName ?: '' }</span></div>
+                            <div class="rx-view-card"><span class="rx-view-label">Start date</span><span class="rx-view-value">${ line.startDate ? line.startDate.format('yyyy-MM-dd') : '' }</span></div>
+                            <div class="rx-view-card"><span class="rx-view-label">Requested quantity</span><span class="rx-view-value">${ line.requestedQuantity ?: '' }</span></div>
+                            <div class="rx-view-card"><span class="rx-view-label">Dispensed quantity</span><span class="rx-view-value">${ line.dispensedQuantity ?: 0 }</span></div>
+                            <div class="rx-view-card"><span class="rx-view-label">Dose</span><span class="rx-view-value">${ line.dose ?: '' }</span></div>
+                            <div class="rx-view-card"><span class="rx-view-label">Route</span><span class="rx-view-value">${ line.route ?: '' }</span></div>
+                            <div class="rx-view-card"><span class="rx-view-label">Frequency</span><span class="rx-view-value">${ line.frequency ?: '' }</span></div>
+                            <div class="rx-view-card"><span class="rx-view-label">Duration</span><span class="rx-view-value">${ line.duration ?: '' } ${ line.durationUnits ?: '' }</span></div>
+                            <div class="rx-view-card"><span class="rx-view-label">Provider</span><span class="rx-view-value">${ line.provider ?: '' }</span></div>
+                            <div class="rx-view-card"><span class="rx-view-label">Status</span><span class="rx-view-value">${ line.lineStatus ?: '' }</span></div>
+                            <div class="rx-view-card"><span class="rx-view-label">Billing</span><span class="rx-view-value">${ line.billable ? 'Billable' : 'Not billable' }</span></div>
+                            <div class="rx-view-card"><span class="rx-view-label">No-bill reason</span><span class="rx-view-value">${ line.billingExclusionReason ?: '' }</span></div>
+                            <div class="rx-view-card"><span class="rx-view-label">Order ID</span><span class="rx-view-value">${ line.orderId ?: '' }</span></div>
+                            <div class="rx-view-card"><span class="rx-view-label">Request ID</span><span class="rx-view-value">${ entry.requestId ?: '' }</span></div>
+                        </div>
+                        <div class="rx-view-card" style="margin-bottom:12px;">
+                            <span class="rx-view-label">Dose instructions</span>
+                            <span class="rx-view-value">${ line.instructions ?: '' }</span>
+                        </div>
+                        <% def dispensedLines = line.dispensedLines ?: [] %>
+                        <% if (dispensedLines) { %>
+                        <strong>Dispensing records</strong>
+                        <table class="rx-view-dispensed">
+                            <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Pharmacy</th>
+                                <th>Dispensed by</th>
+                                <th>Batch</th>
+                                <th>Expiry</th>
+                                <th>Quantity</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <% dispensedLines.each { dispensedLine -> %>
+                            <tr>
+                                <td>${ dispensedLine.dateCreated ? dispensedLine.dateCreated.format('yyyy-MM-dd HH:mm') : '' }</td>
+                                <td>${ dispensedLine.pharmacy ?: '' }</td>
+                                <td>${ dispensedLine.dispensedBy ?: '' }</td>
+                                <td>${ dispensedLine.batchNumber ?: '' }</td>
+                                <td>${ dispensedLine.expiryDate ? dispensedLine.expiryDate.format('yyyy-MM-dd') : '' }</td>
+                                <td>${ dispensedLine.quantityDispensed ?: '' }</td>
+                            </tr>
+                            <% } %>
+                            </tbody>
+                        </table>
+                        <% } else { %>
+                        <div class="rx-muted">No dispensing record captured yet for this prescription line.</div>
+                        <% } %>
+                    </div>
                 </td>
             </tr>
             <% if (line.editable) { %>
@@ -444,7 +519,20 @@
                         </div>
                         <div class="rx-field">
                             <label>Dose instructions</label>
-                            <textarea name="instructions">${ line.instructions ?: '' }</textarea>
+                            <textarea name="instructions" required="required">${ line.instructions ?: '' }</textarea>
+                        </div>
+                        <div class="rx-grid-2">
+                            <div class="rx-field">
+                                <label>Billing</label>
+                                <select name="billable">
+                                    <option value="true" ${ line.billable ? 'selected="selected"' : '' }>Bill this item</option>
+                                    <option value="false" ${ !line.billable ? 'selected="selected"' : '' }>Do not bill this item</option>
+                                </select>
+                            </div>
+                            <div class="rx-field">
+                                <label>No-bill reason</label>
+                                <input type="text" name="billingExclusionReason" value="${ line.billingExclusionReason ?: '' }"/>
+                            </div>
                         </div>
                         <div class="rx-inline-actions">
                             <button type="button" class="rx-btn" onclick="toggleLineEdit('${ line.requestLineId }')">Cancel</button>
@@ -829,6 +917,14 @@
         }
     }
 
+    function toggleLineView(lineId) {
+        var row = byId('rx-view-row-' + lineId);
+        if (!row) {
+            return;
+        }
+        row.classList.toggle('is-hidden');
+    }
+
     function openVoidPrescriptionDialog(requestId, requestLineId, historyPage, itemName) {
         pendingVoidRequest = {
             requestId: requestId,
@@ -885,6 +981,19 @@
             alert('Quantity must be greater than zero.');
             return null;
         }
+        var instructions = normalizeText(byId('rx-instructions').value);
+        if (!instructions) {
+            alert('Dose instructions are required.');
+            byId('rx-instructions').focus();
+            return null;
+        }
+        var billable = !(byId('rx-not-billable') && byId('rx-not-billable').checked);
+        var billingExclusionReason = normalizeText(byId('rx-billing-exclusion-reason') ? byId('rx-billing-exclusion-reason').value : '');
+        if (!billable && !billingExclusionReason) {
+            alert('Enter a reason for not billing this item.');
+            byId('rx-billing-exclusion-reason').focus();
+            return null;
+        }
         var selectedProduct = findPrescriptionProduct(productId);
         return {
             productMasterItemId: productId,
@@ -896,7 +1005,9 @@
             durationUnit: normalizeText(byId('rx-duration-unit').value),
             startDate: normalizeText(byId('rx-start-date-field').value),
             quantity: normalizeText(byId('rx-quantity').value),
-            instructions: normalizeText(byId('rx-instructions').value)
+            instructions: instructions,
+            billable: billable,
+            billingExclusionReason: billable ? '' : billingExclusionReason
         };
     }
 
@@ -916,6 +1027,8 @@
         }
         byId('rx-quantity').value = '';
         byId('rx-instructions').value = '';
+        byId('rx-not-billable').checked = false;
+        byId('rx-billing-exclusion-reason').value = '';
         hidePrescriptionProductSuggestions();
     }
 
@@ -971,6 +1084,7 @@
                 + '<td>' + escapeHtml(line.quantity) + '</td>'
                 + '<td>' + escapeHtml(line.frequency) + '</td>'
                 + '<td>' + escapeHtml(line.duration ? (line.duration + ' ' + line.durationUnit) : '') + '</td>'
+                + '<td>' + (line.billable ? 'Billable' : ('Not billable<br/><span class="rx-muted">' + escapeHtml(line.billingExclusionReason || '') + '</span>')) + '</td>'
                 + '<td><button type="button" class="rx-remove-link" onclick="removeDraftLine(' + i + ')">Remove</button></td>';
             body.appendChild(row);
             hidden.appendChild(hiddenInput('productMasterItemId', line.productMasterItemId));
@@ -982,6 +1096,8 @@
             hidden.appendChild(hiddenInput('startDate', line.startDate));
             hidden.appendChild(hiddenInput('quantity', line.quantity));
             hidden.appendChild(hiddenInput('instructions', line.instructions));
+            hidden.appendChild(hiddenInput('billable', line.billable ? 'true' : 'false'));
+            hidden.appendChild(hiddenInput('billingExclusionReason', line.billingExclusionReason));
         }
         byId('rx-count').textContent = prescriptionDraft.length;
         if (byId('rx-header-draft-count')) {

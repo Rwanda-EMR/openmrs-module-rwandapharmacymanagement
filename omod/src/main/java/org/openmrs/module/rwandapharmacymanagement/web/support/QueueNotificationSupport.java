@@ -6,6 +6,7 @@ import org.openmrs.Location;
 import org.openmrs.LocationTag;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.rwandapharmacymanagement.api.AlertService;
+import org.openmrs.module.rwandapharmacymanagement.api.DepartmentBulkRequestService;
 import org.openmrs.module.rwandapharmacymanagement.api.DispensingService;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.LabSupplyService;
@@ -74,6 +75,20 @@ public final class QueueNotificationSupport {
         catch (Exception ignored) {
             log.warn("Unable to count pharmacy transfer approval notifications", ignored);
             counts.put("pharmacyorder/approve", 0);
+        }
+        try {
+            counts.put("department/finance", departmentRequestCount(DepartmentBulkRequestService.STATUS_SUBMITTED));
+        }
+        catch (Exception ignored) {
+            log.warn("Unable to count department finance approval notifications", ignored);
+            counts.put("department/finance", 0);
+        }
+        try {
+            counts.put("department/dispense", departmentDispenseCount(activePharmacy));
+        }
+        catch (Exception ignored) {
+            log.warn("Unable to count department pharmacy dispense notifications", ignored);
+            counts.put("department/dispense", 0);
         }
         try {
             counts.put("purchaseorder/management", pendingPurchaseOrderCount(pharmacyService));
@@ -195,6 +210,18 @@ public final class QueueNotificationSupport {
         return safeInt(pharmacyService.countPurchaseOrdersByApprovalStatus("PENDING"));
     }
 
+    private static int departmentRequestCount(String status) {
+        return safeInt(departmentBulkRequestService().countRequestsByStatus(status));
+    }
+
+    private static int departmentDispenseCount(PharmacyLocation activePharmacy) {
+        if (activePharmacy == null || activePharmacy.getPharmacyLocationId() == null) {
+            return 0;
+        }
+        return safeInt(departmentBulkRequestService().countRequestsByStatusForSupplyingPharmacy(
+                DepartmentBulkRequestService.STATUS_FINANCE_APPROVED, activePharmacy));
+    }
+
     private static int safeInt(long value) {
         return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) Math.max(0L, value);
     }
@@ -216,6 +243,10 @@ public final class QueueNotificationSupport {
 
     private static PharmacyItemRequestService pharmacyItemRequestService() {
         return Context.getRegisteredComponent("pharmacyItemRequestService", PharmacyItemRequestService.class);
+    }
+
+    private static DepartmentBulkRequestService departmentBulkRequestService() {
+        return Context.getRegisteredComponent("departmentBulkRequestService", DepartmentBulkRequestService.class);
     }
 
     private static InventoryService inventoryService() {

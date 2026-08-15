@@ -1,6 +1,9 @@
 package org.openmrs.module.rwandapharmacymanagement.db.hibernate;
 
 import org.hibernate.SessionFactory;
+import org.hibernate.Criteria;
+import org.hibernate.criterion.CriteriaSpecification;
+import org.hibernate.criterion.MatchMode;
 import org.hibernate.criterion.Order;
 import org.hibernate.criterion.Projections;
 import org.hibernate.criterion.Restrictions;
@@ -11,6 +14,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.PharmacyItemRequestLine
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 
 public class HibernatePharmacyItemRequestDao implements PharmacyItemRequestDao {
@@ -75,6 +79,37 @@ public class HibernatePharmacyItemRequestDao implements PharmacyItemRequestDao {
                 .setProjection(Projections.rowCount())
                 .uniqueResult();
         return result instanceof Number ? ((Number) result).longValue() : 0L;
+    }
+
+    @Override
+    public List<PharmacyItemRequest> getRequestsForPharmacy(PharmacyLocation pharmacyLocation, Date fromInclusive,
+                                                            Date toExclusive, String status, String itemName,
+                                                            int maxResults) {
+        if (pharmacyLocation == null || pharmacyLocation.getPharmacyLocationId() == null || maxResults <= 0) {
+            return Collections.emptyList();
+        }
+        Criteria criteria = sessionFactory.getCurrentSession().createCriteria(PharmacyItemRequest.class)
+                .add(Restrictions.eq("voided", false))
+                .add(Restrictions.eq("requestedPharmacyLocation", pharmacyLocation));
+        if (fromInclusive != null) {
+            criteria.add(Restrictions.ge("dateCreated", fromInclusive));
+        }
+        if (toExclusive != null) {
+            criteria.add(Restrictions.lt("dateCreated", toExclusive));
+        }
+        if (status != null && !status.trim().isEmpty()) {
+            criteria.add(Restrictions.eq("requestStatus", status.trim().toUpperCase()));
+        }
+        if (itemName != null && !itemName.trim().isEmpty()) {
+            criteria.createAlias("lines", "line");
+            criteria.createAlias("line.item", "item");
+            criteria.add(Restrictions.ilike("item.name", itemName.trim(), MatchMode.ANYWHERE));
+            criteria.setResultTransformer(CriteriaSpecification.DISTINCT_ROOT_ENTITY);
+        }
+        return criteria.addOrder(Order.desc("dateCreated"))
+                .addOrder(Order.desc("pharmacyItemRequestId"))
+                .setMaxResults(maxResults)
+                .list();
     }
 
     @Override

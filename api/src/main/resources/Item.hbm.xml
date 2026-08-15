@@ -19,6 +19,7 @@
         <property name="lowStockThreshold" column="low_stock_threshold" type="integer"/>
         <property name="requiresBatch" column="requires_batch" type="boolean"/>
         <property name="requiresExpiry" column="requires_expiry" type="boolean"/>
+        <property name="visibleToRequesters" column="visible_to_requesters" type="boolean"/>
         <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
         <property name="dateCreated" column="date_created"/>
         <property name="voided" column="voided" type="boolean"/>

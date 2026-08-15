@@ -107,6 +107,11 @@
         margin-top: 14px;
         align-items: center;
     }
+    .review-item-title { display:block; color:#222; font-weight:bold; margin-bottom:5px; }
+    .review-remove-link { background:#fff1f2; border:1px solid #fecdd3; border-radius:999px; color:#be123c; cursor:pointer; font-size:11px; padding:5px 9px; text-decoration:none; white-space:nowrap; }
+    .review-remove-link:hover, .review-remove-link:focus { background:#ffe4e6; color:#9f1239; }
+    .review-line-remove { display:flex; gap:6px; align-items:center; margin-top:6px; }
+    .review-line-remove input { width:155px; border:1px solid #cbd5e1; border-radius:4px; font-size:12px; padding:5px 7px; }
 </style>
 
 <h2>Dispensing To Dispensing Review</h2>
@@ -126,15 +131,25 @@
 
             <form method="post">
                 <input type="hidden" name="transferId" value="${ transfer.interPharmacyTransferId }"/>
+                <input type="hidden" name="transferLineId" value=""/>
+                <input type="hidden" name="lineVoidReason" value=""/>
                 <div class="review-table-wrap">
                     <table class="review-table">
                         <thead>
                         <tr><th>Item</th><th>Qty</th><th>Unit cost</th><th>Line value</th><th>Batch</th><th>Expiry</th><th>Available</th></tr>
                         </thead>
                         <tbody>
-                        <% transfer.lines?.each { line -> %>
+                        <% transfer.lines?.each { line -> if (line.voided != true) { %>
                         <tr class="review-inter-line" data-source-id="${ transfer.sourcePharmacyLocation?.pharmacyLocationId ?: '' }" data-item-id="${ line.item?.itemId ?: '' }" data-batch-number="${ line.batchNumber?.replace('\\', '\\\\')?.replace('"', '&quot;') ?: '' }" data-stored-unit-price="${ line.unitPrice ?: 0 }">
-                            <td>${ line.item?.name ?: '' }</td>
+                            <td>
+                                <span class="review-item-title">${ line.item?.name ?: '' }</span>
+                                <% if (transfer.transferStatus == 'REQUESTED' || transfer.transferStatus == 'APPROVED') { %>
+                                <span class="review-line-remove">
+                                    <input type="text" class="review-line-remove-reason" placeholder="Reason for removing"/>
+                                    <button type="submit" class="review-remove-link" name="action" value="removeLine" data-line-id="${ line.interPharmacyTransferLineId }" onclick="return prepareTransferLineRemoval(this)">Remove line</button>
+                                </span>
+                                <% } %>
+                            </td>
                             <td><input type="number" step="0.01" min="0.01" name="quantity" value="${ line.quantity }" ${ transfer.transferStatus == 'SERVED' || transfer.transferStatus == 'REJECTED' ? 'readonly="readonly"' : '' }/></td>
                             <td class="review-inter-unit-price">${ line.unitPrice ?: 0 }</td>
                             <td class="review-inter-line-value">${ line.totalAmount ?: ((line.unitPrice ?: 0) * (line.quantity ?: 0)) }</td>
@@ -146,10 +161,10 @@
                             <td><input type="date" class="openmrs-date-field" name="expiryDate" value="${ line.expiryDate ? new java.text.SimpleDateFormat('yyyy-MM-dd').format(line.expiryDate) : '' }" ${ transfer.transferStatus == 'SERVED' || transfer.transferStatus == 'REJECTED' ? 'readonly="readonly"' : '' }/></td>
                             <td class="review-inter-available"></td>
                         </tr>
-                        <% } %>
+                        <% } } %>
                         <tr>
                             <td colspan="3" style="text-align:right;font-weight:bold;background:#f5f5f5;">Total transfer value</td>
-                            <td id="review-inter-transfer-total" style="font-weight:bold;background:#f5f5f5;">${ transfer.lines?.collect { line -> line.totalAmount ?: ((line.unitPrice ?: 0) * (line.quantity ?: 0)) }?.sum() ?: 0 }</td>
+                            <td id="review-inter-transfer-total" style="font-weight:bold;background:#f5f5f5;">${ transfer.lines?.findAll { line -> line.voided != true }?.collect { line -> line.totalAmount ?: ((line.unitPrice ?: 0) * (line.quantity ?: 0)) }?.sum() ?: 0 }</td>
                             <td colspan="3" style="background:#f5f5f5;"></td>
                         </tr>
                         </tbody>
@@ -190,6 +205,25 @@
         ]${ pharmacyIndex + 1 < stockByPharmacy.size() ? ',' : '' }
         <% } %>
     };
+    function prepareTransferLineRemoval(button) {
+        var form = button ? button.form : null;
+        if (!form) {
+            return false;
+        }
+        var container = button.closest('.review-line-remove');
+        var reasonInput = container ? container.querySelector('.review-line-remove-reason') : null;
+        var reason = reasonInput ? reasonInput.value : '';
+        if (!reason || !reason.trim()) {
+            alert('Enter a reason before removing this line.');
+            if (reasonInput) {
+                reasonInput.focus();
+            }
+            return false;
+        }
+        form.querySelector('input[name="transferLineId"]').value = button.getAttribute('data-line-id');
+        form.querySelector('input[name="lineVoidReason"]').value = reason.trim();
+        return true;
+    }
     function reviewInterNumber(value) {
         var parsed = parseFloat(value || '0');
         return isNaN(parsed) ? 0 : parsed;

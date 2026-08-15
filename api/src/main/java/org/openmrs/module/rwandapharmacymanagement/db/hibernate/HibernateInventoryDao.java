@@ -102,6 +102,16 @@ public class HibernateInventoryDao implements InventoryDao {
     }
 
     @Override
+    public InventoryBalance getInventoryBalance(Integer inventoryBalanceId) {
+        if (inventoryBalanceId == null) {
+            return null;
+        }
+        InventoryBalance balance = (InventoryBalance) sessionFactory.getCurrentSession()
+                .get(InventoryBalance.class, inventoryBalanceId);
+        return balance == null || Boolean.TRUE.equals(balance.getVoided()) ? null : balance;
+    }
+
+    @Override
     public List<DeliveryReceiptLine> getRecentDeliveryReceiptLines() {
         return sessionFactory.getCurrentSession().createCriteria(DeliveryReceiptLine.class)
                 .add(notVoided())
@@ -120,12 +130,28 @@ public class HibernateInventoryDao implements InventoryDao {
     }
 
     @Override
+    public StockTransaction getStockTransaction(Integer stockTransactionId) {
+        if (stockTransactionId == null) {
+            return null;
+        }
+        StockTransaction transaction = (StockTransaction) sessionFactory.getCurrentSession()
+                .get(StockTransaction.class, stockTransactionId);
+        return transaction == null || Boolean.TRUE.equals(transaction.getVoided()) ? null : transaction;
+    }
+
+    @Override
     public List<StockTransaction> getStockTransactions(Date fromInclusive, Date toExclusive, Integer pharmacyLocationId) {
         return getStockTransactions(null, fromInclusive, toExclusive, pharmacyLocationId);
     }
 
     @Override
     public List<StockTransaction> getStockTransactions(Integer itemId, Date fromInclusive, Date toExclusive, Integer pharmacyLocationId) {
+        return getStockTransactions(itemId, fromInclusive, toExclusive, pharmacyLocationId, null);
+    }
+
+    @Override
+    public List<StockTransaction> getStockTransactions(Integer itemId, Date fromInclusive, Date toExclusive,
+                                                       Integer pharmacyLocationId, Integer maxResults) {
         org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(StockTransaction.class);
         criteria.add(notVoided());
         if (itemId != null) {
@@ -144,6 +170,9 @@ public class HibernateInventoryDao implements InventoryDao {
         }
         criteria.addOrder(Order.asc("dateCreated"));
         criteria.addOrder(Order.asc("stockTransactionId"));
+        if (maxResults != null && maxResults > 0) {
+            criteria.setMaxResults(maxResults);
+        }
         return criteria.list();
     }
 
@@ -197,6 +226,34 @@ public class HibernateInventoryDao implements InventoryDao {
     @Override
     public InterPharmacyTransfer getTransfer(Integer transferId) {
         return (InterPharmacyTransfer) sessionFactory.getCurrentSession().get(InterPharmacyTransfer.class, transferId);
+    }
+
+    @Override
+    public InterPharmacyTransferLine getLatestTransferLineBefore(Integer destinationPharmacyLocationId,
+                                                                 Integer itemId,
+                                                                 Date beforeDate,
+                                                                 Integer excludeTransferId) {
+        if (destinationPharmacyLocationId == null || itemId == null || beforeDate == null) {
+            return null;
+        }
+        org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(InterPharmacyTransferLine.class);
+        criteria.add(notVoided());
+        criteria.createAlias("item", "item");
+        criteria.createAlias("interPharmacyTransfer", "transfer");
+        criteria.createAlias("transfer.destinationPharmacyLocation", "destinationPharmacyLocation");
+        criteria.add(Restrictions.eq("item.itemId", itemId));
+        criteria.add(Restrictions.eq("destinationPharmacyLocation.pharmacyLocationId", destinationPharmacyLocationId));
+        criteria.add(Restrictions.lt("transfer.dateCreated", beforeDate));
+        criteria.add(Restrictions.or(Restrictions.eq("transfer.voided", false), Restrictions.isNull("transfer.voided")));
+        criteria.add(Restrictions.ne("transfer.transferStatus", "REJECTED"));
+        if (excludeTransferId != null) {
+            criteria.add(Restrictions.ne("transfer.interPharmacyTransferId", excludeTransferId));
+        }
+        criteria.addOrder(Order.desc("transfer.dateCreated"));
+        criteria.addOrder(Order.desc("interPharmacyTransferLineId"));
+        criteria.setMaxResults(1);
+        List<InterPharmacyTransferLine> lines = criteria.list();
+        return lines == null || lines.isEmpty() ? null : lines.get(0);
     }
 
     @Override

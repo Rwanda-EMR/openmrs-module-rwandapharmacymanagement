@@ -3,6 +3,7 @@ package org.openmrs.module.rwandapharmacymanagement.api;
 import org.openmrs.api.OpenmrsService;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecord;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
+import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.PaymentExceptionType;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestType;
 
@@ -68,11 +69,20 @@ public interface DispensingService extends OpenmrsService {
                                                                        Integer pharmacyLocationId,
                                                                        RequestType requestType);
 
+    List<PatientDispensingRequestLine> getNotBillableRequestLines(Date fromInclusive,
+                                                                  Date toExclusive,
+                                                                  Integer pharmacyLocationId,
+                                                                  RequestType requestType);
+
     List<DispenseRecord> getDispenseRecordsForRequests(List<Integer> requestIds);
 
     List<PatientDispensingRequest> getPatientPrescriptionHistory(Integer patientId, int firstResult, int maxResults);
 
     long countPatientPrescriptionHistory(Integer patientId);
+
+    List<PatientDispensingRequest> getPatientConsumableHistory(Integer patientId, int firstResult, int maxResults);
+
+    long countPatientConsumableHistory(Integer patientId);
 
     PatientDispensingRequest getRequest(Integer requestId);
 

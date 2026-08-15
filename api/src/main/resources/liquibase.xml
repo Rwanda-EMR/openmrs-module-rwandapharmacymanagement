@@ -104,6 +104,10 @@
         <sqlFile path="sql/migrations/rpm-request-line-uuid.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
+    <changeSet id="rpm-hie-prescription-identity" author="codex">
+        <sqlFile path="sql/migrations/rpm-hie-prescription-identity.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
     <changeSet id="rpm-hie-retry-log-metadata" author="codex">
         <sqlFile path="sql/migrations/rpm-hie-retry-log-metadata.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
@@ -114,6 +118,22 @@
 
     <changeSet id="rpm-inventory-balance-unique-active" author="codex">
         <sqlFile path="sql/migrations/rpm-inventory-balance-unique-active.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-department-bulk-request-workflow" author="codex">
+        <sqlFile path="sql/migrations/rpm-department-bulk-request-workflow.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-item-requester-visibility" author="codex">
+        <sqlFile path="sql/migrations/rpm-item-requester-visibility.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-inter-pharmacy-transfer-line-batches" author="codex">
+        <sqlFile path="sql/migrations/rpm-inter-pharmacy-transfer-line-batches.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-request-line-billing-control" author="codex">
+        <sqlFile path="sql/migrations/rpm-request-line-billing-control.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
 </databaseChangeLog>

@@ -59,6 +59,8 @@
     <tr><td><code>Task: rwandapharmacymanagement.dispenseWithoutOrder</code></td><td>Dispense without order where enabled.</td></tr>
     <tr><td><code>Task: rwandapharmacymanagement.transferStock</code></td><td>Transfer stock between pharmacies.</td></tr>
     <tr><td><code>Task: rwandapharmacymanagement.approveMainToDispensingTransfer</code></td><td>Head of Finance approval for main-to-dispensing transfers.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.departmentStore</code></td><td>Access the department store workspace and department stock issue workflows.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.approvePaymentException</code></td><td>Approve controlled exceptions where dispensing must proceed outside the normal payment rule.</td></tr>
     <tr><td><code>Task: rwandapharmacymanagement.submitSupplierOrders</code></td><td>Create/submit/retry supplier purchase orders.</td></tr>
     <tr><td><code>Task: rwandapharmacymanagement.approvePurchaseOrders</code></td><td>Health Facility Leader purchase order approval.</td></tr>
     <tr><td><code>Task: rwandapharmacymanagement.receiveDeliveries</code></td><td>Receive supplier deliveries.</td></tr>
@@ -81,7 +83,9 @@
     <tr><td><code>rwandapharmacymanagement.purchaseOrder.hospital</code></td><td><code>Kirehe Hospital</code></td><td>Hospital name used in SMS message text.</td></tr>
     <tr><td><code>rwandapharmacymanagement.purchaseOrder.hospitalName</code></td><td><code>Kirehe Hospital</code></td><td>Hospital name on purchase order emails and PDFs. Keep same as hospital.</td></tr>
     <tr><td><code>rwandapharmacymanagement.prescription.paymentBillMode</code></td><td><code>strict</code> or <code>latest</code></td><td>Strict checks only linked bill. Latest can fall back to latest bill.</td></tr>
-    <tr><td><code>rwandapharmacymanagement.alerts.expiryDays</code></td><td><code>90</code></td><td>Days before expiry for expiry alerts.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.alerts.expiryDays</code></td><td><code>90</code></td><td>Default number of days ahead used by the Expiration Alerts table. Users can override it from the alert page filter.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.alerts.daysOfStockDays</code></td><td><code>14</code></td><td>Default days-of-stock threshold for Low Stock alerts. Items with calculated days of stock less than or equal to this value are shown as low stock.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.alerts.consumptionLookbackDays</code></td><td><code>90</code></td><td>Default number of past days used to calculate average daily consumption for the Stockout and Low Stock table.</td></tr>
     <tr><td><code>rwandapharmacymanagement.pricing.dispensingMarkupPercentage</code></td><td><code>0</code></td><td>Markup for dispensing price calculations.</td></tr>
     <tr><td><code>rwandapharmacymanagement.lab.serviceConceptSet</code></td><td>Concept UUID or ID</td><td>Concept set/answers used for lab request services.</td></tr>
     <tr><td><code>rwandapharmacymanagement.prescription.frequencyConceptSet</code></td><td>Concept UUID or ID</td><td>Concept set/answers used for prescription frequency options.</td></tr>
@@ -97,6 +101,8 @@
     <tr><td><code>rwandapharmacymanagement.supplier.connectionTimeout</code></td><td><code>10000</code></td><td>API connection timeout in milliseconds.</td></tr>
     <tr><td><code>rwandapharmacymanagement.supplier.readTimeout</code></td><td><code>30000</code></td><td>API read timeout in milliseconds.</td></tr>
     <tr><td><code>rwandapharmacymanagement.supplier.enabled</code></td><td><code>true</code></td><td>Enable RMS integration.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.supplier.deliveryFetchSchedulerEnabled</code></td><td><code>false</code></td><td>Enable scheduled RMS delivery fetching.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.supplier.deliveryFetchSchedulerIntervalSeconds</code></td><td><code>3600</code></td><td>Scheduler interval for RMS delivery fetching.</td></tr>
 </table>
 
 <h3>5.2 Supplier Records</h3>
@@ -142,11 +148,14 @@
     <li>Consumable order page loading does not check billing mappings. Billing mappings are validated when the order is submitted.</li>
     <li>Configure <code>rwandapharmacymanagement.prescription.paymentBillMode</code> as <code>strict</code> or <code>latest</code>.</li>
 </ol>
+<div class="note">The module creates and links its own prescription/consumable request records to billing. Avoid database triggers that also create drug billing rows from OpenMRS orders, because they can duplicate bills or fail when billing mappings contain duplicate rows.</div>
+<p>Use <strong>Missing billing mappings</strong> to identify products that cannot be billed, and <strong>Link prescription bills</strong> when a request exists but the bill link needs administrative correction.</p>
 
 <h2>8. SMS Configuration</h2>
 <table>
     <tr><th>Property</th><th>Example</th><th>Use</th></tr>
     <tr><td><code>rwandapharmacymanagement.sms.enabled</code></td><td><code>true</code></td><td>Enable prescription SMS.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.authorizationUrl</code></td><td>Auth endpoint</td><td>Optional token/auth endpoint when the SMS provider requires authentication before send.</td></tr>
     <tr><td><code>rwandapharmacymanagement.sms.postUrl</code></td><td><code>http://41.186.44.171:1401/send</code></td><td>Intouch HTTP send endpoint from the high-volume API documentation.</td></tr>
     <tr><td><code>rwandapharmacymanagement.sms.username</code></td><td>Provided by Intouch</td><td>SMS username.</td></tr>
     <tr><td><code>rwandapharmacymanagement.sms.password</code></td><td>Provided by Intouch</td><td>SMS password.</td></tr>
@@ -157,6 +166,11 @@
     <tr><td><code>rwandapharmacymanagement.sms.phonePersonAttributeTypeUuid</code></td><td>Phone attribute type UUID</td><td>Where patient phone number is stored.</td></tr>
     <tr><td><code>rwandapharmacymanagement.sms.connectionTimeout</code></td><td><code>10000</code></td><td>Connection timeout.</td></tr>
     <tr><td><code>rwandapharmacymanagement.sms.readTimeout</code></td><td><code>30000</code></td><td>Read timeout.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.authPayloadTemplate</code></td><td>JSON template</td><td>Optional authentication payload template using <code>{{username}}</code> and <code>{{password}}</code>.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.postPayloadTemplate</code></td><td>JSON template</td><td>Optional SMS send payload template using <code>{{sender}}</code>, <code>{{phoneNumber}}</code>, and <code>{{message}}</code>.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.retrySchedulerEnabled</code></td><td><code>true</code></td><td>Retry failed/pending SMS messages through the scheduler.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.retrySchedulerIntervalSeconds</code></td><td><code>1800</code></td><td>SMS retry scheduler interval.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.sms.retryBatchSize</code></td><td><code>50</code></td><td>Maximum SMS log rows retried per scheduler run.</td></tr>
 </table>
 <div class="note">If Intouch requires IP whitelisting, provide the public outbound IP address of the OpenMRS server. A connection timeout can occur when the IP is not whitelisted or when the endpoint/port is blocked.</div>
 
@@ -180,6 +194,9 @@
     <tr><td><code>rwandapharmacymanagement.hie.username</code></td><td>HIE username.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.password</code></td><td>HIE password.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.encounterPath</code></td><td>Encounter endpoint path.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.encounterServiceTypeCode</code></td><td>Service type code sent in pharmacy encounters.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.encounterServiceTypeDisplay</code></td><td>Service type display sent in pharmacy encounters.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.sourceSystem</code></td><td>Source system name sent to HIE.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.medicationRequestPath</code></td><td>MedicationRequest endpoint path.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.medicationDispensePath</code></td><td>MedicationDispense endpoint path.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.patientIdentifierTypeUuid</code></td><td>Patient identifier type sent to HIE.</td></tr>
@@ -187,7 +204,11 @@
     <tr><td><code>rwandapharmacymanagement.hie.groupIdentifierSystem</code></td><td>Group identifier system for prescription/order number.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.connectionTimeout</code></td><td>Connection timeout.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.readTimeout</code></td><td>Read timeout.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.retrySchedulerEnabled</code></td><td>Enable retry of failed/pending HIE messages.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.retrySchedulerIntervalSeconds</code></td><td>HIE retry scheduler interval.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.retryBatchSize</code></td><td>Maximum HIE log rows retried per scheduler run.</td></tr>
 </table>
+<p>HIE prescription messages keep the same group identifier across all drugs in one prescription. Dose unit is currently sent as a blank value to avoid showing incorrect tablet/capsule units.</p>
 
 <h2>11. App Framework Configuration</h2>
 <p>Use these app configurations as references. Adjust required privileges, order, labels, icons, and location rules for the deployment.</p>
@@ -293,46 +314,150 @@
   "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
 }</pre>
 
-<h2>12. Workflow Setup Checklist</h2>
+<h2>12. Operational Workflow Configuration</h2>
+<h3>12.1 Prescription and Patient Queue</h3>
+<table>
+    <tr><th>Area</th><th>Configuration rule</th></tr>
+    <tr><td>OpenMRS drugs</td><td>Each prescribed product must map to the correct OpenMRS Drug/concept. Remove duplicate active OpenMRS drugs with the same practical medication name to avoid ambiguous prescription behavior.</td></tr>
+    <tr><td>Dose instructions</td><td>Dose instructions are mandatory on prescription entry. They are stored and shown as instructions, while dose unit is intentionally not shown on dispensing and is sent blank to HIE.</td></tr>
+    <tr><td>Repeat prescriptions</td><td>When the same active drug is prescribed again for the same patient, the module replaces/discontinues the active same-drug order before saving the new one so OpenMRS does not block repeat prescribing within 24 hours.</td></tr>
+    <tr><td>Hidden items</td><td>Items hidden from requesters are treated as out of stock on prescription entry and cannot be dispensed from patient queue.</td></tr>
+    <tr><td>Billing</td><td>Prescription requests must have billable service mappings unless the item is intentionally unbillable. Administrative linking is available through Link prescription bills.</td></tr>
+</table>
+
+<h3>12.2 Item Visibility and Batch Expiry Control</h3>
+<table>
+    <tr><th>Control page</th><th>Configuration and effect</th></tr>
+    <tr><td>Item visibility control</td><td>Requires <code>Task: rwandapharmacymanagement.adjustStock</code>. Hidden items are listed first for review, can be searched by item name/code, and are hidden from requester-facing selection/availability.</td></tr>
+    <tr><td>Batch expiry control</td><td>Requires <code>Task: rwandapharmacymanagement.adjustStock</code>. Main pharmacy users can update the expiry date for an existing batch number without changing quantity.</td></tr>
+    <tr><td>Reconciliation</td><td>Requires <code>Task: rwandapharmacymanagement.adjustStock</code>. Use for controlled stock corrections with adjustment reason and audit trail.</td></tr>
+</table>
+
+<h3>12.3 Pharmacy Item Requests</h3>
+<p>Pharmacy item requests are user requests to a selected pharmacy. The queue is placed under the <strong>Dispensing</strong> navigation block, and history is available with PDF download per request.</p>
+<table>
+    <tr><th>Feature</th><th>Configuration rule</th></tr>
+    <tr><td>Requester page</td><td>Requester selects one pharmacy, then adds visible/requestable items. One request should not mix source pharmacies.</td></tr>
+    <tr><td>Queue</td><td>Queue uses the user's active pharmacy and issues stock only from that pharmacy.</td></tr>
+    <tr><td>History</td><td>Users with transfer or approval privilege can view request history and download a PDF copy of a request.</td></tr>
+</table>
+
+<h3>12.4 Main, Dispensing, and Department Transfers</h3>
+<table>
+    <tr><th>Workflow</th><th>Configuration rule</th></tr>
+    <tr><td>Main to dispensing</td><td>Requires a main store, dispensing pharmacies, Head of Finance approval privilege, and transfer privilege. Review shows requesting pharmacy current quantity, previous info, removable request lines with reason, and multi-batch allocations when serving.</td></tr>
+    <tr><td>Dispensing to dispensing</td><td>Source excludes main pharmacy and the current active pharmacy. The receiving pharmacy is the active pharmacy.</td></tr>
+    <tr><td>Return to main</td><td>Main pharmacy initiates return request; selected dispensing pharmacy approves transfer back or rejects.</td></tr>
+    <tr><td>Transfer PDFs</td><td>Transferred requests can be downloaded as PDF from transfer history/review pages.</td></tr>
+    <tr><td>Multi-batch transfer</td><td>The transfer form can allocate one requested line across more than one source batch. Validation should compare the sum of allocations with requested/approved quantity, not each batch allocation against the full line quantity.</td></tr>
+</table>
+
+<h3>12.5 Department Store Workflows</h3>
+<p>Department workflows are controlled by <code>Task: rwandapharmacymanagement.departmentStore</code> for the department workspace. The current configuration avoids user-to-department assignment; access is role/privilege based.</p>
+<table>
+    <tr><th>Page</th><th>Use</th></tr>
+    <tr><td>Department store workspace</td><td>Single workspace for department users to request from pharmacy, view department stock, issue internally, and access request PDFs.</td></tr>
+    <tr><td>Department bulk request</td><td>Department requests items from pharmacy. The request page can autofill from dispensed items when full visibility exists, but values remain editable.</td></tr>
+    <tr><td>Department finance approval</td><td>Finance reviews department requests before pharmacy dispensing when workflow mode requires finance approval.</td></tr>
+    <tr><td>Department pharmacy dispense</td><td>Pharmacy dispenses approved department requests from the active dispensing pharmacy only. Batch choices must come from that dispensing pharmacy, not main pharmacy.</td></tr>
+    <tr><td>Department stock issue</td><td>Department users can issue more than one internal item at the same time from department stock.</td></tr>
+</table>
+<p>The department workflow mode global property is initialized to periodic accountability. Review workflow expectations before go-live.</p>
+
+<h3>12.6 Supplier, Delivery, and Purchase Order Controls</h3>
+<table>
+    <tr><th>Area</th><th>Configuration rule</th></tr>
+    <tr><td>Purchase order cart</td><td>Main pharmacy users add items from stock/product view. Orders are grouped by program and supplier.</td></tr>
+    <tr><td>Approval</td><td>Health Facility Leader privilege approves or rejects purchase orders. Approved orders can be dispatched by API or email depending on supplier setup.</td></tr>
+    <tr><td>Delivery receiving</td><td>Receive from RMS/API order details, uploaded supplier template, or direct entry. Receipt proof PDF is available after successful receipt.</td></tr>
+    <tr><td>Supplier templates</td><td>Templates contain example format rows and support blank/N/A expiry for items configured not to require expiry.</td></tr>
+</table>
+
+<h3>12.7 Reports and Exports</h3>
+<table>
+    <tr><th>Report</th><th>Configuration rule</th></tr>
+    <tr><td>Pharmacy stock</td><td>Requires active pharmacy locations and current inventory balances.</td></tr>
+    <tr><td>Overall hospital stock</td><td>Sums stock across pharmacy locations.</td></tr>
+    <tr><td>Inventory movement</td><td>Requires stock transactions. Used to audit received, issued, adjusted, and transferred quantities.</td></tr>
+    <tr><td>Item movement</td><td>Shows one item across one or all pharmacies, including batch, expiry, received, issued, balance, and months of stock.</td></tr>
+    <tr><td>Dispensing report</td><td>Uses dispensing records for patient dispensing activity.</td></tr>
+    <tr><td>Payment exception report</td><td>Uses payment exception approvals and related requests.</td></tr>
+</table>
+
+<h2>13. Alerts Dashboard Configuration</h2>
+<p>The Alerts Dashboard contains two separate alert tables: <strong>Expiration Alerts</strong> and <strong>Stockout and Low Stock Alerts</strong>. Both tables support filters and PDF export.</p>
+
+<h3>13.1 Expiration Alerts</h3>
+<p>Expiration alerts are calculated at batch level from current inventory balances.</p>
+<table>
+    <tr><th>Setting/filter</th><th>Use</th></tr>
+    <tr><td>Pharmacy location</td><td>Optional. When selected, only batches in that pharmacy are shown. When blank, batches from all pharmacy locations are shown.</td></tr>
+    <tr><td>Item name/code</td><td>Optional item search.</td></tr>
+    <tr><td>Category</td><td>Optional item category filter.</td></tr>
+    <tr><td>Expiry Alert Days</td><td>Looks forward from today. A value of 90 shows expired batches and batches expiring in the next 90 days.</td></tr>
+    <tr><td>Expiry status</td><td>Can show all expiry alerts, expired only, or expiring soon only.</td></tr>
+</table>
+<p>Only batches with positive quantity on hand and an expiry date are included.</p>
+
+<h3>13.2 Stockout and Low Stock Alerts</h3>
+<p>Stockout and low stock alerts are calculated at item/location level when a pharmacy location is selected, and at whole-hospital item level when no location is selected.</p>
+<table>
+    <tr><th>Setting/filter</th><th>Use</th></tr>
+    <tr><td>Pharmacy location</td><td>Optional. When blank, the report sums stock and consumption across the whole hospital.</td></tr>
+    <tr><td>Days of Stock Alert Days</td><td>Threshold for Low Stock. Example: 14 means alert when current stock is expected to last 14 days or less.</td></tr>
+    <tr><td>Consumption Lookback Days</td><td>Number of past days used to calculate average daily consumption. Default is 90.</td></tr>
+    <tr><td>Stock status</td><td>Can show stockout and low stock together, stockout only, or low stock only.</td></tr>
+</table>
+<p>The table only considers items that have ever had inventory activity: an inventory balance row or a stock transaction. It does not list every item in <code>rpm_item</code>.</p>
+<pre>average daily consumption = consumed quantity during lookback / consumption lookback days
+days of stock = current quantity / average daily consumption</pre>
+<p>Items with current quantity of zero or less are shown as <strong>Stockout</strong>. Items with positive stock and days of stock less than or equal to the threshold are shown as <strong>Low stock</strong>.</p>
+
+<h3>13.3 PDF Export</h3>
+<p>The <strong>Download PDF</strong> button exports both alert tables using the same filters selected on the page.</p>
+
+<h2>14. Workflow Setup Checklist</h2>
 <table>
     <tr><th>Workflow</th><th>Required configuration before testing</th></tr>
     <tr><td>Prescription request</td><td>Product master pulled; product linked to OpenMRS Drug/concept; local item exists; stock exists; billing mapping configured if billable; patient has visit; app action installed.</td></tr>
     <tr><td>Consumable request</td><td>Product master pulled; item material type is consumable; local item exists; concept/billing mapping configured; app action installed.</td></tr>
     <tr><td>Lab request</td><td>Lab concept set configured; lab request app installed; lab location mapped to pharmacy tag/location; stock exists.</td></tr>
     <tr><td>General pharmacy request</td><td>Pharmacies created; stock exists in requested pharmacy; app installed; active user has dashboard privilege.</td></tr>
+    <tr><td>Department store</td><td>Department store privilege assigned; department request workflow mode reviewed; department stock and active dispensing pharmacy mappings exist.</td></tr>
     <tr><td>Patient queue</td><td>OpenMRS location linked to pharmacy or tag; pharmacy selected where multiple; billing property configured.</td></tr>
     <tr><td>Main to dispensing</td><td>Main store exists; dispensing pharmacy exists; Head of Finance role assigned; main stock exists.</td></tr>
     <tr><td>Return to main</td><td>Main store active; dispensing pharmacies active; current main pharmacy can request; dispensing pharmacy can approve.</td></tr>
     <tr><td>Dispensing to dispensing</td><td>At least two active dispensing pharmacies; stock exists in source; user active pharmacy is selected.</td></tr>
     <tr><td>Purchase order</td><td>Product master and prices pulled; supplier configured; facility ID and hospital name set; Health Facility Leader approval role assigned; SMTP/API configured.</td></tr>
     <tr><td>Delivery receive</td><td>Supplier/order exists; item mappings exist; expiry rules set; templates use accepted format.</td></tr>
-    <tr><td>Reports</td><td>Stock transactions exist; items and pharmacies are active; user has stock/report access.</td></tr>
+    <tr><td>Payment exception</td><td>Exception approver role assigned; payment exception report access tested; dispensing staff understand when exceptions are allowed.</td></tr>
+    <tr><td>Reports and alerts</td><td>Stock transactions or inventory balances exist; items and pharmacies are active; alert global properties are configured; user has stock/report access.</td></tr>
 </table>
 
-<h2>13. Validation Queries for Troubleshooting</h2>
-<h3>13.1 Patient request and bill link</h3>
+<h2>15. Validation Queries for Troubleshooting</h2>
+<h3>15.1 Patient request and bill link</h3>
 <pre>select patient_dispensing_request_id, patient_id, patient_bill_id, billable,
        payment_confirmed, request_status, request_type
 from rpm_patient_dispensing_request
 where patient_dispensing_request_id = &lt;REQUEST_ID&gt;;</pre>
 
-<h3>13.2 Patient bill paid flag</h3>
+<h3>15.2 Patient bill paid flag</h3>
 <pre>select patient_bill_id, is_paid
 from moh_bill_patient_bill
 where patient_bill_id = &lt;PATIENT_BILL_ID&gt;;</pre>
 
-<h3>13.3 Request lines</h3>
+<h3>15.3 Request lines</h3>
 <pre>select patient_dispensing_request_line_id, patient_dispensing_request_id, line_status
 from rpm_patient_dispensing_request_line
 where patient_dispensing_request_id = &lt;REQUEST_ID&gt;;</pre>
 
-<h3>13.4 Inventory by item and pharmacy</h3>
+<h3>15.4 Inventory by item and pharmacy</h3>
 <pre>select i.name, b.pharmacy_location_id, b.batch_number, b.expiry_date, b.quantity_on_hand
 from rpm_inventory_balance b
 join rpm_item i on i.item_id = b.item_id
 where i.code = '&lt;NPC_CODE&gt;' and b.voided = 0;</pre>
 
-<h2>14. Final Go-Live Test Script</h2>
+<h2>16. Final Go-Live Test Script</h2>
 <ol>
     <li>Login as administrator and verify global properties, roles, app links, and locations.</li>
     <li>Pull master products and prices from RMS.</li>
@@ -344,11 +469,14 @@ where i.code = '&lt;NPC_CODE&gt;' and b.voided = 0;</pre>
     <li>Dispense the prescription.</li>
     <li>Create a consumable request and confirm it appears in queue even if mapping is missing.</li>
     <li>Create a general pharmacy item request and approve from its queue.</li>
+    <li>Create a department bulk request, approve if required, dispense from the active dispensing pharmacy, and issue multiple internal department items.</li>
     <li>Create a lab request and approve from lab queue.</li>
     <li>Create a return-to-main request from main and approve it from dispensing.</li>
     <li>Create a purchase order, edit prices, approve, and dispatch to supplier/API/email.</li>
     <li>Receive delivery and verify stock balances and movement reports.</li>
     <li>Export item movement report to Excel/PDF and confirm receiving/issuing pharmacy columns.</li>
+    <li>Hide one item, confirm requester-facing pages show it unavailable, and confirm patient queue cannot dispense it.</li>
+    <li>Change a batch expiry date from Batch expiry control and confirm the alert/report output changes accordingly.</li>
 </ol>
 
 </body>

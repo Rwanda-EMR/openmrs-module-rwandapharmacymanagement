@@ -43,6 +43,10 @@ public interface DispensingDao {
 
     long countPatientPrescriptionHistory(Integer patientId);
 
+    List<PatientDispensingRequest> getPatientConsumableHistory(Integer patientId, int firstResult, int maxResults);
+
+    long countPatientConsumableHistory(Integer patientId);
+
     Integer findLatestPatientBillId(Integer patientId);
 
     Integer findLatestPatientBillId(Integer patientId, Date referenceDate);
@@ -59,6 +63,11 @@ public interface DispensingDao {
                                                                        Date toExclusive,
                                                                        Integer pharmacyLocationId,
                                                                        RequestType requestType);
+
+    List<PatientDispensingRequestLine> getNotBillableRequestLines(Date fromInclusive,
+                                                                  Date toExclusive,
+                                                                  Integer pharmacyLocationId,
+                                                                  RequestType requestType);
 
     PatientDispensingRequest getRequest(Integer requestId);
 

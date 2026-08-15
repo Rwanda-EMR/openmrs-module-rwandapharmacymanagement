@@ -27,6 +27,8 @@
     .po-status { display:inline-flex; align-items:center; border-radius:999px; padding:3px 8px; font-size:11px; font-weight:600; text-transform:uppercase; }
     .po-status-requested { background:#fef3c7; color:#92400e; }
     .po-status-approved { background:#dcfce7; color:#166534; }
+    .po-status-rejected { background:#fee2e2; color:#991b1b; }
+    .po-removed { display:inline-block; margin-left:6px; padding:2px 7px; border-radius:999px; background:#fff1f2; color:#991b1b; font-size:11px; font-weight:600; }
     .po-history-lines div + div { margin-top:4px; }
     .po-pagination { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-top:12px; }
     @media (max-width: 1100px) { .po-grid { grid-template-columns:1fr; } }
@@ -114,6 +116,7 @@
                     <th>Status</th>
                     <th>Reviewed at</th>
                     <th>Items</th>
+                    <th>Download</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -123,9 +126,12 @@
                     <td>${ request.dateCreated ? request.dateCreated.format('yyyy-MM-dd HH:mm') : '' }</td>
                     <td>${ request.requestedPharmacyLocation?.name ?: '' }</td>
                     <td>
-                        <span class="po-status ${ request.requestStatus == 'APPROVED' ? 'po-status-approved' : 'po-status-requested' }">
+                        <span class="po-status ${ request.requestStatus == 'APPROVED' ? 'po-status-approved' : request.requestStatus == 'REJECTED' ? 'po-status-rejected' : 'po-status-requested' }">
                             ${ request.requestStatus ?: '' }
                         </span>
+                        <% if (request.requestStatus == 'REJECTED' && request.voidReason) { %>
+                        <div class="po-muted">Reason: ${ request.voidReason }</div>
+                        <% } %>
                     </td>
                     <td>
                         <% if (request.approvedDate) { %>
@@ -138,12 +144,16 @@
                         <% request.lines?.each { line -> %>
                         <div>
                             ${ line.item?.name ?: '' }: ${ line.requestedQuantity ?: 0 }
+                            <% if (line.voided == true) { %>
+                            <span class="po-removed">Removed${ line.voidReason ? ': ' + line.voidReason : '' }</span>
+                            <% } %>
                             <% if (line.approvedQuantity != null) { %>
                             | approved ${ line.approvedQuantity }
                             <% } %>
                         </div>
                         <% } %>
                     </td>
+                    <td><a class="po-btn" href="${ ui.pageLink('rwandapharmacymanagement', 'pharmacyorder/historyPdf', [requestId: request.pharmacyItemRequestId]) }">PDF</a></td>
                 </tr>
                 <% } %>
                 </tbody>

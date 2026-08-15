@@ -53,6 +53,8 @@
     .serve-source-hint { margin-top:8px; padding:10px 12px; border-radius:4px; border:1px solid #d9edf7; background:#f4fbff; color:#245269; font-size:12px; }
     .serve-complete { margin-top:8px; padding:10px 12px; border-radius:4px; border:1px solid #d6e9c6; background:#f5fff3; color:#3c763d; font-size:12px; }
     .serve-pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; color:#fff; background:#16a34a; }
+    .serve-no-bill-badge { display:inline-block; margin-left:8px; padding:2px 8px; border-radius:999px; background:#7c3aed; color:#fff; font-size:10px; font-weight:700; vertical-align:middle; }
+    .serve-no-bill-note { margin-top:6px; padding:8px 10px; border-radius:4px; border:1px solid #ddd6fe; background:#f5f3ff; color:#5b21b6; font-size:12px; }
     .serve-exception-box { margin-top:14px; border:1px solid #f0ad4e; background:#fff8e8; border-radius:4px; padding:12px; }
     .serve-exception-box h4 { margin:0 0 8px; color:#8a6d3b; }
     .serve-exception-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
@@ -209,26 +211,34 @@
                     def remainingQty = remainingMap[line.patientDispensingRequestLineId] != null ? remainingMap[line.patientDispensingRequestLineId] : line.requestedQuantity
                     def lineServed = (remainingQty ?: 0) <= 0
                     def lineUnavailable = line.lineStatus?.toString() == 'UNAVAILABLE'
+                    def lineHidden = line.item?.visibleToRequesters == false
+                    def lineNotBillable = line.billable == false
                 %>
                 <div class="serve-detail" data-requested-qty="${ remainingQty ?: 0 }">
                     <div class="serve-detail-head">
-                        <div class="serve-detail-title">${ line.item?.name }</div>
+                        <div class="serve-detail-title">
+                            ${ line.item?.name }
+                            <% if (lineNotBillable) { %><span class="serve-no-bill-badge">Not billable</span><% } %>
+                        </div>
                         <div class="serve-detail-sub">
                             Requested quantity: <strong>${ line.requestedQuantity }</strong>
                             | Remaining: <strong>${ remainingQty }</strong>
                             | Allocated: <strong class="serve-allocated-total">0</strong>
                         </div>
+                        <% if (lineNotBillable) { %>
+                        <div class="serve-no-bill-note">This item was intentionally excluded from billing. Reason: <strong>${ line.billingExclusionReason ?: 'No reason recorded' }</strong></div>
+                        <% } %>
                     </div>
                     <div class="serve-detail-body">
                         <% if (consumableRequest) { %>
                         <div class="serve-rx-grid" style="grid-template-columns:repeat(3, minmax(0, 1fr));">
                             <div class="serve-rx-block"><div class="serve-rx-label">Requested quantity</div><div class="serve-rx-value">${ line.requestedQuantity ?: '' }</div></div>
                             <div class="serve-rx-block"><div class="serve-rx-label">Unit of measure</div><div class="serve-rx-value">${ line.unitOfMeasure ?: '' }</div></div>
-                            <div class="serve-rx-block"><div class="serve-rx-label">Payment</div><div class="serve-rx-value">${ paymentSatisfied ? (paymentExceptionApproved && !selectedRequest?.paymentConfirmed ? 'Exception authorized' : 'Ready to dispense') : 'Waiting for payment' }</div></div>
+                            <div class="serve-rx-block"><div class="serve-rx-label">Payment</div><div class="serve-rx-value">${ lineNotBillable ? 'Not billable' : (paymentSatisfied ? (paymentExceptionApproved && !selectedRequest?.paymentConfirmed ? 'Exception authorized' : 'Ready to dispense') : 'Waiting for payment') }</div></div>
                         </div>
                         <% } else { %>
                         <div class="serve-rx-grid">
-                            <div class="serve-rx-block"><div class="serve-rx-label">Dose</div><div class="serve-rx-value">${ details.dose ?: '' } ${ details.doseUnits ?: '' }</div></div>
+                            <div class="serve-rx-block"><div class="serve-rx-label">Dose</div><div class="serve-rx-value">${ details.dose ?: '' }</div></div>
                             <div class="serve-rx-block"><div class="serve-rx-label">Route</div><div class="serve-rx-value">${ details.route ?: '' }</div></div>
                             <div class="serve-rx-block"><div class="serve-rx-label">Frequency</div><div class="serve-rx-value">${ details.frequency ?: '' }</div></div>
                             <div class="serve-rx-block"><div class="serve-rx-label">Duration</div><div class="serve-rx-value">${ details.duration ?: '' } ${ details.durationUnits ?: '' }</div></div>
@@ -238,6 +248,11 @@
 
                         <% if (lineServed) { %>
                         <div class="serve-complete">${ lineUnavailable ? 'This item was marked as not available in all pharmacies and has been closed from the queue.' : 'This item has already been fully served and cannot be dispensed again.' }</div>
+                        <% } else if (lineHidden) { %>
+                        <div class="serve-empty">This ${ consumableRequest ? 'item' : 'drug' } is hidden from requesters and cannot be dispensed.</div>
+                        <div class="serve-source-hint" style="border-color:#f0ad4e;background:#fff8e8;color:#8a6d3b;">
+                            Treat it as unavailable unless main pharmacy makes it visible again.
+                        </div>
                         <% } else if (!options) { %>
                         <div class="serve-empty">No available stock batches were found for this ${ consumableRequest ? 'item' : 'drug' } at ${ activePharmacy.name }.</div>
                         <% if (sourceHint) { %><div class="serve-source-hint">Request this item from <strong>${ sourceHint }</strong>.</div><% } else { %>
@@ -293,7 +308,7 @@
                             <button type="submit"
                                     class="serve-btn serve-btn-secondary"
                                     name="markUnavailableLineId"
-                                    value="${ line.patientDispensingRequestLineId }">Drug not available in all pharmacies</button>
+                                    value="${ line.patientDispensingRequestLineId }">Item not available in all pharmacies</button>
                         </div>
                         <% } %>
                     </div>

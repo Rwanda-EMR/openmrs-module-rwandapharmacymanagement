@@ -19,8 +19,10 @@ import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecordLine;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
+import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus;
 
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -81,7 +83,7 @@ public class HieMedicationPayloadBuilder {
         payload.put("resourceType", "MedicationRequest");
         payload.put("id", medicationRequestId(line));
         payload.put("identifier", identifier(line));
-        payload.put("status", "active");
+        payload.put("status", medicationRequestStatus(line));
         payload.put("intent", "order");
         payload.put("groupIdentifier", groupIdentifier(request, line, facilityId, groupIdentifierSystem));
         Map<String, Object> insurance = insuranceReference(request);
@@ -147,6 +149,10 @@ public class HieMedicationPayloadBuilder {
             payload.put("extension", Collections.singletonList(extension));
         }
         payload.put("whenHandedOver", isoDateTime(dispenseRecord == null ? null : dispenseRecord.getDateCreated()));
+        Map<String, Object> quantity = dispenseQuantity(totalDispensedQuantityForItem(dispenseRecord, line));
+        if (!quantity.isEmpty()) {
+            payload.put("quantity", quantity);
+        }
         DrugOrder order = firstMatchingOrder(request, line);
         List<Map<String, Object>> dosageInstructions = dosageInstruction(order);
         if (!dosageInstructions.isEmpty()) {
@@ -169,7 +175,13 @@ public class HieMedicationPayloadBuilder {
     }
 
     public String prescriptionIdentifier(PatientDispensingRequest request, PatientDispensingRequestLine line, String facilityId) {
+        if (line == null && request != null && !isBlank(request.getHiePrescriptionGroupId())) {
+            return normalizeHiePrescriptionGroupId(request.getHiePrescriptionGroupId(), facilityId);
+        }
         String resolvedFacilityId = isBlank(facilityId) ? "unknown" : facilityId;
+        if (line == null && request != null && request.getPatientDispensingRequestId() != null) {
+            return "EP-" + resolvedFacilityId + "-" + request.getPatientDispensingRequestId();
+        }
         Integer orderId = resolveOrderId(request, line);
         return "Pres-ord-" + resolvedFacilityId + "-" + (orderId == null ? "unknown" : orderId);
     }
@@ -188,7 +200,28 @@ public class HieMedicationPayloadBuilder {
     }
 
     public String medicationRequestId(PatientDispensingRequestLine line) {
-        return line == null ? "unknown" : blankToDefault(line.getUuid(), "unknown");
+        return line == null ? "unknown" : blankToDefault(line.getHieMedicationRequestId(), blankToDefault(line.getUuid(), "unknown"));
+    }
+
+    private String medicationRequestStatus(PatientDispensingRequestLine line) {
+        if (line == null) {
+            return "unknown";
+        }
+        if (Boolean.TRUE.equals(line.getVoided()) || line.getLineStatus() == RequestStatus.CANCELLED) {
+            return "stopped";
+        }
+        if (line.getOrder() != null && Boolean.TRUE.equals(line.getOrder().getVoided())) {
+            return "stopped";
+        }
+        return "active";
+    }
+
+    private String normalizeHiePrescriptionGroupId(String hiePrescriptionGroupId, String facilityId) {
+        String value = hiePrescriptionGroupId == null ? "" : hiePrescriptionGroupId.trim();
+        if (value.startsWith("EP-unknown-") && !isBlank(facilityId)) {
+            return "EP-" + facilityId + "-" + value.substring("EP-unknown-".length());
+        }
+        return value;
     }
 
     private String medicationDispenseId(DispenseRecordLine line) {
@@ -213,7 +246,7 @@ public class HieMedicationPayloadBuilder {
         Map<String, Object> groupIdentifier = new LinkedHashMap<String, Object>();
         groupIdentifier.put("system", blankToDefault(groupIdentifierSystem,
                 "http://openmrs.org/rwanda-pharmacy-management/prescription-order-number"));
-        groupIdentifier.put("value", prescriptionIdentifier(request, line, facilityId));
+        groupIdentifier.put("value", prescriptionIdentifier(request, null, facilityId));
         return groupIdentifier;
     }
 
@@ -622,6 +655,10 @@ public class HieMedicationPayloadBuilder {
         if (managedOrder == null) {
             return Collections.emptyList();
         }
+        return dosageInstruction(managedOrder, managedOrder.getDose());
+    }
+
+    private List<Map<String, Object>> dosageInstruction(DrugOrder managedOrder, Object doseQuantityValue) {
         Map<String, Object> instruction = new LinkedHashMap<String, Object>();
         instruction.put("text", blankToDefault(managedOrder.getDosingInstructions(), managedOrder.getInstructions()));
         Map<String, Object> timing = timing(managedOrder.getFrequency());
@@ -638,20 +675,51 @@ public class HieMedicationPayloadBuilder {
             route.put("coding", Collections.singletonList(coding));
             instruction.put("route", route);
         }
-        if (managedOrder.getDose() != null) {
+        if (doseQuantityValue != null) {
             Map<String, Object> doseQuantity = new LinkedHashMap<String, Object>();
-            doseQuantity.put("value", managedOrder.getDose());
-            if (managedOrder.getDoseUnits() != null) {
-                String units = managedOrder.getDoseUnits().getDisplayString();
-                doseQuantity.put("unit", units);
-                doseQuantity.put("system", "http://unitsofmeasure.org");
-                doseQuantity.put("code", units);
-            }
+            doseQuantity.put("value", doseQuantityValue);
+            doseQuantity.put("unit", "");
+            doseQuantity.put("system", "");
+            doseQuantity.put("code", "");
             Map<String, Object> doseAndRate = new LinkedHashMap<String, Object>();
             doseAndRate.put("doseQuantity", doseQuantity);
             instruction.put("doseAndRate", Collections.singletonList(doseAndRate));
         }
         return Collections.singletonList(instruction);
+    }
+
+    private Map<String, Object> dispenseQuantity(BigDecimal totalQuantityDispensed) {
+        Map<String, Object> quantity = new LinkedHashMap<String, Object>();
+        if (totalQuantityDispensed == null) {
+            return quantity;
+        }
+        quantity.put("value", totalQuantityDispensed);
+        quantity.put("unit", "");
+        quantity.put("system", "");
+        return quantity;
+    }
+
+    private BigDecimal totalDispensedQuantityForItem(DispenseRecord dispenseRecord, DispenseRecordLine selectedLine) {
+        if (selectedLine == null || selectedLine.getItem() == null || selectedLine.getItem().getItemId() == null) {
+            return null;
+        }
+        Integer itemId = selectedLine.getItem().getItemId();
+        BigDecimal total = BigDecimal.ZERO;
+        if (dispenseRecord != null && dispenseRecord.getLines() != null) {
+            for (DispenseRecordLine line : dispenseRecord.getLines()) {
+                if (line == null || line.getItem() == null || line.getItem().getItemId() == null
+                        || line.getQuantityDispensed() == null || Boolean.TRUE.equals(line.getVoided())) {
+                    continue;
+                }
+                if (itemId.equals(line.getItem().getItemId())) {
+                    total = total.add(line.getQuantityDispensed());
+                }
+            }
+        }
+        if (total.compareTo(BigDecimal.ZERO) > 0) {
+            return total;
+        }
+        return selectedLine.getQuantityDispensed();
     }
 
     private Map<String, Object> timing(OrderFrequency frequency) {
