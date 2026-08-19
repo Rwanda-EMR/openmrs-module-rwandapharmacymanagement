@@ -195,6 +195,28 @@
                     </table>
                 </div>
 
+                <% if ((purchaseOrder.approvalStatus == 'PENDING' || purchaseOrder.approvalStatus == 'DRAFT') && canManagePurchaseOrders) { %>
+                <div style="margin-top:16px;padding:12px;border:1px solid #d9e2ec;background:#f8fafc;border-radius:3px;">
+                    <h3 style="margin:0 0 10px 0;">Add item before approval</h3>
+                    <div style="display:grid;grid-template-columns:minmax(260px,1fr) 140px;gap:10px;align-items:end;">
+                        <label>
+                            Product master item
+                            <select name="productMasterItemIds" style="width:100%;">
+                                <option value="">Select item</option>
+                                <% productMasterItems?.each { item -> %>
+                                <option value="${ item.productMasterItemId }">${ item.itemName ?: '' } (${ item.npcCode ?: '' }) — ${ item.program ?: 'General' }</option>
+                                <% } %>
+                            </select>
+                        </label>
+                        <label>
+                            Quantity
+                            <input type="number" step="0.01" min="0.01" name="productMasterQuantities"/>
+                        </label>
+                    </div>
+                    <div style="color:#64748b;margin-top:6px;">Click Save changes to add this item to the purchase order.</div>
+                </div>
+                <% } %>
+
                 <div class="po-timeline">
                     Submitted ${ purchaseOrder.requestedDate ? ui.formatDatePretty(purchaseOrder.requestedDate) : '' }
                     by ${ plainUserName(purchaseOrder.requestedBy) }.

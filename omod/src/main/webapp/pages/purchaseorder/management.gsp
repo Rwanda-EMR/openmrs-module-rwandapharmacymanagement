@@ -111,6 +111,7 @@
 <% } %>
 
 <div class="po-summary-grid">
+    <div class="po-summary-card"><div class="po-summary-count" style="color:#64748b;">${ draftCount }</div><div class="po-summary-label">Draft</div></div>
     <div class="po-summary-card"><div class="po-summary-count" style="color:#f0ad4e;">${ pendingCount }</div><div class="po-summary-label">Pending</div></div>
     <div class="po-summary-card"><div class="po-summary-count" style="color:#5cb85c;">${ approvedCount }</div><div class="po-summary-label">Approved</div></div>
     <div class="po-summary-card"><div class="po-summary-count" style="color:#337ab7;">${ dispatchedCount }</div><div class="po-summary-label">Dispatched</div></div>
@@ -131,6 +132,7 @@
             <label style="display:block;font-size:11px;color:#666;margin-bottom:3px;">Status</label>
             <select name="status">
                 <option value="ALL" ${ selectedStatus == 'ALL' ? 'selected="selected"' : '' }>All</option>
+                <option value="DRAFT" ${ selectedStatus == 'DRAFT' ? 'selected="selected"' : '' }>Draft</option>
                 <option value="PENDING" ${ selectedStatus == 'PENDING' ? 'selected="selected"' : '' }>Pending</option>
                 <option value="APPROVED" ${ selectedStatus == 'APPROVED' ? 'selected="selected"' : '' }>Approved</option>
                 <option value="DISPATCHED" ${ selectedStatus == 'DISPATCHED' ? 'selected="selected"' : '' }>Dispatched</option>
@@ -143,6 +145,7 @@
 
 <div class="po-filter-row">
     <a class="${ selectedStatus == 'ALL' ? 'active' : '' }" href="${ ui.pageLink('rwandapharmacymanagement', 'purchaseorder/management') }">All</a>
+    <a class="${ selectedStatus == 'DRAFT' ? 'active' : '' }" href="${ ui.pageLink('rwandapharmacymanagement', 'purchaseorder/management', [status: 'DRAFT']) }">Draft</a>
     <a class="${ selectedStatus == 'PENDING' ? 'active' : '' }" href="${ ui.pageLink('rwandapharmacymanagement', 'purchaseorder/management', [status: 'PENDING']) }">Pending</a>
     <a class="${ selectedStatus == 'APPROVED' ? 'active' : '' }" href="${ ui.pageLink('rwandapharmacymanagement', 'purchaseorder/management', [status: 'APPROVED']) }">Approved</a>
     <a class="${ selectedStatus == 'DISPATCHED' ? 'active' : '' }" href="${ ui.pageLink('rwandapharmacymanagement', 'purchaseorder/management', [status: 'DISPATCHED']) }">Dispatched</a>
@@ -190,6 +193,9 @@
             <td>
                 <div class="po-action-row">
                     <a class="stock-btn" href="${ ui.pageLink('rwandapharmacymanagement', 'purchaseorder/edit', [purchaseOrderId: purchaseOrder.purchaseOrderId]) }">View</a>
+                    <% if (purchaseOrder.approvalStatus == 'DRAFT') { %>
+                    <a class="stock-btn stock-btn-primary" href="${ ui.pageLink('rwandapharmacymanagement', 'inventory/mainStore', [cart: 'true']) }">Resume draft</a>
+                    <% } %>
                     <% if (purchaseOrder.approvalStatus == 'PENDING' && canApprovePurchaseOrders) { %>
                     <a class="stock-btn stock-btn-primary" href="${ ui.pageLink('rwandapharmacymanagement', 'purchaseorder/edit', [purchaseOrderId: purchaseOrder.purchaseOrderId]) }">Review</a>
                     <% } %>

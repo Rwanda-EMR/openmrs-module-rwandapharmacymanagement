@@ -52,6 +52,7 @@ public class ManagementPageController {
         model.addAttribute("retryPriceFailed", FlashMessageSupport.consumeBoolean(session, FLASH_RETRY_PRICE_FAILED));
         model.addAttribute("errorReference", FlashMessageSupport.consumeString(session, FLASH_ERROR_REFERENCE));
         model.addAttribute("pendingCount", safeInt(pharmacyService.countPurchaseOrdersByApprovalStatus("PENDING")));
+        model.addAttribute("draftCount", safeInt(pharmacyService.countPurchaseOrdersByApprovalStatus("DRAFT")));
         model.addAttribute("approvedCount", safeInt(pharmacyService.countPurchaseOrdersByApprovalStatus("APPROVED")));
         model.addAttribute("rejectedCount", safeInt(pharmacyService.countPurchaseOrdersByApprovalStatus("REJECTED")));
         model.addAttribute("dispatchedCount", safeInt(pharmacyService.countPurchaseOrdersByDispatchStatus("DISPATCHED")));

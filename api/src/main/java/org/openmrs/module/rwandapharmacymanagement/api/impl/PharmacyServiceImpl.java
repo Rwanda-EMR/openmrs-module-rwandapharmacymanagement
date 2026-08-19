@@ -16,6 +16,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.SupplierOrder;
 import org.openmrs.module.rwandapharmacymanagement.model.SupplierPrice;
 import org.openmrs.module.rwandapharmacymanagement.model.SupplierProductMapping;
 import org.openmrs.module.rwandapharmacymanagement.model.SupplierSetting;
+import org.openmrs.User;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -337,6 +338,11 @@ public class PharmacyServiceImpl extends BaseOpenmrsService implements PharmacyS
     @Override
     public PurchaseOrder getPurchaseOrder(Integer purchaseOrderId) {
         return pharmacyDao.getPurchaseOrder(purchaseOrderId);
+    }
+
+    @Override
+    public List<PurchaseOrder> getDraftPurchaseOrdersForUser(User requestedBy) {
+        return pharmacyDao.getDraftPurchaseOrdersForUser(requestedBy);
     }
 
     @Override

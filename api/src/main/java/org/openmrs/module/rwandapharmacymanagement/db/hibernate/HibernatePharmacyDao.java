@@ -6,6 +6,7 @@ import org.hibernate.criterion.Projections;
 import org.hibernate.criterion.Order;
 import org.hibernate.criterion.Restrictions;
 import org.hibernate.criterion.Disjunction;
+import org.openmrs.User;
 import org.openmrs.module.rwandapharmacymanagement.db.PharmacyDao;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.ItemProductMasterMapping;
@@ -565,6 +566,21 @@ public class HibernatePharmacyDao implements PharmacyDao {
     @Override
     public PurchaseOrder getPurchaseOrder(Integer purchaseOrderId) {
         return (PurchaseOrder) sessionFactory.getCurrentSession().get(PurchaseOrder.class, purchaseOrderId);
+    }
+
+    @Override
+    public List<PurchaseOrder> getDraftPurchaseOrdersForUser(User requestedBy) {
+        org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(PurchaseOrder.class)
+                .add(Restrictions.eq("voided", false))
+                .add(Restrictions.eq("approvalStatus", "DRAFT"));
+        if (requestedBy == null) {
+            criteria.add(Restrictions.isNull("requestedBy"));
+        } else {
+            criteria.add(Restrictions.eq("requestedBy", requestedBy));
+        }
+        return criteria.addOrder(Order.asc("program"))
+                .addOrder(Order.asc("purchaseOrderId"))
+                .list();
     }
 
     @Override

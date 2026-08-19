@@ -576,12 +576,12 @@
 <div class="stock-modal-backdrop"></div>
 <div class="stock-modal" style="width:min(900px, calc(100vw - 32px));">
     <div class="stock-modal-header">
-        <span>Order cart — review before initiating order</span>
+        <span>Draft purchase order cart — review before submitting for approval</span>
         <a class="stock-modal-close" href="${ ui.pageLink("rwandapharmacymanagement", "inventory/mainStore") }">&times;</a>
     </div>
     <div class="stock-modal-body">
         <div class="stock-note">
-            Review all items and quantities carefully. Initiating the order will create purchase orders grouped by program for facility approval.
+            This draft is saved automatically and can survive logout or session expiry. Submitting will create purchase orders grouped by program for facility approval.
         </div>
         <% if (!cartRows) { %>
         <div class="cart-empty-note">Your order cart is empty. You can still add items directly from the product master below.</div>
@@ -694,7 +694,7 @@
         <div class="stock-modal-actions" style="flex-wrap:nowrap;">
             <form method="post" id="submit-cart-form" style="margin:0;">
                 <input type="hidden" name="action" value="submitCart"/>
-                <button type="submit" class="stock-btn stock-btn-primary" ${ !cartRows ? 'disabled="disabled"' : '' }>&#10003; Initiate order</button>
+                <button type="submit" class="stock-btn stock-btn-primary" ${ !cartRows ? 'disabled="disabled"' : '' }>&#10003; Submit for approval</button>
             </form>
             <form method="post" style="margin:0;">
                 <input type="hidden" name="action" value="clearCart"/>

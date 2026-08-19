@@ -7,6 +7,7 @@ import org.openmrs.module.rwandapharmacymanagement.api.SupplierIntegrationServic
 import org.openmrs.module.rwandapharmacymanagement.integration.supplier.dto.PurchaseOrderPriceRefreshResult;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrder;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrderItem;
+import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
 import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
@@ -64,6 +65,7 @@ public class EditPageController {
         model.addAttribute("canManagePurchaseOrders",
                 Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_SUBMIT_SUPPLIER_ORDERS)
                         || Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_PURCHASE_ORDERS));
+        model.addAttribute("productMasterItems", pharmacyService.getAllProductMasterItems());
     }
 
     public String post(@SpringBean("pharmacyService") PharmacyService pharmacyService,
@@ -74,6 +76,8 @@ public class EditPageController {
                        @RequestParam(value = "quantities", required = false) BigDecimal[] quantities,
                        @RequestParam(value = "unitPrices", required = false) BigDecimal[] unitPrices,
                        @RequestParam(value = "removeItemIds", required = false) Integer[] removeItemIds,
+                       @RequestParam(value = "productMasterItemIds", required = false) Integer[] productMasterItemIds,
+                       @RequestParam(value = "productMasterQuantities", required = false) BigDecimal[] productMasterQuantities,
                        HttpSession session,
                        UiUtils ui) {
         PurchaseOrder purchaseOrder = pharmacyService.getPurchaseOrder(purchaseOrderId);
@@ -82,8 +86,14 @@ public class EditPageController {
         }
         requirePurchaseOrderActionPrivilege(action);
         try {
-            applyChanges(pharmacyService, purchaseOrder, purchaseOrderItemIds, quantities, unitPrices, removeItemIds);
+            if (isEditable(purchaseOrder)) {
+                applyChanges(pharmacyService, purchaseOrder, purchaseOrderItemIds, quantities, unitPrices, removeItemIds);
+                addProductMasterItems(pharmacyService, purchaseOrder, productMasterItemIds, productMasterQuantities);
+            }
             if ("approve".equals(action)) {
+                if (!"PENDING".equalsIgnoreCase(purchaseOrder.getApprovalStatus())) {
+                    throw new IllegalArgumentException("Only pending purchase orders can be approved.");
+                }
                 if (isRmsPurchaseOrder(purchaseOrder)) {
                     PurchaseOrderPriceRefreshResult priceRefreshResult = supplierIntegrationService.refreshPurchaseOrderPrices(purchaseOrder);
                     if (priceRefreshResult.hasBlockingIssue()) {
@@ -168,6 +178,68 @@ public class EditPageController {
             }
         }
         purchaseOrder.setTotalCost(totalCost);
+    }
+
+    private void addProductMasterItems(PharmacyService pharmacyService, PurchaseOrder purchaseOrder,
+                                       Integer[] productMasterItemIds, BigDecimal[] productMasterQuantities) {
+        if (productMasterItemIds == null || productMasterQuantities == null) {
+            return;
+        }
+        if (purchaseOrder.getItems() == null) {
+            purchaseOrder.setItems(new ArrayList<PurchaseOrderItem>());
+        }
+        BigDecimal totalCost = purchaseOrder.getTotalCost() == null ? BigDecimal.ZERO : purchaseOrder.getTotalCost();
+        String orderNumber = orderNumber(purchaseOrder);
+        for (int i = 0; i < productMasterItemIds.length; i++) {
+            Integer productMasterItemId = productMasterItemIds[i];
+            BigDecimal quantity = productMasterQuantities.length > i ? productMasterQuantities[i] : null;
+            if (productMasterItemId == null || quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(productMasterItemId);
+            if (productMasterItem == null) {
+                continue;
+            }
+            PurchaseOrderItem item = new PurchaseOrderItem();
+            item.setPurchaseOrder(purchaseOrder);
+            item.setProductMasterItem(productMasterItem);
+            item.setOrderNumber(orderNumber);
+            item.setProgram(requiredText(productMasterItem.getProgram(), requiredText(purchaseOrder.getProgram(), "General")));
+            item.setItemName(requiredText(productMasterItem.getItemName(), "Unknown item"));
+            item.setItemCode(requiredText(productMasterItem.getNpcCode(), "UNKNOWN"));
+            item.setQuantity(quantity);
+            item.setUnitPrice(productMasterItem.getItemPrice() == null ? BigDecimal.ZERO : productMasterItem.getItemPrice());
+            item.setTotalPrice(item.getUnitPrice().multiply(quantity));
+            item.setCreator(Context.getAuthenticatedUser());
+            item.setDateCreated(new Date());
+            totalCost = totalCost.add(item.getTotalPrice());
+            purchaseOrder.getItems().add(item);
+        }
+        purchaseOrder.setTotalCost(totalCost);
+    }
+
+    private String orderNumber(PurchaseOrder purchaseOrder) {
+        if (purchaseOrder != null && purchaseOrder.getItems() != null) {
+            for (PurchaseOrderItem item : purchaseOrder.getItems()) {
+                if (item != null && item.getOrderNumber() != null && !item.getOrderNumber().trim().isEmpty()) {
+                    return item.getOrderNumber();
+                }
+            }
+        }
+        String facilityId = purchaseOrder == null || purchaseOrder.getFacilityId() == null
+                ? "" : purchaseOrder.getFacilityId();
+        Integer purchaseOrderId = purchaseOrder == null ? null : purchaseOrder.getPurchaseOrderId();
+        return "ord-" + facilityId + "-" + (purchaseOrderId == null ? "" : purchaseOrderId);
+    }
+
+    private String requiredText(String value, String fallback) {
+        return value == null || value.trim().isEmpty() ? fallback : value.trim();
+    }
+
+    private boolean isEditable(PurchaseOrder purchaseOrder) {
+        return purchaseOrder != null
+                && ("PENDING".equalsIgnoreCase(purchaseOrder.getApprovalStatus())
+                || "DRAFT".equalsIgnoreCase(purchaseOrder.getApprovalStatus()));
     }
 
     private void requirePurchaseOrderActionPrivilege(String action) {

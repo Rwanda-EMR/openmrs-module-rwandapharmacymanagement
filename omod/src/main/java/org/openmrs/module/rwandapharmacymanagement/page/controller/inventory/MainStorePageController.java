@@ -42,6 +42,10 @@ public class MainStorePageController {
     private static final Log log = LogFactory.getLog(MainStorePageController.class);
     private static final String CART_SESSION_KEY = "rwandaPharmacySupplierOrderCart";
     private static final String FLASH_ERROR_REFERENCE = "rpm.mainStore.errorReference";
+    private static final String APPROVAL_STATUS_DRAFT = "DRAFT";
+    private static final String APPROVAL_STATUS_PENDING = "PENDING";
+    private static final String DISPATCH_STATUS_DRAFT = "DRAFT";
+    private static final String DISPATCH_STATUS_PENDING_APPROVAL = "PENDING_APPROVAL";
 
     public void get(PageModel model,
                     @SpringBean("inventoryService") InventoryService inventoryService,
@@ -62,7 +66,7 @@ public class MainStorePageController {
         int currentPageSize = PaginationSupport.sanitizePageSize(pageSize);
         currentPage = PaginationSupport.clampPage(currentPage, currentPageSize, allStockBalances.size());
         List<InventoryBalance> stockBalances = PaginationSupport.slice(allStockBalances, currentPage, currentPageSize);
-        LinkedHashMap<String, CartLine> cart = getCart(session);
+        LinkedHashMap<String, CartLine> cart = getCart(session, pharmacyService);
         Item selectedItem = orderItemId == null ? null : pharmacyService.getItem(orderItemId);
         model.addAttribute("stockBalances", stockBalances);
         PaginationSupport.addAttributes(model, "stock", currentPage, currentPageSize, allStockBalances.size());
@@ -155,26 +159,32 @@ public class MainStorePageController {
         try {
             if ("addToCart".equals(action)) {
                 addLocalItemToCart(session, pharmacyService, itemId, quantity);
+                persistDraftCart(pharmacyService, getCart(session, pharmacyService));
                 return "redirect:" + ui.pageLink("rwandapharmacymanagement", "inventory/mainStore");
             }
             if ("addProductMasterToCart".equals(action)) {
                 addProductMasterItemToCart(session, pharmacyService, productMasterItemId, quantity);
+                persistDraftCart(pharmacyService, getCart(session, pharmacyService));
                 return redirectToCart(ui);
             }
             if ("addProductMasterRowsToCart".equals(action)) {
                 addProductMasterItemsToCart(session, pharmacyService, productMasterItemIds, productMasterQuantities);
+                persistDraftCart(pharmacyService, getCart(session, pharmacyService));
                 return redirectToCart(ui);
             }
             if ("updateCart".equals(action)) {
-                updateCart(session, cartKey, quantity, unitPrice);
+                updateCart(session, pharmacyService, cartKey, quantity, unitPrice);
+                persistDraftCart(pharmacyService, getCart(session, pharmacyService));
                 return redirectToCart(ui);
             }
             if ("removeFromCart".equals(action)) {
-                removeFromCart(session, cartKey);
+                removeFromCart(session, pharmacyService, cartKey);
+                persistDraftCart(pharmacyService, getCart(session, pharmacyService));
                 return redirectToCart(ui);
             }
             if ("clearCart".equals(action)) {
                 session.removeAttribute(CART_SESSION_KEY);
+                clearDraftPurchaseOrders(pharmacyService);
                 return "redirect:" + ui.pageLink("rwandapharmacymanagement", "inventory/mainStore");
             }
             if ("submitCart".equals(action)) {
@@ -204,12 +214,12 @@ public class MainStorePageController {
     }
 
     @SuppressWarnings("unchecked")
-    private LinkedHashMap<String, CartLine> getCart(HttpSession session) {
+    private LinkedHashMap<String, CartLine> getCart(HttpSession session, PharmacyService pharmacyService) {
         Object stored = session.getAttribute(CART_SESSION_KEY);
         if (stored instanceof LinkedHashMap) {
             return (LinkedHashMap<String, CartLine>) stored;
         }
-        LinkedHashMap<String, CartLine> cart = new LinkedHashMap<String, CartLine>();
+        LinkedHashMap<String, CartLine> cart = draftCart(pharmacyService);
         session.setAttribute(CART_SESSION_KEY, cart);
         return cart;
     }
@@ -224,7 +234,7 @@ public class MainStorePageController {
             return;
         }
         String key = cartKeyForItem(itemId);
-        LinkedHashMap<String, CartLine> cart = getCart(session);
+        LinkedHashMap<String, CartLine> cart = getCart(session, pharmacyService);
         CartLine line = cart.get(key);
         if (line == null) {
             line = new CartLine();
@@ -258,7 +268,7 @@ public class MainStorePageController {
                     + normalizeProgram(productMasterItem.getProgram()) + ")");
         }
         String key = cartKeyForProductMaster(productMasterItemId);
-        LinkedHashMap<String, CartLine> cart = getCart(session);
+        LinkedHashMap<String, CartLine> cart = getCart(session, pharmacyService);
         CartLine line = cart.get(key);
         if (line == null) {
             line = new CartLine();
@@ -286,8 +296,8 @@ public class MainStorePageController {
         }
     }
 
-    private void updateCart(HttpSession session, String cartKey, BigDecimal quantity, BigDecimal unitPrice) {
-        LinkedHashMap<String, CartLine> cart = getCart(session);
+    private void updateCart(HttpSession session, PharmacyService pharmacyService, String cartKey, BigDecimal quantity, BigDecimal unitPrice) {
+        LinkedHashMap<String, CartLine> cart = getCart(session, pharmacyService);
         if (cartKey == null || !cart.containsKey(cartKey)) {
             return;
         }
@@ -300,20 +310,90 @@ public class MainStorePageController {
         line.setUnitPrice(unitPrice == null || unitPrice.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : unitPrice);
     }
 
-    private void removeFromCart(HttpSession session, String cartKey) {
+    private void removeFromCart(HttpSession session, PharmacyService pharmacyService, String cartKey) {
         if (cartKey == null) {
             return;
         }
-        getCart(session).remove(cartKey);
+        getCart(session, pharmacyService).remove(cartKey);
     }
 
     private void initiatePurchaseOrders(HttpSession session, PharmacyService pharmacyService, Integer supplierId) {
-        LinkedHashMap<String, CartLine> cart = getCart(session);
+        LinkedHashMap<String, CartLine> cart = getCart(session, pharmacyService);
         if (cart.isEmpty() || supplierId == null) {
             return;
         }
         Supplier supplier = pharmacyService.getSupplier(supplierId);
         if (supplier == null) {
+            return;
+        }
+        persistDraftCart(pharmacyService, cart);
+        List<PurchaseOrder> draftOrders = pharmacyService.getDraftPurchaseOrdersForUser(Context.getAuthenticatedUser());
+        for (PurchaseOrder purchaseOrder : draftOrders) {
+            if (purchaseOrder == null || purchaseOrder.getItems() == null || purchaseOrder.getItems().isEmpty()) {
+                continue;
+            }
+            purchaseOrder.setSupplier(supplier);
+            purchaseOrder.setFacilityId(facilityId());
+            purchaseOrder.setRequestedBy(Context.getAuthenticatedUser());
+            purchaseOrder.setRequestedDate(new Date());
+            purchaseOrder.setApprovalStatus(APPROVAL_STATUS_PENDING);
+            purchaseOrder.setDispatchStatus(DISPATCH_STATUS_PENDING_APPROVAL);
+            String orderNumber = "ord-" + purchaseOrder.getFacilityId() + "-" + purchaseOrder.getPurchaseOrderId();
+            for (PurchaseOrderItem item : purchaseOrder.getItems()) {
+                item.setOrderNumber(orderNumber);
+            }
+            pharmacyService.savePurchaseOrder(purchaseOrder);
+        }
+        session.removeAttribute(CART_SESSION_KEY);
+    }
+
+    private LinkedHashMap<String, CartLine> draftCart(PharmacyService pharmacyService) {
+        LinkedHashMap<String, CartLine> cart = new LinkedHashMap<String, CartLine>();
+        List<PurchaseOrder> draftOrders = pharmacyService.getDraftPurchaseOrdersForUser(Context.getAuthenticatedUser());
+        if (draftOrders == null) {
+            return cart;
+        }
+        for (PurchaseOrder draftOrder : draftOrders) {
+            if (draftOrder == null || draftOrder.getItems() == null) {
+                continue;
+            }
+            for (PurchaseOrderItem item : draftOrder.getItems()) {
+                CartLine line = cartLineFromPurchaseOrderItem(pharmacyService, item);
+                if (line != null) {
+                    cart.put(line.getCartKey(), line);
+                }
+            }
+        }
+        return cart;
+    }
+
+    private CartLine cartLineFromPurchaseOrderItem(PharmacyService pharmacyService, PurchaseOrderItem item) {
+        if (item == null || item.getQuantity() == null || item.getQuantity().compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        CartLine line = new CartLine();
+        ProductMasterItem productMasterItem = item.getProductMasterItem();
+        if (productMasterItem != null && productMasterItem.getProductMasterItemId() != null) {
+            line.setCartKey(cartKeyForProductMaster(productMasterItem.getProductMasterItemId()));
+            line.setProductMasterItemId(productMasterItem.getProductMasterItemId());
+            Item mappedItem = pharmacyService.getMappedItemForProductMasterItem(productMasterItem);
+            line.setItemId(mappedItem == null ? null : mappedItem.getItemId());
+        } else {
+            Item localItem = item.getItemCode() == null ? null : pharmacyService.getItemByCodeAndProgram(item.getItemCode(), item.getProgram());
+            line.setItemId(localItem == null ? null : localItem.getItemId());
+            line.setCartKey(localItem == null ? "POI-" + item.getPurchaseOrderItemId() : cartKeyForItem(localItem.getItemId()));
+        }
+        line.setItemName(item.getItemName());
+        line.setItemCode(item.getItemCode());
+        line.setProgram(item.getProgram());
+        line.setUnitPrice(item.getUnitPrice());
+        line.setQuantity(item.getQuantity());
+        return line;
+    }
+
+    private void persistDraftCart(PharmacyService pharmacyService, LinkedHashMap<String, CartLine> cart) {
+        clearDraftPurchaseOrders(pharmacyService);
+        if (cart == null || cart.isEmpty()) {
             return;
         }
         Map<String, List<CartLine>> linesByProgram = new LinkedHashMap<String, List<CartLine>>();
@@ -328,53 +408,72 @@ public class MainStorePageController {
             linesByProgram.get(program).add(cartLine);
         }
         for (Map.Entry<String, List<CartLine>> entry : linesByProgram.entrySet()) {
-            PurchaseOrder purchaseOrder = new PurchaseOrder();
-            purchaseOrder.setProgram(entry.getKey());
-            purchaseOrder.setSupplier(supplier);
-            purchaseOrder.setFacilityId(facilityId());
-            purchaseOrder.setRequestedBy(Context.getAuthenticatedUser());
-            purchaseOrder.setRequestedDate(new Date());
-            purchaseOrder.setApprovalStatus("PENDING");
-            purchaseOrder.setDispatchStatus("PENDING_APPROVAL");
-            purchaseOrder.setCreator(Context.getAuthenticatedUser());
-            purchaseOrder.setDateCreated(new Date());
             if (entry.getValue().isEmpty()) {
                 continue;
             }
-            purchaseOrder.setItems(new ArrayList<PurchaseOrderItem>());
-            purchaseOrder.setTotalCost(BigDecimal.ZERO);
-            pharmacyService.savePurchaseOrder(purchaseOrder);
-            String orderNumber = "ord-" + purchaseOrder.getFacilityId() + "-" + purchaseOrder.getPurchaseOrderId();
-            List<PurchaseOrderItem> items = purchaseOrder.getItems();
-            if (items == null) {
-                items = new ArrayList<PurchaseOrderItem>();
-                purchaseOrder.setItems(items);
-            } else {
-                items.clear();
-            }
+            PurchaseOrder draftOrder = new PurchaseOrder();
+            draftOrder.setProgram(entry.getKey());
+            draftOrder.setFacilityId(facilityId());
+            draftOrder.setRequestedBy(Context.getAuthenticatedUser());
+            draftOrder.setRequestedDate(new Date());
+            draftOrder.setApprovalStatus(APPROVAL_STATUS_DRAFT);
+            draftOrder.setDispatchStatus(DISPATCH_STATUS_DRAFT);
+            draftOrder.setCreator(Context.getAuthenticatedUser());
+            draftOrder.setDateCreated(new Date());
+            draftOrder.setItems(new ArrayList<PurchaseOrderItem>());
+            draftOrder.setTotalCost(BigDecimal.ZERO);
+            pharmacyService.savePurchaseOrder(draftOrder);
+            String orderNumber = "draft-" + draftOrder.getFacilityId() + "-" + draftOrder.getPurchaseOrderId();
             BigDecimal totalCost = BigDecimal.ZERO;
             for (CartLine cartLine : entry.getValue()) {
-                PurchaseOrderItem item = new PurchaseOrderItem();
-                item.setPurchaseOrder(purchaseOrder);
-                if (cartLine.getProductMasterItemId() != null) {
-                    item.setProductMasterItem(pharmacyService.getProductMasterItem(cartLine.getProductMasterItemId()));
-                }
-                item.setOrderNumber(orderNumber);
-                item.setProgram(entry.getKey());
-                item.setItemName(cartLine.getItemName());
-                item.setItemCode(cartLine.getItemCode());
-                item.setQuantity(cartLine.getQuantity());
-                item.setUnitPrice(cartLine.getUnitPrice() == null ? BigDecimal.ZERO : cartLine.getUnitPrice());
-                item.setTotalPrice(item.getUnitPrice().multiply(cartLine.getQuantity()));
-                item.setCreator(Context.getAuthenticatedUser());
-                item.setDateCreated(new Date());
+                PurchaseOrderItem item = purchaseOrderItemFromCartLine(pharmacyService, draftOrder, cartLine,
+                        entry.getKey(), orderNumber);
                 totalCost = totalCost.add(item.getTotalPrice());
-                items.add(item);
+                draftOrder.getItems().add(item);
             }
-            purchaseOrder.setTotalCost(totalCost);
-            pharmacyService.savePurchaseOrder(purchaseOrder);
+            draftOrder.setTotalCost(totalCost);
+            pharmacyService.savePurchaseOrder(draftOrder);
         }
-        session.removeAttribute(CART_SESSION_KEY);
+    }
+
+    private PurchaseOrderItem purchaseOrderItemFromCartLine(PharmacyService pharmacyService, PurchaseOrder purchaseOrder,
+                                                            CartLine cartLine, String program, String orderNumber) {
+        PurchaseOrderItem item = new PurchaseOrderItem();
+        item.setPurchaseOrder(purchaseOrder);
+        if (cartLine.getProductMasterItemId() != null) {
+            item.setProductMasterItem(pharmacyService.getProductMasterItem(cartLine.getProductMasterItemId()));
+        }
+        item.setOrderNumber(requiredText(orderNumber, "draft"));
+        item.setProgram(requiredText(program, "General"));
+        item.setItemName(requiredText(cartLine.getItemName(), "Unknown item"));
+        item.setItemCode(requiredText(cartLine.getItemCode(), "UNKNOWN"));
+        item.setQuantity(cartLine.getQuantity());
+        item.setUnitPrice(cartLine.getUnitPrice() == null ? BigDecimal.ZERO : cartLine.getUnitPrice());
+        item.setTotalPrice(item.getUnitPrice().multiply(cartLine.getQuantity()));
+        item.setCreator(Context.getAuthenticatedUser());
+        item.setDateCreated(new Date());
+        return item;
+    }
+
+    private String requiredText(String value, String fallback) {
+        return value == null || value.trim().isEmpty() ? fallback : value.trim();
+    }
+
+    private void clearDraftPurchaseOrders(PharmacyService pharmacyService) {
+        List<PurchaseOrder> draftOrders = pharmacyService.getDraftPurchaseOrdersForUser(Context.getAuthenticatedUser());
+        if (draftOrders == null) {
+            return;
+        }
+        for (PurchaseOrder draftOrder : draftOrders) {
+            if (draftOrder == null) {
+                continue;
+            }
+            draftOrder.setVoided(Boolean.TRUE);
+            draftOrder.setVoidedBy(Context.getAuthenticatedUser());
+            draftOrder.setDateVoided(new Date());
+            draftOrder.setVoidReason("Replaced by active purchase order draft cart");
+            pharmacyService.savePurchaseOrder(draftOrder);
+        }
     }
 
     private BigDecimal currentStock(List<InventoryBalance> stockBalances, Integer itemId) {

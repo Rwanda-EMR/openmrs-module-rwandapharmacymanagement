@@ -13,6 +13,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.SupplierOrder;
 import org.openmrs.module.rwandapharmacymanagement.model.SupplierPrice;
 import org.openmrs.module.rwandapharmacymanagement.model.SupplierProductMapping;
 import org.openmrs.module.rwandapharmacymanagement.model.SupplierSetting;
+import org.openmrs.User;
 
 import java.util.List;
 
@@ -115,6 +116,8 @@ public interface PharmacyService extends OpenmrsService {
     long countPurchaseOrdersByDispatchStatus(String dispatchStatus);
 
     PurchaseOrder getPurchaseOrder(Integer purchaseOrderId);
+
+    List<PurchaseOrder> getDraftPurchaseOrdersForUser(User requestedBy);
 
     PurchaseOrder savePurchaseOrder(PurchaseOrder purchaseOrder);
 
