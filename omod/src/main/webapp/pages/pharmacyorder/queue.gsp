@@ -22,6 +22,12 @@
     .poq-inline-form { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:0; }
     .poq-inline-form input[type="text"] { border:1px solid #cbd5e1; border-radius:4px; font-size:12px; padding:5px 7px; }
     .poq-removed { display:inline-block; margin-left:6px; padding:3px 8px; border-radius:999px; background:#fff1f2; color:#991b1b; font-size:11px; font-weight:600; }
+    .poq-pager { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; color:#64748b; font-size:12px; flex-wrap:wrap; }
+    .poq-pager-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+    .poq-pager a { display:inline-block; padding:5px 9px; border:1px solid #cbd5e1; border-radius:4px; color:#334155; text-decoration:none; background:#fff; }
+    .poq-pager select { width:auto; min-width:70px; }
+    .poq-search { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+    .poq-search input[type="text"] { min-width:280px; border:1px solid #cbd5e1; border-radius:4px; font-size:12px; padding:7px 9px; }
 </style>
 
 <% if (approved) { %><div class="poq-banner">Request approved and deducted from stock.</div><% } %>
@@ -50,8 +56,41 @@
 <% } %>
 
 <div class="poq-card">
-    <div class="poq-head">Pending user item requests</div>
+    <div class="poq-head">Pending user item requests (${ requestStartItem ?: 0 }-${ requestEndItem ?: 0 } of ${ requestTotalItems ?: 0 })</div>
     <div class="poq-body">
+        <form method="get" class="poq-search">
+            <% if (activePharmacy) { %><input type="hidden" name="pharmacyLocationId" value="${ activePharmacy.pharmacyLocationId }"/><% } %>
+            <input type="hidden" name="page" value="1"/>
+            <input type="hidden" name="pageSize" value="${ requestPageSize ?: 25 }"/>
+            <input type="text" name="q" value="${ queueSearch ?: '' }" placeholder="Search requested by, reason, item name, or item code"/>
+            <button type="submit" class="poq-btn">Search</button>
+            <% if (queueSearch) { %>
+            <a class="poq-remove-btn" href="${ ui.pageLink('rwandapharmacymanagement', 'pharmacyorder/queue', [pharmacyLocationId: activePharmacy?.pharmacyLocationId, pageSize: requestPageSize]) }">Clear</a>
+            <% } %>
+        </form>
+        <div class="poq-pager">
+            <div>Page ${ requestPage ?: 1 } of ${ requestTotalPages ?: 1 }</div>
+            <div class="poq-pager-actions">
+                <form method="get" class="poq-inline-form">
+                    <% if (activePharmacy) { %><input type="hidden" name="pharmacyLocationId" value="${ activePharmacy.pharmacyLocationId }"/><% } %>
+                    <input type="hidden" name="q" value="${ queueSearch ?: '' }"/>
+                    <input type="hidden" name="page" value="1"/>
+                    <label>Show
+                        <select name="pageSize" onchange="this.form.submit()">
+                            <% requestPageSizes?.each { size -> %>
+                            <option value="${ size }" ${ requestPageSize == size ? 'selected="selected"' : '' }>${ size }</option>
+                            <% } %>
+                        </select>
+                    </label>
+                </form>
+                <% if (requestHasPrevious) { %>
+                <a href="${ ui.pageLink('rwandapharmacymanagement', 'pharmacyorder/queue', [pharmacyLocationId: activePharmacy?.pharmacyLocationId, q: queueSearch, page: requestPage - 1, pageSize: requestPageSize]) }">Previous</a>
+                <% } %>
+                <% if (requestHasNext) { %>
+                <a href="${ ui.pageLink('rwandapharmacymanagement', 'pharmacyorder/queue', [pharmacyLocationId: activePharmacy?.pharmacyLocationId, q: queueSearch, page: requestPage + 1, pageSize: requestPageSize]) }">Next</a>
+                <% } %>
+            </div>
+        </div>
         <table class="poq-table">
             <thead><tr><th>ID</th><th>Requested by</th><th>Reason</th><th>Items</th><th>Action</th></tr></thead>
             <tbody>

@@ -58,6 +58,7 @@
                     ]],
                     [title: "Department Requests", links: [
                             [path: "department/store", label: "Department store workspace", privilege: "Task: rwandapharmacymanagement.departmentStore"],
+                            [path: "department/returnQueue", label: "Department Return Queue", privilege: "Task: rwandapharmacymanagement.transferStock"],
                             [path: "department/request", label: "Department bulk request"],
                             [path: "department/finance", label: "Department finance approval"],
                             [path: "department/financeHistory", label: "Department finance history"],

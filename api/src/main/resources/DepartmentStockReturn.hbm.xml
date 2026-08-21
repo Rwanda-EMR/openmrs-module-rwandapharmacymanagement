@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="DepartmentStockReturn" table="rpm_department_stock_return">
+        <id name="departmentStockReturnId" type="int" column="department_stock_return_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <many-to-one name="departmentLocation" class="org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation" column="department_location_id"/>
+        <many-to-one name="destinationPharmacyLocation" class="org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation" column="destination_pharmacy_location_id"/>
+        <property name="returnStatus" column="return_status" type="string"/>
+        <property name="reason" column="reason" type="string"/>
+        <many-to-one name="receivedBy" class="org.openmrs.User" column="received_by"/>
+        <property name="receivedDate" column="received_date"/>
+        <many-to-one name="rejectedBy" class="org.openmrs.User" column="rejected_by"/>
+        <property name="rejectedDate" column="rejected_date"/>
+        <property name="rejectionReason" column="rejection_reason" type="string"/>
+        <bag name="lines" cascade="all-delete-orphan" inverse="true" lazy="false">
+            <key column="department_stock_return_id"/>
+            <one-to-many class="org.openmrs.module.rwandapharmacymanagement.model.DepartmentStockReturnLine"/>
+        </bag>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+        <property name="uuid" column="uuid" type="string"/>
+    </class>
+</hibernate-mapping>

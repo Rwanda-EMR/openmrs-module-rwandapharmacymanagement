@@ -897,6 +897,9 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
                 && request.getRequestStatus() != RequestStatus.PENDING_DISPENSE) {
             throw new IllegalArgumentException("Only pending consumable requests can be edited or deleted");
         }
+        if (hasNonPendingLine(request)) {
+            throw new IllegalArgumentException("Consumable requests cannot be edited or deleted after dispensing has started");
+        }
         if (request.getPatientBillId() != null && Boolean.TRUE.equals(dispensingService.isPatientBillPaid(request.getPatientBillId()))) {
             throw new IllegalArgumentException("Paid consumable requests cannot be edited or deleted");
         }
@@ -919,6 +922,22 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
             }
         }
         return null;
+    }
+
+    private boolean hasNonPendingLine(PatientDispensingRequest request) {
+        if (request == null || request.getLines() == null) {
+            return false;
+        }
+        for (PatientDispensingRequestLine line : request.getLines()) {
+            if (line == null || Boolean.TRUE.equals(line.getVoided())) {
+                continue;
+            }
+            if (line.getLineStatus() != RequestStatus.PENDING_PAYMENT
+                    && line.getLineStatus() != RequestStatus.PENDING_DISPENSE) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void rebuildConsumableBilling(PatientDispensingRequest request) {
@@ -1032,6 +1051,7 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
             Class<?> billingServiceClass = Context.loadClass("org.openmrs.module.mohbilling.service.BillingService");
             Class<?> patientBillClass = Context.loadClass("org.openmrs.module.mohbilling.model.PatientBill");
             Class<?> consommationClass = Context.loadClass("org.openmrs.module.mohbilling.model.Consommation");
+            Class<?> patientServiceBillClass = Context.loadClass("org.openmrs.module.mohbilling.model.PatientServiceBill");
             Object billingService = Context.getService(billingServiceClass);
             if (billingService == null) {
                 return;
@@ -1052,6 +1072,7 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
             invokeSetter(patientBill, "setStatus", "CANCELLED", String.class);
             billingServiceClass.getMethod("savePatientBill", patientBillClass).invoke(billingService, patientBill);
             if (consommation != null) {
+                voidConsumableBillItems(billingServiceClass, billingService, patientServiceBillClass, consommation, reason);
                 invokeSetter(consommation, "setVoided", Boolean.TRUE, boolean.class);
                 invokeSetter(consommation, "setVoidedBy", Context.getAuthenticatedUser(), Context.loadClass("org.openmrs.User"));
                 invokeSetter(consommation, "setVoidedDate", new Date(), Date.class);
@@ -1073,6 +1094,27 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
         }
         catch (Exception e) {
             throw new IllegalStateException("Unable to void existing consumable bill before rebuilding it", e);
+        }
+    }
+
+    private void voidConsumableBillItems(Class<?> billingServiceClass,
+                                         Object billingService,
+                                         Class<?> patientServiceBillClass,
+                                         Object consommation,
+                                         String reason) throws Exception {
+        Object billItems = consommation == null ? null : invokeNoArg(consommation, "getBillItems");
+        if (!(billItems instanceof Iterable)) {
+            return;
+        }
+        for (Object billItem : (Iterable<?>) billItems) {
+            if (billItem == null || extractBoolean(billItem, "getVoided")) {
+                continue;
+            }
+            invokeSetter(billItem, "setVoided", Boolean.TRUE, Boolean.class);
+            invokeSetter(billItem, "setVoidedBy", Context.getAuthenticatedUser(), Context.loadClass("org.openmrs.User"));
+            invokeSetter(billItem, "setVoidedDate", new Date(), Date.class);
+            invokeSetter(billItem, "setVoidReason", reason, String.class);
+            billingServiceClass.getMethod("saveBilledItem", patientServiceBillClass).invoke(billingService, billItem);
         }
     }
 

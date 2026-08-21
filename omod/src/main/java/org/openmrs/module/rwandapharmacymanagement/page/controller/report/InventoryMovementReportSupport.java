@@ -155,7 +155,9 @@ final class InventoryMovementReportSupport {
         StockTransactionType type = tx.getTransactionType();
         if (type == StockTransactionType.DELIVERY_RECEIPT) {
             row.receivedQty = row.receivedQty.add(qty.max(BigDecimal.ZERO));
-        } else if (type == StockTransactionType.MAIN_TO_DISPENSING_TRANSFER || type == StockTransactionType.INTER_PHARMACY_TRANSFER) {
+        } else if (type == StockTransactionType.MAIN_TO_DISPENSING_TRANSFER
+                || type == StockTransactionType.INTER_PHARMACY_TRANSFER
+                || type == StockTransactionType.DEPARTMENT_STOCK_RETURN) {
             if (qty.compareTo(BigDecimal.ZERO) >= 0) {
                 row.transferInQty = row.transferInQty.add(qty);
             } else {

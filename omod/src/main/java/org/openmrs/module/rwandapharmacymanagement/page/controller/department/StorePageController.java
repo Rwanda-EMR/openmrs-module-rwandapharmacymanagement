@@ -5,12 +5,15 @@ import org.openmrs.LocationTag;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.DepartmentBulkRequestService;
+import org.openmrs.module.rwandapharmacymanagement.api.DepartmentStockReturnService;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.DepartmentBulkRequestLineCommand;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.DepartmentStockIssueLineCommand;
+import org.openmrs.module.rwandapharmacymanagement.api.dto.DepartmentStockReturnLineCommand;
 import org.openmrs.module.rwandapharmacymanagement.model.DepartmentBulkRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.DepartmentStockIssue;
+import org.openmrs.module.rwandapharmacymanagement.model.DepartmentStockReturn;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.PharmacyLocationType;
@@ -38,6 +41,7 @@ public class StorePageController {
 
     public void get(PageModel model,
                     @SpringBean("departmentBulkRequestService") DepartmentBulkRequestService departmentBulkRequestService,
+                    @SpringBean("departmentStockReturnService") DepartmentStockReturnService departmentStockReturnService,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @RequestParam(value = "departmentLocationId", required = false) Integer departmentLocationId,
@@ -50,6 +54,8 @@ public class StorePageController {
                 : positiveBalances(inventoryService.getInventoryForPharmacy(department.getPharmacyLocationId()));
         List<DepartmentBulkRequest> departmentRequests = department == null ? Collections.<DepartmentBulkRequest>emptyList()
                 : departmentBulkRequestService.getRequestsForDepartment(department, 0, 25);
+        List<DepartmentStockReturn> departmentReturns = department == null ? Collections.<DepartmentStockReturn>emptyList()
+                : departmentStockReturnService.getReturnsForDepartment(department, 0, 25);
         String workflowMode = Context.getAdministrationService().getGlobalProperty(
                 DepartmentBulkRequestService.GP_WORKFLOW_MODE,
                 DepartmentBulkRequestService.MODE_PERIODIC_ACCOUNTABILITY);
@@ -63,6 +69,7 @@ public class StorePageController {
                 DepartmentBulkRequestService.MODE_FULL_VISIBILITY.equals(workflowMode)));
         model.addAttribute("stockBalances", stockBalances);
         model.addAttribute("departmentRequests", departmentRequests);
+        model.addAttribute("departmentReturns", departmentReturns);
         model.addAttribute("recentIssues", department == null ? Collections.emptyList()
                 : departmentBulkRequestService.getIssuesForDepartment(department, 0, 25));
         model.addAttribute("workflowMode", workflowMode);
@@ -70,6 +77,7 @@ public class StorePageController {
     }
 
     public String post(@SpringBean("departmentBulkRequestService") DepartmentBulkRequestService departmentBulkRequestService,
+                       @SpringBean("departmentStockReturnService") DepartmentStockReturnService departmentStockReturnService,
                        @SpringBean("pharmacyService") PharmacyService pharmacyService,
                        @RequestParam("action") String action,
                        @RequestParam(value = "supplyingPharmacyLocationId", required = false) Integer supplyingPharmacyLocationId,
@@ -86,6 +94,10 @@ public class StorePageController {
                        @RequestParam(value = "issueBatchNumber", required = false) String[] issueBatchNumbers,
                        @RequestParam(value = "issuedTo", required = false) String issuedTo,
                        @RequestParam(value = "reason", required = false) String reason,
+                       @RequestParam(value = "returnDestinationPharmacyLocationId", required = false) Integer returnDestinationPharmacyLocationId,
+                       @RequestParam(value = "returnItemBatch", required = false) String[] returnItemBatches,
+                       @RequestParam(value = "returnQuantity", required = false) BigDecimal[] returnQuantities,
+                       @RequestParam(value = "returnReason", required = false) String returnReason,
                        @RequestParam(value = "departmentLocationId", required = false) Integer departmentLocationId,
                        HttpSession session,
                        UiUtils ui) {
@@ -105,6 +117,10 @@ public class StorePageController {
         } else if ("issue".equalsIgnoreCase(action)) {
             departmentBulkRequestService.recordIssues(department,
                     issueCommands(issueItemIds, issueQuantities, issueBatchNumbers), issuedTo, reason);
+        } else if ("return".equalsIgnoreCase(action)) {
+            departmentStockReturnService.createReturn(department,
+                    pharmacyService.getPharmacyLocation(returnDestinationPharmacyLocationId), returnReason,
+                    returnCommands(returnItemBatches, returnQuantities));
         }
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "department/store");
     }
@@ -328,6 +344,43 @@ public class StorePageController {
             commands.add(new DepartmentStockIssueLineCommand(itemIds[i], quantities[i], batchNumber));
         }
         return commands;
+    }
+
+    private List<DepartmentStockReturnLineCommand> returnCommands(String[] itemBatches, BigDecimal[] quantities) {
+        List<DepartmentStockReturnLineCommand> commands = new ArrayList<DepartmentStockReturnLineCommand>();
+        if (itemBatches == null || quantities == null) {
+            return commands;
+        }
+        int count = Math.min(itemBatches.length, quantities.length);
+        for (int i = 0; i < count; i++) {
+            Integer itemId = itemIdFromItemBatch(itemBatches[i]);
+            if (itemId == null || quantities[i] == null || quantities[i].compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            commands.add(new DepartmentStockReturnLineCommand(itemId, quantities[i], batchFromItemBatch(itemBatches[i])));
+        }
+        return commands;
+    }
+
+    private Integer itemIdFromItemBatch(String itemBatch) {
+        if (itemBatch == null || itemBatch.trim().isEmpty()) {
+            return null;
+        }
+        String[] parts = itemBatch.split("\\|", 2);
+        try {
+            return Integer.valueOf(parts[0]);
+        }
+        catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private String batchFromItemBatch(String itemBatch) {
+        if (itemBatch == null) {
+            return null;
+        }
+        String[] parts = itemBatch.split("\\|", 2);
+        return parts.length < 2 || parts[1].trim().isEmpty() ? null : parts[1].trim();
     }
 
     private void sortLocations(List<PharmacyLocation> locations) {

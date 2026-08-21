@@ -170,6 +170,48 @@
 </div>
 
 <div class="dept-card">
+    <div class="dept-head">Return stock to pharmacy</div>
+    <div class="dept-body">
+        <form method="post">
+            <input type="hidden" name="action" value="return"/>
+            <input type="hidden" name="departmentLocationId" value="${ department.pharmacyLocationId }"/>
+            <p>
+                <label>Return to</label><br/>
+                <select name="returnDestinationPharmacyLocationId" required="required">
+                    <option value="">Select receiving pharmacy</option>
+                    <% supplyingPharmacies.each { location ->
+                        def destType = location.mainStore ? 'Main pharmacy' : (location.locationType?.toString() == 'DISPENSING_PHARMACY' ? 'Dispensing pharmacy' : (location.locationType ?: 'Pharmacy'))
+                    %><option value="${ location.pharmacyLocationId }">${ location.name } (${ destType })</option><% } %>
+                </select>
+            </p>
+            <table class="dept-table">
+                <thead><tr><th>Item/batch</th><th>Available</th><th>Quantity</th><th></th></tr></thead>
+                <tbody id="return-lines">
+                <tr class="return-line">
+                    <td>
+                        <select name="returnItemBatch" required="required" onchange="syncReturnLine(this)">
+                            <option value="">Select department stock</option>
+                            <% stockBalances.each { balance ->
+                                def batchValue = balance.batchNumber ?: ''
+                            %>
+                            <option value="${ balance.item?.itemId }|${ batchValue }" data-available="${ balance.quantityOnHand ?: 0 }">${ balance.item?.name ?: '' } - ${ balance.quantityOnHand ?: 0 } ${ balance.batchNumber ? '(' + balance.batchNumber + ')' : '' }</option>
+                            <% } %>
+                        </select>
+                    </td>
+                    <td class="return-available dept-muted">0</td>
+                    <td><input class="dept-input-sm" type="number" step="0.01" min="0.01" name="returnQuantity" required="required"/></td>
+                    <td><button type="button" class="dept-btn dept-btn-danger" onclick="removeReturnLine(this)">Remove</button></td>
+                </tr>
+                </tbody>
+            </table>
+            <p><button type="button" class="dept-btn dept-btn-secondary" onclick="addReturnLine()">Add another item</button></p>
+            <p><label>Reason</label><br/><input type="text" name="returnReason" class="dept-full"/></p>
+            <p><button type="submit" class="dept-btn">Submit return</button></p>
+        </form>
+    </div>
+</div>
+
+<div class="dept-card">
     <div class="dept-head">My department requests</div>
     <div class="dept-body">
         <table class="dept-table">
@@ -187,6 +229,29 @@
                     <a class="dept-btn dept-btn-secondary" href="${ ui.pageLink('rwandapharmacymanagement', 'department/transferPdf', [requestId: request.departmentBulkRequestId]) }">PDF</a>
                     <% } %>
                 </td>
+            </tr>
+            <% } } %>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="dept-card">
+    <div class="dept-head">My department returns</div>
+    <div class="dept-body">
+        <table class="dept-table">
+            <thead><tr><th>ID</th><th>Date</th><th>Destination</th><th>Status</th><th>Items</th><th>Received by</th><th>Reason</th><th>Download</th></tr></thead>
+            <tbody>
+            <% if (!departmentReturns) { %><tr><td colspan="8" class="dept-muted">No department returns found.</td></tr><% } else { departmentReturns.each { stockReturn -> %>
+            <tr>
+                <td>${ stockReturn.departmentStockReturnId }</td>
+                <td>${ stockReturn.dateCreated ? ui.formatDatePretty(stockReturn.dateCreated) : '' }</td>
+                <td>${ stockReturn.destinationPharmacyLocation?.name ?: '' }</td>
+                <td>${ stockReturn.returnStatus ?: '' }</td>
+                <td>${ stockReturn.lines?.findAll { it.voided != true }?.size() ?: 0 }</td>
+                <td>${ stockReturn.receivedBy?.displayString ?: '' }</td>
+                <td>${ stockReturn.reason ?: stockReturn.rejectionReason ?: '' }</td>
+                <td><a class="dept-btn dept-btn-secondary" href="${ ui.pageLink('rwandapharmacymanagement', 'department/returnPdf', [returnId: stockReturn.departmentStockReturnId]) }">PDF</a></td>
             </tr>
             <% } } %>
             </tbody>
@@ -373,8 +438,72 @@
         }
         body.removeChild(row);
     }
+    function syncReturnLine(select) {
+        var row = closestReturnRow(select);
+        var selected = select.options[select.selectedIndex];
+        var availableCell = row ? row.querySelector('.return-available') : null;
+        var quantity = row ? row.querySelector('input[name="returnQuantity"]') : null;
+        if (availableCell) {
+            availableCell.innerHTML = selected ? (selected.getAttribute('data-available') || '0') : '0';
+        }
+        if (quantity) {
+            quantity.max = selected ? (selected.getAttribute('data-available') || '') : '';
+        }
+    }
+    function addReturnLine() {
+        var body = document.getElementById('return-lines');
+        var firstLine = body ? body.querySelector('.return-line') : null;
+        if (!firstLine) {
+            return;
+        }
+        var newLine = firstLine.cloneNode(true);
+        var select = newLine.querySelector('select[name="returnItemBatch"]');
+        var quantity = newLine.querySelector('input[name="returnQuantity"]');
+        var availableCell = newLine.querySelector('.return-available');
+        if (select) {
+            select.selectedIndex = 0;
+        }
+        if (quantity) {
+            quantity.value = '';
+            quantity.max = '';
+        }
+        if (availableCell) {
+            availableCell.innerHTML = '0';
+        }
+        body.appendChild(newLine);
+    }
+    function removeReturnLine(button) {
+        var row = closestReturnRow(button);
+        var body = document.getElementById('return-lines');
+        if (!row || !body) {
+            return;
+        }
+        if (body.querySelectorAll('.return-line').length <= 1) {
+            var select = row.querySelector('select[name="returnItemBatch"]');
+            var quantity = row.querySelector('input[name="returnQuantity"]');
+            var availableCell = row.querySelector('.return-available');
+            if (select) {
+                select.selectedIndex = 0;
+            }
+            if (quantity) {
+                quantity.value = '';
+                quantity.max = '';
+            }
+            if (availableCell) {
+                availableCell.innerHTML = '0';
+            }
+            return;
+        }
+        body.removeChild(row);
+    }
     function closestIssueRow(element) {
         while (element && !element.classList.contains('issue-line')) {
+            element = element.parentNode;
+        }
+        return element;
+    }
+    function closestReturnRow(element) {
+        while (element && !element.classList.contains('return-line')) {
             element = element.parentNode;
         }
         return element;

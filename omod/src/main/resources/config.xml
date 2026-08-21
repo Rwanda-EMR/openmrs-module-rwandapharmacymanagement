@@ -35,6 +35,8 @@
         DepartmentBulkRequest.hbm.xml
         DepartmentBulkRequestLine.hbm.xml
         DepartmentStockIssue.hbm.xml
+        DepartmentStockReturn.hbm.xml
+        DepartmentStockReturnLine.hbm.xml
         DispenseRecord.hbm.xml
         DispenseRecordLine.hbm.xml
         IntegrationLog.hbm.xml

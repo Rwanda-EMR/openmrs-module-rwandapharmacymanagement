@@ -32,6 +32,12 @@
         <span class="tile-icon">⇢</span>
         <span class="tile-label">Department Pharmacy Dispense <% if ((queueCounts['department/dispense'] ?: 0) > 0) { %><span class="tile-count-badge">${ queueCounts['department/dispense'] }</span><% } %></span>
     </a>
+    <% if (canTransferStock) { %>
+    <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "department/returnQueue") }">
+        <span class="tile-icon">↩</span>
+        <span class="tile-label">Department Return Queue</span>
+    </a>
+    <% } %>
     <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "pharmacyorder/queue") }">
         <span class="tile-icon">☷</span>
         <span class="tile-label">Pharmacy Item Request Queue <% if ((queueCounts['pharmacyorder/queue'] ?: 0) > 0) { %><span class="tile-count-badge">${ queueCounts['pharmacyorder/queue'] }</span><% } %></span>

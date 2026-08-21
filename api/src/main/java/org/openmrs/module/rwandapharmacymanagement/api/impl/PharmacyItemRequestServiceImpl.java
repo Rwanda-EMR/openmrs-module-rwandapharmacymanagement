@@ -87,8 +87,24 @@ public class PharmacyItemRequestServiceImpl extends BaseOpenmrsService implement
     }
 
     @Override
+    public List<PharmacyItemRequest> getPendingRequestsForPharmacy(PharmacyLocation pharmacyLocation, int offset, int limit) {
+        return pharmacyItemRequestDao.getPendingRequestsForPharmacy(pharmacyLocation, offset, limit);
+    }
+
+    @Override
+    public List<PharmacyItemRequest> getPendingRequestsForPharmacy(PharmacyLocation pharmacyLocation, String search,
+                                                                   int offset, int limit) {
+        return pharmacyItemRequestDao.getPendingRequestsForPharmacy(pharmacyLocation, search, offset, limit);
+    }
+
+    @Override
     public long countPendingRequestsForPharmacy(PharmacyLocation pharmacyLocation) {
         return pharmacyItemRequestDao.countPendingRequestsForPharmacy(pharmacyLocation);
+    }
+
+    @Override
+    public long countPendingRequestsForPharmacy(PharmacyLocation pharmacyLocation, String search) {
+        return pharmacyItemRequestDao.countPendingRequestsForPharmacy(pharmacyLocation, search);
     }
 
     @Override

@@ -3,6 +3,7 @@ package org.openmrs.module.rwandapharmacymanagement.api.impl;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.openmrs.User;
 import org.openmrs.module.rwandapharmacymanagement.db.DispensingDao;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecord;
@@ -129,6 +130,67 @@ public class DispensingServiceImplTest {
         Assert.assertNull(dispensingDao.savedDispenseRecord);
         Assert.assertEquals(RequestStatus.CANCELLED, cancelledLine.getLineStatus());
         Assert.assertEquals(RequestStatus.PENDING_DISPENSE, request.getRequestStatus());
+    }
+
+    @Test
+    public void saveRequestShouldCompletePrescriptionWhenAllLinesAreDispensed() {
+        PatientDispensingRequest request = new PatientDispensingRequest();
+        request.setPatientDispensingRequestId(1);
+        request.setPaymentConfirmed(Boolean.TRUE);
+        request.setRequestType(RequestType.PRESCRIPTION);
+        request.setRequestStatus(RequestStatus.IN_PROGRESS);
+        request.setCreator(new User(1));
+        request.setDateCreated(new Date());
+
+        PatientDispensingRequestLine firstLine = new PatientDispensingRequestLine();
+        firstLine.setPatientDispensingRequestLineId(10);
+        firstLine.setLineStatus(RequestStatus.DISPENSED);
+        firstLine.setCreator(new User(1));
+        firstLine.setDateCreated(new Date());
+
+        PatientDispensingRequestLine secondLine = new PatientDispensingRequestLine();
+        secondLine.setPatientDispensingRequestLineId(11);
+        secondLine.setLineStatus(RequestStatus.DISPENSED);
+        secondLine.setCreator(new User(1));
+        secondLine.setDateCreated(new Date());
+
+        request.setLines(Arrays.asList(firstLine, secondLine));
+
+        FakeDispensingDao dispensingDao = new FakeDispensingDao(request);
+        DispensingServiceImpl service = new DispensingServiceImpl();
+        service.setDispensingDao(dispensingDao);
+
+        service.saveRequest(request);
+
+        Assert.assertEquals(RequestStatus.DISPENSED, request.getRequestStatus());
+        Assert.assertSame(request, dispensingDao.savedRequest);
+    }
+
+    @Test
+    public void saveRequestShouldCompleteConsumableRequestWhenAllLinesAreDispensed() {
+        PatientDispensingRequest request = new PatientDispensingRequest();
+        request.setPatientDispensingRequestId(1);
+        request.setPaymentConfirmed(Boolean.TRUE);
+        request.setRequestType(RequestType.CONSUMABLE);
+        request.setRequestStatus(RequestStatus.PENDING_DISPENSE);
+        request.setCreator(new User(1));
+        request.setDateCreated(new Date());
+
+        PatientDispensingRequestLine line = new PatientDispensingRequestLine();
+        line.setPatientDispensingRequestLineId(10);
+        line.setLineStatus(RequestStatus.DISPENSED);
+        line.setCreator(new User(1));
+        line.setDateCreated(new Date());
+        request.setLines(Collections.singletonList(line));
+
+        FakeDispensingDao dispensingDao = new FakeDispensingDao(request);
+        DispensingServiceImpl service = new DispensingServiceImpl();
+        service.setDispensingDao(dispensingDao);
+
+        service.saveRequest(request);
+
+        Assert.assertEquals(RequestStatus.DISPENSED, request.getRequestStatus());
+        Assert.assertSame(request, dispensingDao.savedRequest);
     }
 
     private static class FakeDispensingDao implements DispensingDao {

@@ -8,6 +8,7 @@ import org.openmrs.module.rwandapharmacymanagement.api.PharmacyItemRequestServic
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
+import org.openmrs.module.rwandapharmacymanagement.page.controller.support.PaginationSupport;
 import org.openmrs.module.rwandapharmacymanagement.web.support.CurrentPharmacySupport;
 import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
@@ -37,13 +38,25 @@ public class QueuePageController {
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @SpringBean("pharmacyItemRequestService") PharmacyItemRequestService pharmacyItemRequestService,
                     @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
+                    @RequestParam(value = "q", required = false) String search,
+                    @RequestParam(value = "page", required = false) Integer page,
+                    @RequestParam(value = "pageSize", required = false) Integer pageSize,
                     HttpSession session) {
         CurrentPharmacySupport.rememberSelection(pharmacyService, session, pharmacyLocationId);
         CurrentPharmacySupport.populateModel(model, pharmacyService, session);
         PharmacyLocation activePharmacy = resolveActiveRequestPharmacy(pharmacyService, session);
+        String searchTerm = normalizeSearch(search);
+        int currentPage = PaginationSupport.sanitizePage(page);
+        int currentPageSize = PaginationSupport.sanitizePageSize(pageSize);
+        int totalRequests = activePharmacy == null ? 0
+                : (int) pharmacyItemRequestService.countPendingRequestsForPharmacy(activePharmacy, searchTerm);
+        currentPage = PaginationSupport.clampPage(currentPage, currentPageSize, totalRequests);
+        int offset = (currentPage - 1) * currentPageSize;
         model.addAttribute("activePharmacy", activePharmacy);
         model.addAttribute("requests", activePharmacy == null ? java.util.Collections.emptyList()
-                : pharmacyItemRequestService.getPendingRequestsForPharmacy(activePharmacy));
+                : pharmacyItemRequestService.getPendingRequestsForPharmacy(activePharmacy, searchTerm, offset, currentPageSize));
+        PaginationSupport.addAttributes(model, "request", currentPage, currentPageSize, totalRequests);
+        model.addAttribute("queueSearch", searchTerm);
         model.addAttribute("availableByItemId", buildAvailableByItemId(activePharmacy, inventoryService));
         model.addAttribute("batchOptionsByItemId", buildBatchOptionsByItemId(activePharmacy, inventoryService));
         model.addAttribute("approved", FlashMessageSupport.consumeBoolean(session, FLASH_APPROVED));
@@ -124,6 +137,10 @@ public class QueuePageController {
             }
         }
         return false;
+    }
+
+    private String normalizeSearch(String search) {
+        return search == null ? "" : search.trim();
     }
 
     private Map<Integer, BigDecimal> buildAvailableByItemId(PharmacyLocation activePharmacy, InventoryService inventoryService) {

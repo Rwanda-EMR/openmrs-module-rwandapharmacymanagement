@@ -27,6 +27,10 @@
         <property name="sessionFactory" ref="sessionFactory"/>
     </bean>
 
+    <bean id="departmentStockReturnDao" class="org.openmrs.module.rwandapharmacymanagement.db.hibernate.HibernateDepartmentStockReturnDao">
+        <property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
     <bean id="clinicalSafetyDao" class="org.openmrs.module.rwandapharmacymanagement.db.hibernate.HibernateClinicalSafetyDao">
         <property name="sessionFactory" ref="sessionFactory"/>
     </bean>
@@ -128,6 +132,12 @@
         <property name="inventoryDao" ref="inventoryDao"/>
         <property name="pharmacyService" ref="pharmacyService"/>
         <property name="administrationService" ref="adminService"/>
+    </bean>
+
+    <bean id="departmentStockReturnServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.DepartmentStockReturnServiceImpl">
+        <property name="departmentStockReturnDao" ref="departmentStockReturnDao"/>
+        <property name="inventoryDao" ref="inventoryDao"/>
+        <property name="pharmacyService" ref="pharmacyService"/>
     </bean>
 
     <bean id="rwandaPharmacyAlertServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.AlertServiceImpl">
@@ -261,6 +271,15 @@
         </property>
     </bean>
 
+    <bean id="departmentStockReturnService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="departmentStockReturnServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
     <bean parent="serviceContext">
         <property name="moduleService">
             <list merge="true">
@@ -292,6 +311,8 @@
                 <ref bean="pharmacyItemRequestService"/>
                 <value>org.openmrs.module.rwandapharmacymanagement.api.DepartmentBulkRequestService</value>
                 <ref bean="departmentBulkRequestService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.DepartmentStockReturnService</value>
+                <ref bean="departmentStockReturnService"/>
             </list>
         </property>
     </bean>

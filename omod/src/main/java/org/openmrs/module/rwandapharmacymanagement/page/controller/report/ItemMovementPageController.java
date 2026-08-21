@@ -2,6 +2,7 @@ package org.openmrs.module.rwandapharmacymanagement.page.controller.report;
 
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.DepartmentBulkRequestService;
+import org.openmrs.module.rwandapharmacymanagement.api.DepartmentStockReturnService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyItemRequestService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
@@ -27,6 +28,7 @@ public class ItemMovementPageController {
     public void get(PageModel model,
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @SpringBean("departmentBulkRequestService") DepartmentBulkRequestService departmentBulkRequestService,
+                    @SpringBean("departmentStockReturnService") DepartmentStockReturnService departmentStockReturnService,
                     @SpringBean("pharmacyItemRequestService") PharmacyItemRequestService pharmacyItemRequestService,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @RequestParam(value = "itemId", required = false) Integer itemId,
@@ -43,7 +45,7 @@ public class ItemMovementPageController {
                 ? java.util.Collections.<ItemMovementReportSupport.Row>emptyList()
                 : ItemMovementReportSupport.buildRows(inventoryService, selectedItem, startDate,
                 ItemMovementReportSupport.nextDay(endDate), pharmacyLocationId, departmentBulkRequestService,
-                pharmacyItemRequestService);
+                departmentStockReturnService, pharmacyItemRequestService);
         BigDecimal openingBalance = selectedItem == null ? BigDecimal.ZERO
                 : ItemMovementReportSupport.openingBalance(inventoryService, selectedItem.getItemId(), startDate, pharmacyLocationId);
         BigDecimal closingBalance = ItemMovementReportSupport.closingBalance(rows, openingBalance);

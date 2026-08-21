@@ -124,6 +124,10 @@
         <sqlFile path="sql/migrations/rpm-department-bulk-request-workflow.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
+    <changeSet id="rpm-department-stock-return-workflow" author="codex">
+        <sqlFile path="sql/migrations/rpm-department-stock-return-workflow.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
     <changeSet id="rpm-item-requester-visibility" author="codex">
         <sqlFile path="sql/migrations/rpm-item-requester-visibility.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>

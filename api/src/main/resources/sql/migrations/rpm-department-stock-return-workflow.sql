@@ -1,0 +1,42 @@
+CREATE TABLE IF NOT EXISTS rpm_department_stock_return (
+    department_stock_return_id INT NOT NULL AUTO_INCREMENT,
+    department_location_id INT NOT NULL,
+    destination_pharmacy_location_id INT NOT NULL,
+    return_status VARCHAR(50) NOT NULL,
+    reason VARCHAR(255),
+    received_by INT,
+    received_date DATETIME,
+    rejected_by INT,
+    rejected_date DATETIME,
+    rejection_reason VARCHAR(255),
+    creator INT,
+    date_created DATETIME,
+    voided TINYINT(1) NOT NULL DEFAULT 0,
+    voided_by INT,
+    date_voided DATETIME,
+    void_reason VARCHAR(255),
+    uuid VARCHAR(38),
+    PRIMARY KEY (department_stock_return_id),
+    INDEX rpm_dept_return_department_idx (department_location_id, return_status, date_created),
+    INDEX rpm_dept_return_destination_idx (destination_pharmacy_location_id, return_status, date_created)
+);
+
+CREATE TABLE IF NOT EXISTS rpm_department_stock_return_line (
+    department_stock_return_line_id INT NOT NULL AUTO_INCREMENT,
+    department_stock_return_id INT NOT NULL,
+    item_id INT NOT NULL,
+    batch_number VARCHAR(100),
+    expiry_date DATE,
+    quantity DECIMAL(18,2) NOT NULL DEFAULT 0,
+    unit_price DECIMAL(18,2),
+    total_amount DECIMAL(18,2),
+    creator INT,
+    date_created DATETIME,
+    voided TINYINT(1) NOT NULL DEFAULT 0,
+    voided_by INT,
+    date_voided DATETIME,
+    void_reason VARCHAR(255),
+    uuid VARCHAR(38),
+    PRIMARY KEY (department_stock_return_line_id),
+    INDEX rpm_dept_return_line_return_idx (department_stock_return_id, item_id)
+);

@@ -2,8 +2,10 @@ package org.openmrs.module.rwandapharmacymanagement.page.controller.report;
 
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.DepartmentBulkRequestService;
+import org.openmrs.module.rwandapharmacymanagement.api.DepartmentStockReturnService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyItemRequestService;
 import org.openmrs.module.rwandapharmacymanagement.model.DepartmentBulkRequest;
+import org.openmrs.module.rwandapharmacymanagement.model.DepartmentStockReturn;
 import org.openmrs.module.rwandapharmacymanagement.model.InterPharmacyTransfer;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyItemRequest;
@@ -36,6 +38,7 @@ final class ItemMovementReportSupport {
                                Date endExclusive,
                                Integer pharmacyLocationId,
                                DepartmentBulkRequestService departmentBulkRequestService,
+                               DepartmentStockReturnService departmentStockReturnService,
                                PharmacyItemRequestService pharmacyItemRequestService) {
         if (inventoryService == null || item == null || item.getItemId() == null) {
             return Collections.emptyList();
@@ -45,24 +48,27 @@ final class ItemMovementReportSupport {
         List<Row> rows = new ArrayList<Row>();
         Map<String, InterPharmacyTransfer> transfersByReference = new LinkedHashMap<String, InterPharmacyTransfer>();
         Map<String, DepartmentBulkRequest> departmentTransfersByReference = new LinkedHashMap<String, DepartmentBulkRequest>();
+        Map<String, DepartmentStockReturn> departmentReturnsByReference = new LinkedHashMap<String, DepartmentStockReturn>();
         Map<String, PharmacyItemRequest> pharmacyRequestsByReference = new LinkedHashMap<String, PharmacyItemRequest>();
         for (StockTransaction transaction : inventoryService.getStockTransactions(item.getItemId(), startDate, endExclusive, pharmacyLocationId)) {
             InterPharmacyTransfer transfer = transferForTransaction(inventoryService, transfersByReference, transaction);
             DepartmentBulkRequest departmentTransfer = departmentTransferForTransaction(departmentBulkRequestService,
                     departmentTransfersByReference, transaction);
+            DepartmentStockReturn departmentReturn = departmentReturnForTransaction(departmentStockReturnService,
+                    departmentReturnsByReference, transaction);
             PharmacyItemRequest pharmacyItemRequest = pharmacyItemRequestForTransaction(pharmacyItemRequestService,
                     pharmacyRequestsByReference, transaction);
             BigDecimal quantity = quantity(transaction);
             runningBalance = runningBalance.add(quantity);
             Row row = new Row();
             row.movementDate = formatDateTime(transaction.getDateCreated());
-            row.receivingPharmacyOrUser = receivingPharmacyOrUser(transaction, transfer, departmentTransfer);
-            row.issuingPharmacy = issuingPharmacy(transaction, transfer, departmentTransfer);
+            row.receivingPharmacyOrUser = receivingPharmacyOrUser(transaction, transfer, departmentTransfer, departmentReturn);
+            row.issuingPharmacy = issuingPharmacy(transaction, transfer, departmentTransfer, departmentReturn);
             row.performedBy = performedBy(transaction);
-            row.requestedBy = requestedBy(transaction, transfer, departmentTransfer, pharmacyItemRequest);
-            row.requestedWhere = requestedWhere(transfer, departmentTransfer, pharmacyItemRequest);
-            row.servedBy = servedBy(transaction, transfer, departmentTransfer, pharmacyItemRequest);
-            row.servedWhere = servedWhere(transaction, transfer, departmentTransfer, pharmacyItemRequest);
+            row.requestedBy = requestedBy(transaction, transfer, departmentTransfer, departmentReturn, pharmacyItemRequest);
+            row.requestedWhere = requestedWhere(transfer, departmentTransfer, departmentReturn, pharmacyItemRequest);
+            row.servedBy = servedBy(transaction, transfer, departmentTransfer, departmentReturn, pharmacyItemRequest);
+            row.servedWhere = servedWhere(transaction, transfer, departmentTransfer, departmentReturn, pharmacyItemRequest);
             row.batchNumber = safe(transaction.getBatchNumber());
             row.expiryDate = formatDate(transaction.getExpiryDate());
             row.quantityReceived = quantity.compareTo(BigDecimal.ZERO) > 0 ? quantity : BigDecimal.ZERO;
@@ -82,7 +88,7 @@ final class ItemMovementReportSupport {
                                Date startDate,
                                Date endExclusive,
                                Integer pharmacyLocationId) {
-        return buildRows(inventoryService, item, startDate, endExclusive, pharmacyLocationId, null, null);
+        return buildRows(inventoryService, item, startDate, endExclusive, pharmacyLocationId, null, null, null);
     }
 
     static List<Row> buildRows(InventoryService inventoryService,
@@ -92,7 +98,18 @@ final class ItemMovementReportSupport {
                                Integer pharmacyLocationId,
                                DepartmentBulkRequestService departmentBulkRequestService) {
         return buildRows(inventoryService, item, startDate, endExclusive, pharmacyLocationId,
-                departmentBulkRequestService, null);
+                departmentBulkRequestService, null, null);
+    }
+
+    static List<Row> buildRows(InventoryService inventoryService,
+                               Item item,
+                               Date startDate,
+                               Date endExclusive,
+                               Integer pharmacyLocationId,
+                               DepartmentBulkRequestService departmentBulkRequestService,
+                               PharmacyItemRequestService pharmacyItemRequestService) {
+        return buildRows(inventoryService, item, startDate, endExclusive, pharmacyLocationId,
+                departmentBulkRequestService, null, pharmacyItemRequestService);
     }
 
     private static InterPharmacyTransfer transferForTransaction(InventoryService inventoryService,
@@ -144,6 +161,32 @@ final class ItemMovementReportSupport {
         }
         departmentTransfersByReference.put(reference, request);
         return request;
+    }
+
+    private static DepartmentStockReturn departmentReturnForTransaction(
+            DepartmentStockReturnService departmentStockReturnService,
+            Map<String, DepartmentStockReturn> departmentReturnsByReference,
+            StockTransaction transaction) {
+        if (departmentStockReturnService == null || transaction == null || transaction.getTransactionType() == null
+                || !"DEPARTMENT_STOCK_RETURN".equals(transaction.getTransactionType().name())) {
+            return null;
+        }
+        String reference = safe(transaction.getReferenceNumber()).trim();
+        if (reference.isEmpty()) {
+            return null;
+        }
+        if (departmentReturnsByReference.containsKey(reference)) {
+            return departmentReturnsByReference.get(reference);
+        }
+        DepartmentStockReturn stockReturn = null;
+        try {
+            stockReturn = departmentStockReturnService.getReturn(Integer.valueOf(reference));
+        }
+        catch (NumberFormatException ignored) {
+            stockReturn = null;
+        }
+        departmentReturnsByReference.put(reference, stockReturn);
+        return stockReturn;
     }
 
     private static PharmacyItemRequest pharmacyItemRequestForTransaction(
@@ -329,12 +372,16 @@ final class ItemMovementReportSupport {
     }
 
     private static String receivingPharmacyOrUser(StockTransaction transaction, InterPharmacyTransfer transfer,
-                                                  DepartmentBulkRequest departmentTransfer) {
+                                                  DepartmentBulkRequest departmentTransfer,
+                                                  DepartmentStockReturn departmentReturn) {
         if (transfer != null && transfer.getDestinationPharmacyLocation() != null) {
             return safe(transfer.getDestinationPharmacyLocation().getName());
         }
         if (departmentTransfer != null) {
             return departmentTransferSummary(transaction, departmentTransfer);
+        }
+        if (departmentReturn != null && departmentReturn.getDestinationPharmacyLocation() != null) {
+            return safe(departmentReturn.getDestinationPharmacyLocation().getName());
         }
         BigDecimal quantity = quantity(transaction);
         if (quantity.compareTo(BigDecimal.ZERO) > 0) {
@@ -350,12 +397,16 @@ final class ItemMovementReportSupport {
     }
 
     private static String issuingPharmacy(StockTransaction transaction, InterPharmacyTransfer transfer,
-                                          DepartmentBulkRequest departmentTransfer) {
+                                          DepartmentBulkRequest departmentTransfer,
+                                          DepartmentStockReturn departmentReturn) {
         if (transfer != null && transfer.getSourcePharmacyLocation() != null) {
             return safe(transfer.getSourcePharmacyLocation().getName());
         }
         if (departmentTransfer != null && departmentTransfer.getSupplyingPharmacyLocation() != null) {
             return safe(departmentTransfer.getSupplyingPharmacyLocation().getName());
+        }
+        if (departmentReturn != null && departmentReturn.getDepartmentLocation() != null) {
+            return safe(departmentReturn.getDepartmentLocation().getName());
         }
         BigDecimal quantity = quantity(transaction);
         if (quantity.compareTo(BigDecimal.ZERO) < 0) {
@@ -410,12 +461,16 @@ final class ItemMovementReportSupport {
     }
 
     private static String requestedBy(StockTransaction transaction, InterPharmacyTransfer transfer,
-                                      DepartmentBulkRequest departmentTransfer, PharmacyItemRequest pharmacyItemRequest) {
+                                      DepartmentBulkRequest departmentTransfer, DepartmentStockReturn departmentReturn,
+                                      PharmacyItemRequest pharmacyItemRequest) {
         if (transfer != null) {
             return UserNameUtils.plainName(transfer.getCreator());
         }
         if (departmentTransfer != null) {
             return UserNameUtils.plainName(departmentTransfer.getCreator());
+        }
+        if (departmentReturn != null) {
+            return UserNameUtils.plainName(departmentReturn.getCreator());
         }
         if (pharmacyItemRequest != null) {
             return UserNameUtils.plainName(pharmacyItemRequest.getCreator());
@@ -427,12 +482,16 @@ final class ItemMovementReportSupport {
     }
 
     private static String requestedWhere(InterPharmacyTransfer transfer, DepartmentBulkRequest departmentTransfer,
+                                         DepartmentStockReturn departmentReturn,
                                          PharmacyItemRequest pharmacyItemRequest) {
         if (transfer != null && transfer.getDestinationPharmacyLocation() != null) {
             return safe(transfer.getDestinationPharmacyLocation().getName());
         }
         if (departmentTransfer != null && departmentTransfer.getDepartmentLocation() != null) {
             return safe(departmentTransfer.getDepartmentLocation().getName());
+        }
+        if (departmentReturn != null && departmentReturn.getDepartmentLocation() != null) {
+            return safe(departmentReturn.getDepartmentLocation().getName());
         }
         if (pharmacyItemRequest != null && pharmacyItemRequest.getRequestedPharmacyLocation() != null) {
             return safe(pharmacyItemRequest.getRequestedPharmacyLocation().getName());
@@ -441,12 +500,16 @@ final class ItemMovementReportSupport {
     }
 
     private static String servedBy(StockTransaction transaction, InterPharmacyTransfer transfer,
-                                   DepartmentBulkRequest departmentTransfer, PharmacyItemRequest pharmacyItemRequest) {
+                                   DepartmentBulkRequest departmentTransfer, DepartmentStockReturn departmentReturn,
+                                   PharmacyItemRequest pharmacyItemRequest) {
         if (transfer != null) {
             return firstNonBlank(UserNameUtils.plainName(transfer.getServedBy()), performedBy(transaction));
         }
         if (departmentTransfer != null) {
             return firstNonBlank(UserNameUtils.plainName(departmentTransfer.getDispensedBy()), performedBy(transaction));
+        }
+        if (departmentReturn != null) {
+            return firstNonBlank(UserNameUtils.plainName(departmentReturn.getReceivedBy()), performedBy(transaction));
         }
         if (pharmacyItemRequest != null) {
             return firstNonBlank(UserNameUtils.plainName(pharmacyItemRequest.getApprovedBy()), performedBy(transaction));
@@ -455,12 +518,16 @@ final class ItemMovementReportSupport {
     }
 
     private static String servedWhere(StockTransaction transaction, InterPharmacyTransfer transfer,
-                                      DepartmentBulkRequest departmentTransfer, PharmacyItemRequest pharmacyItemRequest) {
+                                      DepartmentBulkRequest departmentTransfer, DepartmentStockReturn departmentReturn,
+                                      PharmacyItemRequest pharmacyItemRequest) {
         if (transfer != null && transfer.getSourcePharmacyLocation() != null) {
             return safe(transfer.getSourcePharmacyLocation().getName());
         }
         if (departmentTransfer != null && departmentTransfer.getSupplyingPharmacyLocation() != null) {
             return safe(departmentTransfer.getSupplyingPharmacyLocation().getName());
+        }
+        if (departmentReturn != null && departmentReturn.getDestinationPharmacyLocation() != null) {
+            return safe(departmentReturn.getDestinationPharmacyLocation().getName());
         }
         if (pharmacyItemRequest != null && transaction != null && transaction.getPharmacyLocation() != null) {
             return safe(transaction.getPharmacyLocation().getName());

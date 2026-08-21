@@ -595,6 +595,7 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
             patientDispensingRequest.setRequestStatus(patientDispensingRequest.getPaymentConfirmed()
                     ? RequestStatus.PENDING_DISPENSE : RequestStatus.PENDING_PAYMENT);
         }
+        reconcileTerminalRequestStatus(patientDispensingRequest);
         dispensingDao.saveRequest(patientDispensingRequest);
         if (patientDispensingRequest.getLines() != null) {
             for (PatientDispensingRequestLine line : patientDispensingRequest.getLines()) {
@@ -615,6 +616,43 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
             }
         }
         return patientDispensingRequest;
+    }
+
+    private void reconcileTerminalRequestStatus(PatientDispensingRequest request) {
+        if (request == null || request.getLines() == null || request.getLines().isEmpty()) {
+            return;
+        }
+        boolean hasNonVoidedLine = false;
+        boolean hasQueueableLine = false;
+        boolean hasDispensedLine = false;
+        boolean hasUnavailableLine = false;
+        for (PatientDispensingRequestLine line : request.getLines()) {
+            if (line == null || Boolean.TRUE.equals(line.getVoided())) {
+                continue;
+            }
+            hasNonVoidedLine = true;
+            RequestStatus status = line.getLineStatus();
+            if (status == RequestStatus.DISPENSED) {
+                hasDispensedLine = true;
+            } else if (status == RequestStatus.UNAVAILABLE) {
+                hasUnavailableLine = true;
+            }
+            if (status != RequestStatus.DISPENSED
+                    && status != RequestStatus.UNAVAILABLE
+                    && status != RequestStatus.CANCELLED) {
+                hasQueueableLine = true;
+            }
+        }
+        if (!hasNonVoidedLine || hasQueueableLine) {
+            return;
+        }
+        if (hasDispensedLine) {
+            request.setRequestStatus(RequestStatus.DISPENSED);
+        } else if (hasUnavailableLine) {
+            request.setRequestStatus(RequestStatus.UNAVAILABLE);
+        } else {
+            request.setRequestStatus(RequestStatus.CANCELLED);
+        }
     }
 
     @Override

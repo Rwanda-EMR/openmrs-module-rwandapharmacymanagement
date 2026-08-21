@@ -54,8 +54,14 @@
     .cons-status { display:inline-flex; border-radius:999px; padding:3px 8px; font-size:11px; font-weight:600; background:#e0f2fe; color:#075985; }
     .cons-status-dispensed { background:#dcfce7; color:#166534; }
     .cons-status-cancelled { background:#fee2e2; color:#991b1b; }
+    .cons-history-actions { display:flex; gap:6px; flex-wrap:wrap; }
+    .cons-history-details { background:#f8fbff; }
+    .cons-history-detail-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; margin-bottom:10px; }
+    .cons-history-detail-grid div { border:1px solid #dbe5f0; background:#fff; border-radius:4px; padding:8px; font-size:12px; }
+    .cons-pagination { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:10px; }
+    .cons-disabled { opacity:.55; cursor:not-allowed; }
     @media (max-width: 1100px) {
-        .cons-summary, .cons-grid, .cons-total-grid { grid-template-columns:1fr; }
+        .cons-summary, .cons-grid, .cons-total-grid, .cons-history-detail-grid { grid-template-columns:1fr; }
     }
 </style>
 
@@ -226,6 +232,147 @@
         </div>
     </div>
 
+    <% if (patient) { %>
+    <div class="cons-card">
+        <div class="cons-card-head">Consumable order history</div>
+        <div class="cons-card-body">
+            <table class="cons-table">
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Payment</th>
+                    <th>Items</th>
+                    <th>Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                <% if (!consumableHistory) { %>
+                <tr><td colspan="6" class="cons-muted">No consumable order history found for this patient.</td></tr>
+                <% } else { consumableHistory.each { row ->
+                    def request = row.request
+                    def editable = row.editable == true
+                    def paid = row.paid == true
+                    def hasDispensedLine = row.hasDispensedLine == true
+                    def detailId = "cons-history-details-${ request.patientDispensingRequestId }"
+                %>
+                <tr>
+                    <td>#${ request.patientDispensingRequestId }</td>
+                    <td>${ request.dateCreated ? ui.formatDatePretty(request.dateCreated) : '' }</td>
+                    <td><span class="cons-status ${ request.requestStatus?.toString() == 'DISPENSED' ? 'cons-status-dispensed' : request.requestStatus?.toString() == 'CANCELLED' ? 'cons-status-cancelled' : '' }">${ request.requestStatus ?: '' }</span></td>
+                    <td>
+                        ${ paid ? 'Paid' : (request.billable == true ? 'Not paid / pending' : 'Not billable') }
+                        <% if (request.patientBillId) { %><div class="cons-inline-note">Bill #${ request.patientBillId }</div><% } %>
+                    </td>
+                    <td>${ row.activeLineCount ?: 0 }</td>
+                    <td>
+                        <div class="cons-history-actions">
+                            <button type="button" class="cons-link" onclick="toggleConsumableHistory('${ detailId }')">View</button>
+                            <% if (!editable) { %>
+                            <span class="cons-muted">${ hasDispensedLine ? 'View only after dispensing starts' : paid ? 'View only after payment' : 'View only' }</span>
+                            <% } %>
+                        </div>
+                    </td>
+                </tr>
+                <tr id="${ detailId }" class="cons-hidden-row cons-history-details">
+                    <td colspan="6">
+                        <div class="cons-history-detail-grid">
+                            <div><strong>Request ID</strong><br/>#${ request.patientDispensingRequestId }</div>
+                            <div><strong>Requested location</strong><br/>${ request.requestingLocation?.name ?: '' }</div>
+                            <div><strong>Medical act</strong><br/>${ request.medicalActReference ?: '' }</div>
+                            <div><strong>Payment confirmed</strong><br/>${ request.paymentConfirmed == true ? 'Yes' : 'No' }</div>
+                            <div><strong>Billable</strong><br/>${ request.billable == true ? 'Yes' : 'No' }</div>
+                            <div><strong>Edit rule</strong><br/>${ editable ? 'Editable until payment or dispensing starts' : 'Locked' }</div>
+                        </div>
+                        <table class="cons-table">
+                            <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>UOM</th>
+                                <th>Quantity</th>
+                                <th>Billing</th>
+                                <th>Line status</th>
+                                <th>Actions</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <% request.lines?.findAll { it.voided != true }?.each { line ->
+                                def productMasterItemId = row.productMasterByLineId ? row.productMasterByLineId[line.patientDispensingRequestLineId] : null
+                            %>
+                            <tr>
+                                <td>${ line.item?.name ?: '' }</td>
+                                <td>${ line.unitOfMeasure ?: '' }</td>
+                                <td>${ line.requestedQuantity ?: 0 }</td>
+                                <td>
+                                    ${ line.billable == true ? 'Billable' : 'Not billable' }
+                                    <% if (line.billingExclusionReason) { %><div class="cons-inline-note">${ line.billingExclusionReason }</div><% } %>
+                                </td>
+                                <td>${ line.lineStatus ?: '' }</td>
+                                <td>
+                                    <% if (editable && productMasterItemId) { %>
+                                    <form method="post" class="cons-inline-form">
+                                        <input type="hidden" name="patientId" value="${ patientReferenceForSubmit ?: '' }"/>
+                                        <input type="hidden" name="patientUuid" value="${ patientUuidForSubmit ?: '' }"/>
+                                        <input type="hidden" name="action" value="updateLine"/>
+                                        <input type="hidden" name="requestId" value="${ request.patientDispensingRequestId }"/>
+                                        <input type="hidden" name="requestLineId" value="${ line.patientDispensingRequestLineId }"/>
+                                        <select name="productMasterItemId" required="required">
+                                            <% orderableItems.each { item -> %>
+                                            <option value="${ item.productMasterItemId }"${ item.productMasterItemId == productMasterItemId ? ' selected="selected"' : '' }>${ item.itemName }</option>
+                                            <% } %>
+                                        </select>
+                                        <input type="text" name="unitOfMeasure" value="${ line.unitOfMeasure ?: 'EA' }" style="width:70px;"/>
+                                        <input type="number" step="0.01" min="0.01" name="quantity" value="${ line.requestedQuantity ?: 0 }" style="width:90px;"/>
+                                        <select name="billable">
+                                            <option value="true"${ line.billable == true ? ' selected="selected"' : '' }>Billable</option>
+                                            <option value="false"${ line.billable == false ? ' selected="selected"' : '' }>Not billable</option>
+                                        </select>
+                                        <input type="text" name="billingExclusionReason" value="${ line.billingExclusionReason ?: '' }" placeholder="Non-billable reason"/>
+                                        <button type="submit" class="cons-link">Save</button>
+                                    </form>
+                                    <form method="post" class="cons-inline-form" onsubmit="return confirm('Delete this consumable line? Billing will be rebuilt if needed.');">
+                                        <input type="hidden" name="patientId" value="${ patientReferenceForSubmit ?: '' }"/>
+                                        <input type="hidden" name="patientUuid" value="${ patientUuidForSubmit ?: '' }"/>
+                                        <input type="hidden" name="action" value="voidLine"/>
+                                        <input type="hidden" name="requestId" value="${ request.patientDispensingRequestId }"/>
+                                        <input type="hidden" name="requestLineId" value="${ line.patientDispensingRequestLineId }"/>
+                                        <input type="hidden" name="voidReason" value="Deleted from consumable order history"/>
+                                        <button type="submit" class="cons-link cons-danger">Delete</button>
+                                    </form>
+                                    <% } else { %>
+                                    <span class="cons-muted">${ editable ? 'Item mapping unavailable for editing' : 'Locked' }</span>
+                                    <% } %>
+                                </td>
+                            </tr>
+                            <% } %>
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+                <% } } %>
+                </tbody>
+            </table>
+            <div class="cons-pagination">
+                <div class="cons-muted">Showing ${ historyPageSize ?: 10 } per page. Total orders: ${ historyTotal ?: 0 }.</div>
+                <div class="cons-history-actions">
+                    <% if (historyPreviousPage != null) { %>
+                    <a class="cons-link" href="${ ui.pageLink('rwandapharmacymanagement', 'consumable/enter', [patientId: patient.uuid, historyPage: historyPreviousPage]) }">Previous</a>
+                    <% } else { %>
+                    <span class="cons-link cons-disabled">Previous</span>
+                    <% } %>
+                    <span class="cons-muted">Page ${(historyPage ?: 0) + 1}</span>
+                    <% if (historyNextPage != null) { %>
+                    <a class="cons-link" href="${ ui.pageLink('rwandapharmacymanagement', 'consumable/enter', [patientId: patient.uuid, historyPage: historyNextPage]) }">Next</a>
+                    <% } else { %>
+                    <span class="cons-link cons-disabled">Next</span>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </div>
+    <% } %>
+
 </div>
 
 <script type="text/javascript">
@@ -383,6 +530,18 @@
         var suggestions = document.getElementById('cons-product-suggestions');
         if (suggestions) {
             suggestions.classList.remove('is-visible');
+        }
+    }
+
+    function toggleConsumableHistory(rowId) {
+        var row = document.getElementById(rowId);
+        if (!row) {
+            return;
+        }
+        if (row.className.indexOf('cons-hidden-row') >= 0) {
+            row.className = row.className.replace('cons-hidden-row', '');
+        } else {
+            row.className += ' cons-hidden-row';
         }
     }
 

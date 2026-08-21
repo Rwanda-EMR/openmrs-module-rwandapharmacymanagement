@@ -2,6 +2,7 @@ package org.openmrs.module.rwandapharmacymanagement.page.controller.report;
 
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.DepartmentBulkRequestService;
+import org.openmrs.module.rwandapharmacymanagement.api.DepartmentStockReturnService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyItemRequestService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
@@ -27,6 +28,7 @@ public class ItemMovementExportPageController {
 
     public void get(@SpringBean("inventoryService") InventoryService inventoryService,
                     @SpringBean("departmentBulkRequestService") DepartmentBulkRequestService departmentBulkRequestService,
+                    @SpringBean("departmentStockReturnService") DepartmentStockReturnService departmentStockReturnService,
                     @SpringBean("pharmacyItemRequestService") PharmacyItemRequestService pharmacyItemRequestService,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @RequestParam("format") String format,
@@ -47,7 +49,7 @@ public class ItemMovementExportPageController {
         }
         List<ItemMovementReportSupport.Row> rows = ItemMovementReportSupport.buildRows(inventoryService, selectedItem,
                 startDate, ItemMovementReportSupport.nextDay(endDate), pharmacyLocationId, departmentBulkRequestService,
-                pharmacyItemRequestService);
+                departmentStockReturnService, pharmacyItemRequestService);
         List<String> headers = Arrays.asList("Date of movement", "Receiving pharmacy / user", "Issuing pharmacy",
                 "Performed by", "Requested by", "Requested where", "Served by", "Served where", "Batch number",
                 "Expiry date", "Quantity received", "Quantity issued", "Balance in stock", "Months of stock",

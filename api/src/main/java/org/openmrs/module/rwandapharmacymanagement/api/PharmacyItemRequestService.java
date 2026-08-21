@@ -17,7 +17,14 @@ public interface PharmacyItemRequestService extends OpenmrsService {
 
     List<PharmacyItemRequest> getPendingRequestsForPharmacy(PharmacyLocation pharmacyLocation);
 
+    List<PharmacyItemRequest> getPendingRequestsForPharmacy(PharmacyLocation pharmacyLocation, int offset, int limit);
+
+    List<PharmacyItemRequest> getPendingRequestsForPharmacy(PharmacyLocation pharmacyLocation, String search,
+                                                            int offset, int limit);
+
     long countPendingRequestsForPharmacy(PharmacyLocation pharmacyLocation);
+
+    long countPendingRequestsForPharmacy(PharmacyLocation pharmacyLocation, String search);
 
     List<PharmacyItemRequest> getRequestsByCreator(User creator, int offset, int limit);
 

@@ -274,6 +274,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         }
         refreshBillingStateAfterLineChange(request);
         reconcileEditedPrescriptionBilling(request, previousBillableLine, matchingOrder, wasBillableLine, requestLine);
+        updateRelatedBillingDrugFrequency(request);
         dispensingService.saveRequest(request);
         notifyPrescriptionLineUpdatedAfterCommit(request, requestLine);
         return request;
