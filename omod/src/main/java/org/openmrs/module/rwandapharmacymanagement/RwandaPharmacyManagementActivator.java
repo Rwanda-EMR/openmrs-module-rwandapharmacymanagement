@@ -2,7 +2,10 @@ package org.openmrs.module.rwandapharmacymanagement;
 
 import org.openmrs.api.context.Context;
 import org.openmrs.module.BaseModuleActivator;
+import org.openmrs.module.htmlformentry.HtmlFormEntryService;
 import org.openmrs.module.rwandapharmacymanagement.config.Setup;
+import org.openmrs.module.rwandapharmacymanagement.htmlformentry.RpmConsumableOrderTagHandler;
+import org.openmrs.module.rwandapharmacymanagement.htmlformentry.RpmPrescriptionOrderTagHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,6 +28,7 @@ public class RwandaPharmacyManagementActivator extends BaseModuleActivator {
                 throw new RuntimeException("Failed to initialize setup " + setup.getClass().getName(), e);
             }
         }
+        registerHtmlFormEntryTags();
     }
 
     @Override
@@ -52,6 +56,18 @@ public class RwandaPharmacyManagementActivator extends BaseModuleActivator {
         catch (Exception e) {
             log.warn("Unable to access registered setup components during module lifecycle", e);
             return java.util.Collections.emptyList();
+        }
+    }
+
+    private void registerHtmlFormEntryTags() {
+        try {
+            HtmlFormEntryService htmlFormEntryService = Context.getService(HtmlFormEntryService.class);
+            htmlFormEntryService.addHandler("rpmPrescriptionOrder", new RpmPrescriptionOrderTagHandler());
+            htmlFormEntryService.addHandler("rpmConsumableOrder", new RpmConsumableOrderTagHandler());
+            log.info("Registered Rwanda Pharmacy Management HTML Form Entry tags");
+        }
+        catch (Exception e) {
+            log.warn("Unable to register Rwanda Pharmacy Management HTML Form Entry tags", e);
         }
     }
 }

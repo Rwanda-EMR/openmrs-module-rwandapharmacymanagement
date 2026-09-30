@@ -28,6 +28,7 @@
         <uiframeworkVersion>4.0.0</uiframeworkVersion>
         <uilibraryVersion>2.0.7</uilibraryVersion>
         <webservicesRestVersion>2.50.0</webservicesRestVersion>
+        <htmlformentryVersion>7.3.0-SNAPSHOT</htmlformentryVersion>
         <mavenOpenmrsPluginVersion>1.0.1</mavenOpenmrsPluginVersion>
 
         <MODULE_ID>${project.parent.artifactId}</MODULE_ID>
