@@ -101,7 +101,7 @@ public class RequestPageController {
     private List<PharmacyLocation> departmentLocations(PharmacyService pharmacyService) {
         List<PharmacyLocation> locations = new ArrayList<PharmacyLocation>();
         for (PharmacyLocation location : pharmacyService.getAllPharmacyLocations()) {
-            if (location != null && Boolean.TRUE.equals(location.getActive())
+            if (location != null && !Boolean.FALSE.equals(location.getActive())
                     && location.getLocationType() == PharmacyLocationType.DEPARTMENT_STORE) {
                 locations.add(location);
             }
@@ -113,7 +113,7 @@ public class RequestPageController {
     private List<PharmacyLocation> supplyingPharmacies(PharmacyService pharmacyService) {
         List<PharmacyLocation> locations = new ArrayList<PharmacyLocation>();
         for (PharmacyLocation location : pharmacyService.getAllPharmacyLocations()) {
-            if (location != null && Boolean.TRUE.equals(location.getActive())
+            if (location != null && !Boolean.FALSE.equals(location.getActive())
                     && location.getLocationType() != PharmacyLocationType.DEPARTMENT_STORE) {
                 locations.add(location);
             }

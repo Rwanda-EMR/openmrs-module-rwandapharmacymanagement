@@ -40,6 +40,14 @@ public class PaymentExceptionReportExportPageController {
                 ? java.util.Collections.<DispenseRecord>emptyList()
                 : dispensingService.getDispenseRecordsForRequests(requestIds);
         List<PaymentExceptionReportSupport.Row> rows = PaymentExceptionReportSupport.buildRows(requests, dispenseRecords);
+        PaymentExceptionReportSupport.Totals totals = PaymentExceptionReportSupport.totals(rows);
+        List<List<String>> summaryRows = ReportExportSummarySupport.rows(
+                "Approved requests", ReportExportSummarySupport.integer(totals.requestCount),
+                "Dispensed", ReportExportSummarySupport.integer(totals.dispensedCount),
+                "Pending dispense", ReportExportSummarySupport.integer(totals.pendingDispenseCount),
+                "Prescriptions", ReportExportSummarySupport.integer(totals.prescriptionCount),
+                "Consumables", ReportExportSummarySupport.integer(totals.consumableCount)
+        );
         List<String> headers = Arrays.asList("Approval date", "Request date", "Request ID", "Patient", "Identifier",
                 "Request type", "Request status", "Bill", "Payment confirmed", "Exception type", "Reason", "Note",
                 "Approved by", "Requested by", "Requesting location", "Target pharmacy", "Items", "Item count", "Dispensed",
@@ -75,13 +83,13 @@ public class PaymentExceptionReportExportPageController {
         String title = "Payment Exception Report " + PaymentExceptionReportSupport.formatDate(startDate) + " to "
                 + PaymentExceptionReportSupport.formatDate(endDate);
         if ("excel".equalsIgnoreCase(format)) {
-            byte[] workbook = StockReportExcelRenderer.render("Payment Exception Report", headers, body);
+            byte[] workbook = StockReportExcelRenderer.render("Payment Exception Report", summaryRows, headers, body);
             response.setContentType("application/vnd.ms-excel");
             response.setHeader("Content-Disposition", "attachment; filename=\"payment-exception-report.xls\"");
             response.setContentLength(workbook.length);
             response.getOutputStream().write(workbook);
         } else if ("pdf".equalsIgnoreCase(format)) {
-            byte[] pdf = StockReportPdfRenderer.render(title, headers, body);
+            byte[] pdf = StockReportPdfRenderer.render(title, summaryRows, headers, body);
             response.setContentType("application/pdf");
             response.setHeader("Content-Disposition", "attachment; filename=\"payment-exception-report.pdf\"");
             response.setContentLength(pdf.length);

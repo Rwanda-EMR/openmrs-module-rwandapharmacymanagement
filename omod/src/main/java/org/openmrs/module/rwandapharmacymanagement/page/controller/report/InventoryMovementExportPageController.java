@@ -40,6 +40,17 @@ public class InventoryMovementExportPageController {
                 ? InventoryMovementReportSupport.MODE_DETAIL : InventoryMovementReportSupport.MODE_SUMMARY;
         List<InventoryMovementReportSupport.Row> rows = InventoryMovementReportSupport.buildRows(inventoryService, pharmacyService,
                 startDate, InventoryMovementReportSupport.nextDay(endDate), pharmacyLocationId, materialType, program, reportMode);
+        InventoryMovementReportSupport.Totals totals = InventoryMovementReportSupport.totals(rows);
+        List<List<String>> summaryRows = ReportExportSummarySupport.rows(
+                "Opening", ReportExportSummarySupport.decimal(totals.getOpeningQty()),
+                "Received", ReportExportSummarySupport.decimal(totals.getReceivedQty()),
+                "Dispensed", ReportExportSummarySupport.decimal(totals.getDispensedQty()),
+                "Closing", ReportExportSummarySupport.decimal(totals.getClosingQty()),
+                "Transfer in", ReportExportSummarySupport.decimal(totals.getTransferInQty()),
+                "Transfer out", ReportExportSummarySupport.decimal(totals.getTransferOutQty()),
+                "Stock at hand", ReportExportSummarySupport.decimal(totals.getStockAtHand()),
+                "Stock at hand value", ReportExportSummarySupport.decimal(totals.getStockAtHandValue())
+        );
         List<String> headers = Arrays.asList("Item", "Code", "Material Type", "Program", "Pharmacy", "Batch", "Expiry",
                 "Opening", "Received", "Transfer In", "Adjustment In", "Dispensed", "Transfer Out", "Adjustment Out",
                 "Closing", "Stock At Hand", "Unit Cost", "Closing Value", "Stock At Hand Value");
@@ -70,13 +81,13 @@ public class InventoryMovementExportPageController {
         String title = "Inventory Movement " + InventoryMovementReportSupport.formatDate(startDate) + " to "
                 + InventoryMovementReportSupport.formatDate(endDate);
         if ("excel".equalsIgnoreCase(format)) {
-            byte[] workbook = StockReportExcelRenderer.render("Inventory Movement", headers, body);
+            byte[] workbook = StockReportExcelRenderer.render("Inventory Movement", summaryRows, headers, body);
             response.setContentType("application/vnd.ms-excel");
             response.setHeader("Content-Disposition", "attachment; filename=\"inventory-movement-report.xls\"");
             response.setContentLength(workbook.length);
             response.getOutputStream().write(workbook);
         } else if ("pdf".equalsIgnoreCase(format)) {
-            byte[] pdf = StockReportPdfRenderer.render(title, headers, body);
+            byte[] pdf = StockReportPdfRenderer.render(title, summaryRows, headers, body);
             response.setContentType("application/pdf");
             response.setHeader("Content-Disposition", "attachment; filename=\"inventory-movement-report.pdf\"");
             response.setContentLength(pdf.length);

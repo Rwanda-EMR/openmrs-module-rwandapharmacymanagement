@@ -64,6 +64,11 @@ public interface DispensingService extends OpenmrsService {
 
     List<DispenseRecord> getDispenseRecords(Date fromInclusive, Date toExclusive, Integer pharmacyLocationId);
 
+    List<PatientDispensingRequest> getPatientDispensingRequests(Date fromInclusive,
+                                                                 Date toExclusive,
+                                                                 Integer pharmacyLocationId,
+                                                                 RequestType requestType);
+
     List<PatientDispensingRequest> getPaymentExceptionApprovedRequests(Date fromInclusive,
                                                                        Date toExclusive,
                                                                        Integer pharmacyLocationId,

@@ -24,6 +24,9 @@ public interface InventoryDao {
 
     List<DeliveryReceiptLine> getRecentDeliveryReceiptLines();
 
+    List<DeliveryReceipt> getDeliveryReceipts(Date fromInclusive, Date toExclusive, Integer pharmacyLocationId,
+                                              Integer purchaseOrderId);
+
     List<StockTransaction> getRecentStockTransactions();
 
     StockTransaction getStockTransaction(Integer stockTransactionId);

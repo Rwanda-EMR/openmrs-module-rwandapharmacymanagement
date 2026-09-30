@@ -487,7 +487,7 @@ public class WithOrderPageController {
         }
         Map<Integer, PharmacyLocation> activePharmaciesById = new LinkedHashMap<Integer, PharmacyLocation>();
         for (PharmacyLocation pharmacyLocation : pharmacyService.getAllPharmacyLocations()) {
-            if (pharmacyLocation == null || pharmacyLocation.getPharmacyLocationId() == null || !Boolean.TRUE.equals(pharmacyLocation.getActive())) {
+            if (pharmacyLocation == null || pharmacyLocation.getPharmacyLocationId() == null || Boolean.FALSE.equals(pharmacyLocation.getActive())) {
                 continue;
             }
             activePharmaciesById.put(pharmacyLocation.getPharmacyLocationId(), pharmacyLocation);

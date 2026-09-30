@@ -121,6 +121,30 @@ public class HibernateInventoryDao implements InventoryDao {
     }
 
     @Override
+    public List<DeliveryReceipt> getDeliveryReceipts(Date fromInclusive, Date toExclusive, Integer pharmacyLocationId,
+                                                     Integer purchaseOrderId) {
+        org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(DeliveryReceipt.class);
+        criteria.add(notVoided());
+        if (fromInclusive != null) {
+            criteria.add(Restrictions.ge("dateCreated", fromInclusive));
+        }
+        if (toExclusive != null) {
+            criteria.add(Restrictions.lt("dateCreated", toExclusive));
+        }
+        if (pharmacyLocationId != null) {
+            criteria.createAlias("receivedIntoLocation", "receivedIntoLocation");
+            criteria.add(Restrictions.eq("receivedIntoLocation.pharmacyLocationId", pharmacyLocationId));
+        }
+        if (purchaseOrderId != null) {
+            criteria.createAlias("purchaseOrder", "purchaseOrder");
+            criteria.add(Restrictions.eq("purchaseOrder.purchaseOrderId", purchaseOrderId));
+        }
+        criteria.addOrder(Order.desc("dateCreated"));
+        criteria.addOrder(Order.desc("deliveryReceiptId"));
+        return criteria.list();
+    }
+
+    @Override
     public List<StockTransaction> getRecentStockTransactions() {
         return sessionFactory.getCurrentSession().createCriteria(StockTransaction.class)
                 .add(notVoided())

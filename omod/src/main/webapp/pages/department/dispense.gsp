@@ -58,11 +58,12 @@
                                     <% def batches = batchesByLineId[line.departmentBulkRequestLineId] ?: []
                                        batches.each { batch ->
                                            def batchNumber = batch.batchNumber ?: ''
-                                           def label = batchNumber ?: 'No batch number'
-                                           def expiryDate = batch.expiryDate ?: ''
-                                           def available = batch.available ?: 0
-                                    %>
-                                    <option value="${ batchNumber }" data-available="${ available }" data-expiry="${ expiryDate }">${ label } - ${ available } available</option>
+	                                           def label = batchNumber ?: 'No batch number'
+	                                           def expiryDate = batch.expiryDate ?: ''
+	                                           def expiryLabel = expiryDate ? 'Exp: ' + expiryDate : 'No expiry'
+	                                           def available = batch.available ?: 0
+	                                    %>
+	                                    <option value="${ batchNumber }" data-available="${ available }" data-expiry="${ expiryDate }">${ label } - ${ expiryLabel } - ${ available } available</option>
                                     <% } %>
                                 </select>
                                 <input type="number" step="0.01" min="0" name="dispensedQuantity" value="${ line.approvedQuantity ?: 0 }" oninput="refreshDepartmentLineTotal(this)"/>
@@ -93,8 +94,9 @@
                 def expiryDate = batch.expiryDate ?: ''
                 def available = batch.available ?: 0
                 def label = batchNumber ?: 'No batch number'
+                def displayLabel = label + ' - ' + (expiryDate ? 'Exp: ' + expiryDate : 'No expiry')
             %>
-            { batchNumber: "${ batchNumber?.replace('\\', '\\\\')?.replace('"', '\\"') }", label: "${ label?.replace('\\', '\\\\')?.replace('"', '\\"') }", available: "${ available }", expiryDate: "${ expiryDate }" }${ batchIndex + 1 < entry.value.size() ? ',' : '' }
+            { batchNumber: "${ batchNumber?.replace('\\', '\\\\')?.replace('"', '\\"') }", label: "${ displayLabel?.replace('\\', '\\\\')?.replace('"', '\\"') }", available: "${ available }", expiryDate: "${ expiryDate }" }${ batchIndex + 1 < entry.value.size() ? ',' : '' }
             <% } %>
         ]${ lineIndex + 1 < batchesByLineId.size() ? ',' : '' }
         <% } %>

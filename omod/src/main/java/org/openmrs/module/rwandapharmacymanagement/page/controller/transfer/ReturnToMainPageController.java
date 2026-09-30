@@ -119,7 +119,7 @@ public class ReturnToMainPageController {
     }
 
     private void validateReturnRequestSource(PharmacyLocation sourcePharmacy) {
-        if (sourcePharmacy == null || !Boolean.TRUE.equals(sourcePharmacy.getActive())
+        if (sourcePharmacy == null || Boolean.FALSE.equals(sourcePharmacy.getActive())
                 || Boolean.TRUE.equals(sourcePharmacy.getMainStore())
                 || sourcePharmacy.getLocationType() != PharmacyLocationType.DISPENSING_PHARMACY) {
             throw new IllegalArgumentException("Choose an active dispensing pharmacy to return stock from");
@@ -143,7 +143,7 @@ public class ReturnToMainPageController {
     private List<PharmacyLocation> getDispensingPharmacies(PharmacyService pharmacyService) {
         List<PharmacyLocation> pharmacies = new ArrayList<PharmacyLocation>();
         for (PharmacyLocation location : pharmacyService.getAllPharmacyLocations()) {
-            if (location != null && Boolean.TRUE.equals(location.getActive())
+            if (location != null && !Boolean.FALSE.equals(location.getActive())
                     && !Boolean.TRUE.equals(location.getMainStore())
                     && location.getLocationType() == PharmacyLocationType.DISPENSING_PHARMACY) {
                 pharmacies.add(location);

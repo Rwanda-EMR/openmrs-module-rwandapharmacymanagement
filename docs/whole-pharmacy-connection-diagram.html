@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Whole Pharmacy Connection Diagram</title>
+<style>
+body { font-family: Arial, sans-serif; color: #111827; }
+h1 { font-size: 28px; }
+h2 { font-size: 21px; margin-top: 26px; }
+p, li { font-size: 12pt; line-height: 1.35; }
+.diagram { width: 100%; margin: 12px 0 24px 0; }
+.page-break { page-break-before: always; }
+code { font-family: Consolas, monospace; }
+</style>
+</head>
+<body>
+<h1>Whole Pharmacy Connection Diagram</h1>
+<p>This document shows how the Rwanda Pharmacy Management module connects OpenMRS clinical records, pharmacy master data, dispensing, inventory, supplier/RMS integration, HIE, SMS, reporting, and settings.</p>
+<h2>Whole Module View</h2>
+<img class="diagram" src="generated/whole-pharmacy-connection.png" alt="Whole pharmacy connection diagram">
+<div class="page-break"></div>
+<h2>Prescription to Dispensing Flow</h2>
+<img class="diagram" src="generated/prescription-dispensing-flow.png" alt="Prescription to dispensing flow diagram">
+<h2>Stock Movement Summary</h2>
+<img class="diagram" src="generated/stock-movement-summary.png" alt="Stock movement summary diagram">
+<h2>Key Code Anchors</h2>
+<ul>
+<li><code>PrescriptionServiceImpl</code> creates OpenMRS encounters/orders and module dispensing requests.</li>
+<li><code>DispensingServiceImpl</code> validates dispensing, applies safety/pricing, reduces stock, and records dispense transactions.</li>
+<li><code>InventoryServiceImpl</code> receives deliveries, transfers stock, adjusts stock, and maintains <code>InventoryBalance</code> plus <code>StockTransaction</code>.</li>
+<li><code>SupplierIntegrationServiceImpl</code> submits purchase orders and delivery confirmations to RMS.</li>
+<li><code>PrescriptionCommunicationService</code> sends HIE and SMS messages and records integration logs.</li>
+</ul>
+</body>
+</html>

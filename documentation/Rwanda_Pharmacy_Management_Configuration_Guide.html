@@ -379,7 +379,7 @@
     <tr><td>Pharmacy stock</td><td>Requires active pharmacy locations and current inventory balances.</td></tr>
     <tr><td>Overall hospital stock</td><td>Sums stock across pharmacy locations.</td></tr>
     <tr><td>Inventory movement</td><td>Requires stock transactions. Used to audit received, issued, adjusted, and transferred quantities.</td></tr>
-    <tr><td>Item movement</td><td>Shows one item across one or all pharmacies, including batch, expiry, received, issued, balance, and months of stock.</td></tr>
+    <tr><td>Item movement</td><td>Shows one item across one or all pharmacies, including batch, expiry, received, issued, balance, and months of stock. Patient dispense movements are stock transactions; new patient dispense rows store the dispensing request id in <code>reference_number</code>.</td></tr>
     <tr><td>Dispensing report</td><td>Uses dispensing records for patient dispensing activity.</td></tr>
     <tr><td>Payment exception report</td><td>Uses payment exception approvals and related requests.</td></tr>
 </table>
@@ -451,7 +451,25 @@ where patient_bill_id = &lt;PATIENT_BILL_ID&gt;;</pre>
 from rpm_patient_dispensing_request_line
 where patient_dispensing_request_id = &lt;REQUEST_ID&gt;;</pre>
 
-<h3>15.4 Inventory by item and pharmacy</h3>
+<h3>15.4 Duplicate patient dispense check</h3>
+<pre>select dr.patient_dispensing_request_id,
+       dr.dispense_record_id,
+       dr.date_created,
+       dr.creator,
+       dr.dispensing_pharmacy_location_id,
+       drl.dispense_record_line_id,
+       drl.item_id,
+       drl.quantity_dispensed,
+       drl.batch_number
+from rpm_dispense_record dr
+join rpm_dispense_record_line drl
+  on drl.dispense_record_id = dr.dispense_record_id
+where dr.patient_dispensing_request_id = &lt;REQUEST_ID&gt;
+  and dr.voided = 0
+  and drl.voided = 0
+order by dr.date_created, dr.dispense_record_id;</pre>
+
+<h3>15.5 Inventory by item and pharmacy</h3>
 <pre>select i.name, b.pharmacy_location_id, b.batch_number, b.expiry_date, b.quantity_on_hand
 from rpm_inventory_balance b
 join rpm_item i on i.item_id = b.item_id

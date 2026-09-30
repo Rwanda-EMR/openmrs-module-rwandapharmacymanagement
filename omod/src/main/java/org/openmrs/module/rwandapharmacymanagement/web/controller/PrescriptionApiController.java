@@ -65,7 +65,7 @@ public class PrescriptionApiController {
             BigDecimal totalQuantity = BigDecimal.ZERO;
             List<PharmacyLocation> pharmacies = pharmacyService.getAllPharmacyLocations();
             for (PharmacyLocation pharmacyLocation : pharmacies) {
-                if (pharmacyLocation == null || !Boolean.TRUE.equals(pharmacyLocation.getActive())) {
+                if (pharmacyLocation == null || Boolean.FALSE.equals(pharmacyLocation.getActive())) {
                     continue;
                 }
                 BigDecimal pharmacyTotal = BigDecimal.ZERO;

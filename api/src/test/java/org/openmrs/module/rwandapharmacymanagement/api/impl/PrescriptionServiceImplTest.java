@@ -103,6 +103,17 @@ public class PrescriptionServiceImplTest {
         Assert.assertFalse(service.isPerNeedFrequency("Once a day"));
     }
 
+    @Test
+    public void normalizeFreeTextInstructionsShouldRemoveGeneratedDoseScheduleParts() {
+        PrescriptionServiceImpl service = new PrescriptionServiceImpl();
+
+        String instructions = service.normalizeFreeTextInstructions(
+                "Dose: 4; Route: ORAL; Frequency: TWICE A DAY; Duration: 5 DAYS; "
+                        + "Dose: 3; Route: ORAL; Frequency: ONCE A DAY; Duration: 4 DAYS; none");
+
+        Assert.assertEquals("none", instructions);
+    }
+
     private void assertCalculatedQuantity(String frequency, int duration, String durationUnit, String expectedQuantity) {
         PrescriptionLineCommand line = new PrescriptionLineCommand();
         line.setDose(BigDecimal.ONE);

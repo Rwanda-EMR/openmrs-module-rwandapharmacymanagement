@@ -103,6 +103,7 @@ public class EnterPageController {
 
     public String post(@SpringBean("prescriptionService") PrescriptionService prescriptionService,
                        @SpringBean("pharmacyService") PharmacyService pharmacyService,
+                       @SpringBean("hieMedicationPayloadBuilder") HieMedicationPayloadBuilder hieMedicationPayloadBuilder,
                        @RequestParam(value = "patientId", required = false) String patientIdOrUuid,
                        @RequestParam(value = "patientUuid", required = false) String patientUuid,
                        @RequestParam(value = "patientBillId", required = false) Integer patientBillId,
@@ -154,6 +155,7 @@ public class EnterPageController {
             prescriptionService.voidPrescriptionLine(requestId, requestLineId, voidReason);
             return redirectToPrescriptionPage(ui, patient, historyPage);
         }
+        validatePatientPhoneForBilling(patient, hieMedicationPayloadBuilder);
         List<PrescriptionLineCommand> lines = buildCommands(productMasterItemIds, doses, routes, frequencies, durations,
                 durationUnits, startDates, quantities, instructions, billables, billingExclusionReasons);
         PatientDispensingRequest request = prescriptionService.createPrescription(patient, activeVisit, orderingProvider,
@@ -163,6 +165,16 @@ public class EnterPageController {
         redirectParams.put("prescriptionSaved", 1);
         redirectParams.put("requestId", request.getPatientDispensingRequestId());
         return "redirect:" + ui.pageLink("coreapps", "clinicianfacing/patient", redirectParams);
+    }
+
+    private void validatePatientPhoneForBilling(Patient patient, HieMedicationPayloadBuilder hieMedicationPayloadBuilder) {
+        String patientPhoneNumber = resolvePatientPhoneNumber(patient, hieMedicationPayloadBuilder);
+        if (patientPhoneNumber == null || patientPhoneNumber.trim().isEmpty()) {
+            return;
+        }
+        if (!SmsPhoneNumberUtil.isValidForSending(patientPhoneNumber)) {
+            throw new IllegalArgumentException("Correct the patient phone number before prescribing. Use one Rwanda phone number in format 250XXXXXXXXX or 0XXXXXXXXX.");
+        }
     }
 
     private Integer firstNonNull(Integer first, Integer second, Integer third) {
@@ -265,7 +277,7 @@ public class EnterPageController {
     private List<ProductMasterItem> getPrescribableItems(PharmacyService pharmacyService) {
         List<ProductMasterItem> filtered = new ArrayList<ProductMasterItem>();
         for (ProductMasterItem item : pharmacyService.getAllProductMasterItems()) {
-            if (item == null || !Boolean.TRUE.equals(item.getActive())) {
+            if (item == null || Boolean.FALSE.equals(item.getActive())) {
                 continue;
             }
             if (!"ZMED".equalsIgnoreCase(item.getMaterialType())) {
@@ -305,7 +317,7 @@ public class EnterPageController {
 
         Map<Integer, BigDecimal> quantitiesByProductMasterItemId = new HashMap<Integer, BigDecimal>();
         for (PharmacyLocation pharmacyLocation : pharmacyService.getAllPharmacyLocations()) {
-            if (pharmacyLocation == null || !Boolean.TRUE.equals(pharmacyLocation.getActive())
+            if (pharmacyLocation == null || Boolean.FALSE.equals(pharmacyLocation.getActive())
                     || pharmacyLocation.getPharmacyLocationId() == null) {
                 continue;
             }
@@ -521,8 +533,10 @@ public class EnterPageController {
                     }
                     Map<String, Object> lineEntry = new LinkedHashMap<String, Object>();
                     DrugOrderHistoryInfo orderInfo = findOrderInfo(request, line);
-                    boolean editable = line.getLineStatus() == org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.PENDING_PAYMENT
-                            || line.getLineStatus() == org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.PENDING_DISPENSE;
+                    boolean requestPaid = Boolean.TRUE.equals(request.getPaymentConfirmed());
+                    boolean editable = !requestPaid
+                            && (line.getLineStatus() == org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.PENDING_PAYMENT
+                            || line.getLineStatus() == org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.PENDING_DISPENSE);
                     String statusLabel = String.valueOf(line.getLineStatus());
                     lineEntry.put("requestLineId", line.getPatientDispensingRequestLineId());
                     lineEntry.put("itemName", line.getItem() == null ? "" : line.getItem().getName());
@@ -727,7 +741,36 @@ public class EnterPageController {
         info.frequency = drugOrder.getFrequency() == null ? "" : drugOrder.getFrequency().getName();
         info.duration = drugOrder.getDuration() == null ? "" : drugOrder.getDuration().toString();
         info.durationUnits = drugOrder.getDurationUnits() == null ? "" : drugOrder.getDurationUnits().getDisplayString();
-        info.instructions = drugOrder.getDosingInstructions() == null ? drugOrder.getInstructions() : drugOrder.getDosingInstructions();
+        info.instructions = normalizeFreeTextInstructions(drugOrder.getDosingInstructions() == null
+                ? drugOrder.getInstructions() : drugOrder.getDosingInstructions());
+    }
+
+    private String normalizeFreeTextInstructions(String instructions) {
+        String value = instructions == null ? "" : instructions.trim();
+        if (value.isEmpty()) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        String[] parts = value.split("\\s*;\\s*");
+        for (String part : parts) {
+            String cleanPart = part == null ? "" : part.trim();
+            if (cleanPart.isEmpty() || isGeneratedInstructionPart(cleanPart)) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append("; ");
+            }
+            builder.append(cleanPart);
+        }
+        return builder.toString();
+    }
+
+    private boolean isGeneratedInstructionPart(String part) {
+        String normalized = part == null ? "" : part.trim().toLowerCase();
+        return normalized.startsWith("dose:")
+                || normalized.startsWith("route:")
+                || normalized.startsWith("frequency:")
+                || normalized.startsWith("duration:");
     }
 
     private org.openmrs.Drug resolveLineDrug(PatientDispensingRequestLine requestLine) {

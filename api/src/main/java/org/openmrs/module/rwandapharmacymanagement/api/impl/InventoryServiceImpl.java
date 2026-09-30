@@ -162,6 +162,12 @@ public class InventoryServiceImpl extends BaseOpenmrsService implements Inventor
     }
 
     @Override
+    public List<DeliveryReceipt> getDeliveryReceipts(Date fromInclusive, Date toExclusive, Integer pharmacyLocationId,
+                                                     Integer purchaseOrderId) {
+        return inventoryDao.getDeliveryReceipts(fromInclusive, toExclusive, pharmacyLocationId, purchaseOrderId);
+    }
+
+    @Override
     public List<StockTransaction> getRecentStockTransactions() {
         return inventoryDao.getRecentStockTransactions();
     }
@@ -302,8 +308,14 @@ public class InventoryServiceImpl extends BaseOpenmrsService implements Inventor
         if (deliveryReceipt.getLines() != null) {
             for (DeliveryReceiptLine line : deliveryReceipt.getLines()) {
                 line.setDeliveryReceipt(deliveryReceipt);
+                if ((line.getProgram() == null || line.getProgram().trim().isEmpty()) && line.getProductMasterItem() != null) {
+                    line.setProgram(line.getProductMasterItem().getProgram());
+                }
+                if ((line.getProgram() == null || line.getProgram().trim().isEmpty()) && line.getItem() != null) {
+                    line.setProgram(line.getItem().getProgram());
+                }
                 if (line.getUnitPrice() == null && line.getItem() != null) {
-                    SupplierPrice latestPrice = pharmacyService.getLatestSupplierPrice(line.getItem().getCode());
+                    SupplierPrice latestPrice = pharmacyService.getLatestSupplierPrice(line.getItem().getCode(), line.getProgram());
                     if (latestPrice != null) {
                         line.setUnitPrice(latestPrice.getUnitPrice());
                     }

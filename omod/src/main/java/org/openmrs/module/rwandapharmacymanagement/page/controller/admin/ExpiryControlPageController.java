@@ -5,6 +5,7 @@ import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfi
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
+import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.model.StockTransaction;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.StockTransactionType;
@@ -24,6 +25,7 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -34,6 +36,7 @@ public class ExpiryControlPageController {
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
+                    @RequestParam(value = "q", required = false) String query,
                     @RequestParam(value = "updated", required = false) Boolean updated,
                     @RequestParam(value = "writtenOff", required = false) Boolean writtenOff,
                     @RequestParam(value = "disposed", required = false) Boolean disposed) {
@@ -46,7 +49,9 @@ public class ExpiryControlPageController {
         }
         List<InventoryBalance> stockBalances = activePharmacy == null ? Collections.<InventoryBalance>emptyList()
                 : inventoryService.getInventoryForPharmacy(activePharmacy.getPharmacyLocationId());
+        stockBalances = filterStockBalances(stockBalances, query);
         model.addAttribute("stockBalances", stockBalances);
+        model.addAttribute("q", trimToEmpty(query));
         List<StockTransaction> recentWriteOffs = activePharmacy == null ? Collections.<StockTransaction>emptyList()
                 : recentWriteOffs(inventoryService, activePharmacy.getPharmacyLocationId());
         model.addAttribute("recentWriteOffs", recentWriteOffs);
@@ -67,11 +72,15 @@ public class ExpiryControlPageController {
                        @RequestParam(value = "disposalMethod", required = false) String disposalMethod,
                        @RequestParam(value = "notes", required = false) String notes,
                        @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
+                       @RequestParam(value = "q", required = false) String query,
                        UiUtils ui) throws ParseException {
         Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_ADJUST_STOCK);
         PharmacyLocation activePharmacy = requireMainPharmacy(pharmacyService, pharmacyLocationId);
         Map<String, Object> redirectParams = new LinkedHashMap<String, Object>();
         redirectParams.put("pharmacyLocationId", activePharmacy.getPharmacyLocationId());
+        if (!trimToEmpty(query).isEmpty()) {
+            redirectParams.put("q", trimToEmpty(query));
+        }
         String normalizedAction = action == null ? "updateExpiry" : action.trim();
         if ("writeOff".equalsIgnoreCase(normalizedAction)) {
             inventoryService.writeOffInventoryBalance(inventoryBalanceId, activePharmacy.getPharmacyLocationId(), quantity, reason);
@@ -84,6 +93,40 @@ public class ExpiryControlPageController {
             redirectParams.put("updated", Boolean.TRUE);
         }
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "admin/expiryControl", redirectParams);
+    }
+
+    private List<InventoryBalance> filterStockBalances(List<InventoryBalance> balances, String query) {
+        String normalizedQuery = trimToEmpty(query).toLowerCase(Locale.ENGLISH);
+        if (normalizedQuery.isEmpty()) {
+            return balances;
+        }
+        List<InventoryBalance> filtered = new ArrayList<InventoryBalance>();
+        for (InventoryBalance balance : balances) {
+            if (matchesStockSearch(balance, normalizedQuery)) {
+                filtered.add(balance);
+            }
+        }
+        return filtered;
+    }
+
+    private boolean matchesStockSearch(InventoryBalance balance, String normalizedQuery) {
+        if (balance == null) {
+            return false;
+        }
+        Item item = balance.getItem();
+        return contains(item == null ? null : item.getName(), normalizedQuery)
+                || contains(item == null ? null : item.getCode(), normalizedQuery)
+                || contains(item == null ? null : item.getProgram(), normalizedQuery)
+                || contains(item == null || item.getItemCategory() == null ? null : item.getItemCategory().getName(), normalizedQuery)
+                || contains(balance.getBatchNumber(), normalizedQuery);
+    }
+
+    private boolean contains(String value, String normalizedQuery) {
+        return value != null && value.toLowerCase(Locale.ENGLISH).contains(normalizedQuery);
+    }
+
+    private String trimToEmpty(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private PharmacyLocation resolveMainPharmacy(PharmacyService pharmacyService) {
@@ -104,7 +147,7 @@ public class ExpiryControlPageController {
 
     private boolean isUsableMainPharmacy(PharmacyLocation pharmacyLocation) {
         return pharmacyLocation != null && pharmacyLocation.getPharmacyLocationId() != null
-                && Boolean.TRUE.equals(pharmacyLocation.getActive())
+                && !Boolean.FALSE.equals(pharmacyLocation.getActive())
                 && Boolean.TRUE.equals(pharmacyLocation.getMainStore());
     }
 

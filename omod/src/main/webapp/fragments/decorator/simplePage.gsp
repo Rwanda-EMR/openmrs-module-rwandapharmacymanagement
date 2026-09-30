@@ -34,8 +34,9 @@
                     [path: "index", label: "Dashboard"]
             ]],
             [title: "Dispensing", links: [
-                    [path: "queue/patientQueue", label: "Patient queue"],
-                    [path: "dispense/history", label: "Dispensing history"],
+	                    [path: "queue/patientQueue", label: "Patient queue"],
+	                    [path: "report/patientRequestReport", label: "Patient request report"],
+	                    [path: "dispense/history", label: "Dispensing history"],
                     [path: "pharmacyorder/queue", label: "Pharmacy item request queue"],
 	                    [path: "pharmacyorder/history", label: "Pharmacy item request history", privilegeAny: ["Task: rwandapharmacymanagement.transferStock", "Task: rwandapharmacymanagement.approveMainToDispensingTransfer"]],
                     [path: "lab/queue", label: "Lab dispensing queue"],
@@ -97,7 +98,8 @@
 		                    [path: "report/dispensingReport", label: "Dispensing report"],
 	                    [path: "report/paymentExceptionReport", label: "Payment exception report"],
 	                    [path: "report/notBillableItemsReport", label: "Not billable items report"],
-	                    [path: "report/itemMovement", label: "Item movement report"]
+	                    [path: "report/itemMovement", label: "Item movement report"],
+	                    [path: "report/purchaseOrderReconciliationReport", label: "Purchase order reconciliation report"]
 	            ]]
     ]
 %>

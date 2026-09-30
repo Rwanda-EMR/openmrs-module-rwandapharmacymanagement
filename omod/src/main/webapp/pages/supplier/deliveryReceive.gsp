@@ -795,6 +795,7 @@
                     <tr>
                         <th class="receive-item-field">Item name</th>
                         <th class="receive-code-field">Item code</th>
+                        <th class="receive-line-field">Program</th>
                         <th class="receive-batch-field">Batch number</th>
                         <th class="receive-expiry-field">Expiry date / N/A</th>
                         <th class="receive-price-field">Receiving unit price</th>
@@ -807,13 +808,23 @@
                         <td class="receive-item-field">
                             <div class="receive-combobox">
                                 <input type="text" class="receive-item-search" placeholder="Search item name or code" oninput="searchDirectItems(this)" onfocus="searchDirectItems(this)" onkeydown="handleDirectSuggestionKeydown(event, this)" autocomplete="off"/>
+                                <input type="hidden" name="productMasterItemIds"/>
                                 <input type="hidden" name="itemIds"/>
                                 <input type="hidden" name="itemCodes"/>
+                                <input type="hidden" name="programs"/>
                                 <div class="receive-suggestions"></div>
                                 <div class="receive-validation-note">Select an item from the dropdown list.</div>
                             </div>
                         </td>
                         <td class="receive-code-field"><input type="text" class="receive-item-code" readonly="readonly" placeholder="Item code"/></td>
+                        <td class="receive-line-field">
+                            <select class="receive-item-program" onchange="handleDirectProgramChange(this)">
+                                <option value="">All programs</option>
+                                <% productMasterPrograms.each { program -> %>
+                                <option value="${ program }">${ program }</option>
+                                <% } %>
+                            </select>
+                        </td>
                         <td class="receive-batch-field"><input type="text" name="batchNumbers" placeholder="e.g. B2025-001"/></td>
                         <td class="receive-expiry-field"><input type="text" name="expiryDates" placeholder="yyyy-MM-dd or N/A"/></td>
                         <td class="receive-price-field"><input type="number" step="0.01" min="0" name="unitPrices"/></td>
@@ -961,6 +972,7 @@
                     <tr>
                         <th class="receive-item-field">Item</th>
                         <th class="receive-code-field">Item code</th>
+                        <th class="receive-line-field">Program</th>
                         <th class="receive-line-field">Line no</th>
                         <th class="receive-unit-field">Unit</th>
                         <th class="receive-purchase-price-field">Purchase unit price</th>
@@ -980,11 +992,14 @@
                     <% receiveRows.each { row -> %>
                     <tr>
                         <td class="receive-item-field">
+                            <input type="hidden" name="productMasterItemIds" value="${ row.productMasterItemId ?: '' }"/>
                             <input type="hidden" name="itemIds" value="${ row.itemId ?: '' }"/>
                             <input type="hidden" name="itemCodes" value="${ row.itemCode ?: '' }"/>
+                            <input type="hidden" name="programs" value="${ row.program ?: '' }"/>
                             <input type="text" value="${ row.itemName ?: '' }" readonly="readonly"/>
                         </td>
                         <td class="receive-code-field"><input type="text" value="${ row.itemCode ?: '' }" readonly="readonly"/></td>
+                        <td class="receive-line-field"><input type="text" value="${ row.program ?: '' }" readonly="readonly"/></td>
                         <td class="receive-line-field">
                             <input type="hidden" name="confirmationItemNos" value="${ row.confirmationItemNo ?: '' }"/>
                             <input type="text" value="${ row.confirmationItemNo ?: '' }" readonly="readonly"/>
@@ -1043,13 +1058,23 @@
         <td class="receive-item-field">
             <div class="receive-combobox">
                 <input type="text" class="receive-item-search" placeholder="Search item name or code" oninput="searchDirectItems(this)" onfocus="searchDirectItems(this)" onkeydown="handleDirectSuggestionKeydown(event, this)" autocomplete="off"/>
+                <input type="hidden" name="productMasterItemIds"/>
                 <input type="hidden" name="itemIds"/>
                 <input type="hidden" name="itemCodes"/>
+                <input type="hidden" name="programs"/>
                 <div class="receive-suggestions"></div>
                 <div class="receive-validation-note">Select an item from the dropdown list.</div>
             </div>
         </td>
         <td class="receive-code-field"><input type="text" class="receive-item-code" readonly="readonly" placeholder="Item code"/></td>
+        <td class="receive-line-field">
+            <select class="receive-item-program" onchange="handleDirectProgramChange(this)">
+                <option value="">All programs</option>
+                <% productMasterPrograms.each { program -> %>
+                <option value="${ program }">${ program }</option>
+                <% } %>
+            </select>
+        </td>
         <td class="receive-batch-field"><input type="text" name="batchNumbers" placeholder="e.g. B2025-001"/></td>
         <td class="receive-expiry-field"><input type="text" name="expiryDates" placeholder="yyyy-MM-dd or N/A"/></td>
         <td class="receive-price-field"><input type="number" step="0.01" min="0" name="unitPrices"/></td>
@@ -1061,7 +1086,7 @@
 <script type="text/javascript">
     var directProductMasterItems = [
         <% productMasterItems.eachWithIndex { item, idx -> %>
-        { code: '${ (item.npcCode ?: '').replace("\\", "\\\\").replace("'", "\\'") }', display: '${ ((item.itemName ?: '') + " (" + (item.npcCode ?: '') + ")").replace("\\", "\\\\").replace("'", "\\'") }', itemName: '${ (item.itemName ?: '').replace("\\", "\\\\").replace("'", "\\'") }' }${ idx < productMasterItems.size() - 1 ? ',' : '' }
+        { id: '${ item.productMasterItemId ?: '' }', code: '${ (item.npcCode ?: '').replace("\\", "\\\\").replace("'", "\\'") }', program: '${ (item.program ?: '').replace("\\", "\\\\").replace("'", "\\'") }', display: '${ ((item.itemName ?: '') + " (" + (item.npcCode ?: '') + ")" + (item.program ? " - " + item.program : "")).replace("\\", "\\\\").replace("'", "\\'") }', itemName: '${ (item.itemName ?: '').replace("\\", "\\\\").replace("'", "\\'") }' }${ idx < productMasterItems.size() - 1 ? ',' : '' }
         <% } %>
     ];
 
@@ -1120,6 +1145,10 @@
                 inputs[i].value = '';
             }
         }
+        var programField = row.querySelector('.receive-item-program');
+        if (programField) {
+            programField.value = '';
+        }
         var itemSearch = row.querySelector('.receive-item-search');
         if (itemSearch) {
             itemSearch.value = '';
@@ -1145,6 +1174,7 @@
         for (var i = 0; i < rows.length; i++) {
             var itemInput = rows[i].querySelector('.receive-item-search');
             var hiddenItemCode = rows[i].querySelector('input[name="itemCodes"]');
+            var hiddenProductMasterItemId = rows[i].querySelector('input[name="productMasterItemIds"]');
             var batchInput = rows[i].querySelector('input[name="batchNumbers"]');
             var qtyInput = rows[i].querySelector('input[name="quantities"]');
             var hasAnyValue = itemInput && itemInput.value && itemInput.value.trim()
@@ -1154,7 +1184,8 @@
                 setDirectItemValidity(itemInput, true);
                 continue;
             }
-            var isValid = hiddenItemCode && hiddenItemCode.value && hiddenItemCode.value.trim();
+            var isValid = hiddenProductMasterItemId && hiddenProductMasterItemId.value && hiddenProductMasterItemId.value.trim()
+                && hiddenItemCode && hiddenItemCode.value && hiddenItemCode.value.trim();
             setDirectItemValidity(itemInput, !!isValid);
             if (!isValid && !firstInvalidInput) {
                 firstInvalidInput = itemInput;
@@ -1176,9 +1207,18 @@
             return;
         }
         var hiddenItemCode = combo.querySelector('input[name="itemCodes"]');
+        var hiddenProductMasterItemId = combo.querySelector('input[name="productMasterItemIds"]');
+        var hiddenProgram = combo.querySelector('input[name="programs"]');
         var suggestions = combo.querySelector('.receive-suggestions');
+        var selectedProgram = getDirectRowProgram(input);
         if (hiddenItemCode) {
             hiddenItemCode.value = '';
+        }
+        if (hiddenProductMasterItemId) {
+            hiddenProductMasterItemId.value = '';
+        }
+        if (hiddenProgram) {
+            hiddenProgram.value = selectedProgram;
         }
         setCodeField(input, '');
         setDirectItemValidity(input, false);
@@ -1194,9 +1234,13 @@
         var matches = [];
         for (var i = 0; i < directProductMasterItems.length; i++) {
             var item = directProductMasterItems[i];
+            if (selectedProgram && (item.program || '') !== selectedProgram) {
+                continue;
+            }
             if ((item.display || '').toLowerCase().indexOf(query) !== -1
                     || (item.itemName || '').toLowerCase().indexOf(query) !== -1
-                    || (item.code || '').toLowerCase().indexOf(query) !== -1) {
+                    || (item.code || '').toLowerCase().indexOf(query) !== -1
+                    || (item.program || '').toLowerCase().indexOf(query) !== -1) {
                 matches.push(item);
             }
         }
@@ -1210,7 +1254,9 @@
             var option = document.createElement('div');
             option.className = 'receive-suggestion';
             option.textContent = matches[j].display;
+            option.setAttribute('data-id', matches[j].id);
             option.setAttribute('data-code', matches[j].code);
+            option.setAttribute('data-program', matches[j].program);
             option.setAttribute('data-display', matches[j].display);
             option.onmousedown = function(event) {
                 event.preventDefault();
@@ -1228,12 +1274,21 @@
             return;
         }
         var hiddenItemCode = combo.querySelector('input[name="itemCodes"]');
+        var hiddenProductMasterItemId = combo.querySelector('input[name="productMasterItemIds"]');
+        var hiddenProgram = combo.querySelector('input[name="programs"]');
         var suggestions = combo.querySelector('.receive-suggestions');
         input.value = option.getAttribute('data-display') || '';
+        if (hiddenProductMasterItemId) {
+            hiddenProductMasterItemId.value = option.getAttribute('data-id') || '';
+        }
         if (hiddenItemCode) {
             hiddenItemCode.value = option.getAttribute('data-code') || '';
         }
+        if (hiddenProgram) {
+            hiddenProgram.value = option.getAttribute('data-program') || '';
+        }
         setCodeField(input, option.getAttribute('data-code') || '');
+        setProgramField(input, option.getAttribute('data-program') || '');
         setDirectItemValidity(input, true);
         if (suggestions) {
             suggestions.innerHTML = '';
@@ -1259,6 +1314,70 @@
         var codeField = row.querySelector('.receive-item-code');
         if (codeField) {
             codeField.value = code || '';
+        }
+    }
+
+    function setProgramField(input, program) {
+        var row = input ? input.closest('tr') : null;
+        if (!row) {
+            return;
+        }
+        var programField = row.querySelector('.receive-item-program');
+        if (programField) {
+            ensureProgramOption(programField, program || '');
+            programField.value = program || '';
+        }
+    }
+
+    function ensureProgramOption(select, program) {
+        if (!select || !program) {
+            return;
+        }
+        for (var i = 0; i < select.options.length; i++) {
+            if (select.options[i].value === program) {
+                return;
+            }
+        }
+        var option = document.createElement('option');
+        option.value = program;
+        option.textContent = program;
+        select.appendChild(option);
+    }
+
+    function getDirectRowProgram(input) {
+        var row = input ? input.closest('tr') : null;
+        var programField = row ? row.querySelector('.receive-item-program') : null;
+        return programField ? (programField.value || '') : '';
+    }
+
+    function handleDirectProgramChange(select) {
+        var row = select ? select.closest('tr') : null;
+        if (!row) {
+            return;
+        }
+        var selectedProgram = select.value || '';
+        var hiddenProgram = row.querySelector('input[name="programs"]');
+        var hiddenItemCode = row.querySelector('input[name="itemCodes"]');
+        var hiddenProductMasterItemId = row.querySelector('input[name="productMasterItemIds"]');
+        var itemSearch = row.querySelector('.receive-item-search');
+        var suggestions = row.querySelector('.receive-suggestions');
+        if (hiddenProgram) {
+            hiddenProgram.value = selectedProgram;
+        }
+        if (hiddenItemCode) {
+            hiddenItemCode.value = '';
+        }
+        if (hiddenProductMasterItemId) {
+            hiddenProductMasterItemId.value = '';
+        }
+        setCodeField(itemSearch, '');
+        if (itemSearch) {
+            itemSearch.value = '';
+            setDirectItemValidity(itemSearch, true);
+        }
+        if (suggestions) {
+            suggestions.innerHTML = '';
+            suggestions.classList.remove('active');
         }
     }
 

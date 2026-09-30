@@ -260,6 +260,14 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
             dispensingDao.saveRequest(request);
             return;
         }
+        if (Boolean.TRUE.equals(request.getPaymentConfirmed())) {
+            if (request.getRequestStatus() == RequestStatus.PENDING_PAYMENT) {
+                request.setRequestStatus(RequestStatus.PENDING_DISPENSE);
+                updateActiveLineStatuses(request, RequestStatus.PENDING_DISPENSE);
+                dispensingDao.saveRequest(request);
+            }
+            return;
+        }
         Integer patientBillId = request.getPatientBillId();
         if (patientBillId == null && request.getPatient() != null) {
             Set<String> itemNames = billingLookupNames(request);
@@ -538,6 +546,14 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
     }
 
     @Override
+    public List<PatientDispensingRequest> getPatientDispensingRequests(Date fromInclusive,
+                                                                       Date toExclusive,
+                                                                       Integer pharmacyLocationId,
+                                                                       RequestType requestType) {
+        return dispensingDao.getPatientDispensingRequests(fromInclusive, toExclusive, pharmacyLocationId, requestType);
+    }
+
+    @Override
     public List<PatientDispensingRequest> getPaymentExceptionApprovedRequests(Date fromInclusive,
                                                                               Date toExclusive,
                                                                               Integer pharmacyLocationId,
@@ -741,10 +757,13 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
                 tx.setTransactionType(withoutOrder ? StockTransactionType.DISPENSE_WITHOUT_ORDER : StockTransactionType.DISPENSE);
                 tx.setUnitPrice(null);
                 tx.setTotalAmount(null);
+                if (!withoutOrder && request != null && request.getPatientDispensingRequestId() != null) {
+                    tx.setReferenceNumber(request.getPatientDispensingRequestId().toString());
+                }
                 tx.setCreator(Context.getAuthenticatedUser());
                 tx.setPerformedBy(Context.getAuthenticatedUser());
                 tx.setDateCreated(new Date());
-                tx.setRemarks(withoutOrder ? "Dispensed without order" : "Dispensed against request");
+                tx.setRemarks(withoutOrder ? "Dispensed without order" : dispenseRequestRemarks(request));
                 inventoryDao.saveStockTransaction(tx);
             }
         }
@@ -759,12 +778,20 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
                 || dispenseRecord.getPatientDispensingRequest().getPatientDispensingRequestId() == null) {
             return null;
         }
-        PatientDispensingRequest request = dispensingDao.getRequest(
+        PatientDispensingRequest request = dispensingDao.getRequestForUpdate(
                 dispenseRecord.getPatientDispensingRequest().getPatientDispensingRequestId());
         if (request == null) {
             throw new IllegalArgumentException("Prescription request not found");
         }
+        dispenseRecord.setPatientDispensingRequest(request);
         return request;
+    }
+
+    private String dispenseRequestRemarks(PatientDispensingRequest request) {
+        if (request == null || request.getPatientDispensingRequestId() == null) {
+            return "Dispensed against request";
+        }
+        return "Dispensed against request #" + request.getPatientDispensingRequestId();
     }
 
     private void validateDispenseAgainstActiveRequestLines(PatientDispensingRequest request,

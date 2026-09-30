@@ -10,6 +10,10 @@ public final class StockReportExcelRenderer {
     }
 
     public static byte[] render(String sheetName, List<String> headers, List<List<String>> rows) {
+        return render(sheetName, null, headers, rows);
+    }
+
+    public static byte[] render(String sheetName, List<List<String>> summaryRows, List<String> headers, List<List<String>> rows) {
         StringBuilder xml = new StringBuilder();
         xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
         xml.append("<?mso-application progid=\"Excel.Sheet\"?>");
@@ -22,6 +26,18 @@ public final class StockReportExcelRenderer {
         xml.append("</Styles>");
         xml.append("<Worksheet ss:Name=\"").append(escapeXml(trimSheetName(sheetName))).append("\">");
         xml.append("<Table>");
+        if (summaryRows != null && !summaryRows.isEmpty()) {
+            for (List<String> row : summaryRows) {
+                xml.append("<Row>");
+                for (String value : row) {
+                    xml.append("<Cell><Data ss:Type=\"String\">")
+                            .append(escapeXml(value))
+                            .append("</Data></Cell>");
+                }
+                xml.append("</Row>");
+            }
+            xml.append("<Row/>");
+        }
         xml.append("<Row>");
         for (String header : headers) {
             xml.append("<Cell ss:StyleID=\"Header\"><Data ss:Type=\"String\">")

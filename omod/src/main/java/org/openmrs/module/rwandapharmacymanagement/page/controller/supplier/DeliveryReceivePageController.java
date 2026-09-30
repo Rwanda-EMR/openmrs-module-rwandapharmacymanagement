@@ -14,6 +14,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.DeliveryReceipt;
 import org.openmrs.module.rwandapharmacymanagement.model.DeliveryReceiptLine;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
+import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrder;
 import org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrderItem;
 import org.openmrs.module.rwandapharmacymanagement.web.support.CurrentPharmacySupport;
@@ -47,6 +48,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Locale;
 import java.util.HashSet;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.Set;
 import java.nio.charset.StandardCharsets;
@@ -74,7 +76,9 @@ public class DeliveryReceivePageController {
         CurrentPharmacySupport.populateModel(model, pharmacyService, session);
         model.addAttribute("mainStock", inventoryService.getInventoryForPharmacy(null));
         model.addAttribute("items", Collections.emptyList());
-        model.addAttribute("productMasterItems", pharmacyService.getAllProductMasterItems());
+        List<ProductMasterItem> productMasterItems = pharmacyService.getAllProductMasterItems();
+        model.addAttribute("productMasterItems", productMasterItems);
+        model.addAttribute("productMasterPrograms", productMasterPrograms(productMasterItems));
         List<PharmacyLocation> pharmacyLocations = pharmacyService.getAllPharmacyLocations();
         model.addAttribute("pharmacyLocations", pharmacyLocations);
         PharmacyLocation defaultReceiveLocation = (PharmacyLocation) model.getAttribute("activePharmacy");
@@ -118,8 +122,11 @@ public class DeliveryReceivePageController {
         Map<String, Integer> itemIdByCode = new LinkedHashMap<String, Integer>();
         if (selectedPurchaseOrder != null && selectedPurchaseOrder.getItems() != null) {
             for (org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrderItem purchaseOrderItem : selectedPurchaseOrder.getItems()) {
-                Item item = DeliveryReceiptSupport.resolveOrCreateItemByCode(pharmacyService,
-                        purchaseOrderItem.getItemCode(), purchaseOrderItem.getItemName(), purchaseOrderItem.getProgram());
+                ProductMasterItem productMasterItem = purchaseOrderItem.getProductMasterItem();
+                Item item = productMasterItem == null
+                        ? DeliveryReceiptSupport.resolveOrCreateItemByCode(pharmacyService,
+                        purchaseOrderItem.getItemCode(), purchaseOrderItem.getItemName(), purchaseOrderItem.getProgram())
+                        : DeliveryReceiptSupport.resolveOrCreateMappedItem(pharmacyService, productMasterItem);
                 if (item != null && purchaseOrderItem.getItemCode() != null) {
                     itemIdByCode.put(purchaseOrderItem.getItemCode(), item.getItemId());
                 }
@@ -163,8 +170,10 @@ public class DeliveryReceivePageController {
                        @RequestParam(value = "receiptNumber", required = false) String receiptNumber,
                        @RequestParam(value = "purchaseOrderId", required = false) Integer purchaseOrderId,
                        @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
+                       @RequestParam(value = "productMasterItemIds", required = false) Integer[] productMasterItemIds,
                        @RequestParam(value = "itemIds", required = false) Integer[] itemIds,
                        @RequestParam(value = "itemCodes", required = false) String[] itemCodes,
+                       @RequestParam(value = "programs", required = false) String[] programs,
                        @RequestParam(value = "orderedQuantities", required = false) BigDecimal[] orderedQuantities,
                        @RequestParam(value = "quantities", required = false) BigDecimal[] quantities,
                        @RequestParam(value = "acceptedQuantities", required = false) BigDecimal[] acceptedQuantities,
@@ -194,7 +203,8 @@ public class DeliveryReceivePageController {
                         successParams("receive", source, purchaseOrderId));
             }
             if ("receiveManual".equals(action)) {
-                receipt = buildManualReceipt(pharmacyService, receiptNumber, purchaseOrderId, pharmacyLocationId, itemIds, itemCodes, orderedQuantities, quantities,
+                receipt = buildManualReceipt(pharmacyService, receiptNumber, purchaseOrderId, pharmacyLocationId,
+                        productMasterItemIds, itemIds, itemCodes, programs, orderedQuantities, quantities,
                         acceptedQuantities, unitPrices, confirmationItemNos, batchNumbers, expiryDates,
                         rejectionReasonCodes, rejectionReasonDetails, lineNotes, deliveryDate);
                 inventoryService.receiveDelivery(receipt);
@@ -212,7 +222,8 @@ public class DeliveryReceivePageController {
                 return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/deliveryReceive",
                         successParams("direct", null, null));
             }
-            receipt = buildManualReceipt(pharmacyService, receiptNumber, null, pharmacyLocationId, itemIds, itemCodes, orderedQuantities, quantities,
+            receipt = buildManualReceipt(pharmacyService, receiptNumber, null, pharmacyLocationId,
+                    productMasterItemIds, itemIds, itemCodes, programs, orderedQuantities, quantities,
                     acceptedQuantities, unitPrices, confirmationItemNos, batchNumbers, expiryDates,
                     rejectionReasonCodes, rejectionReasonDetails, lineNotes, deliveryDate);
             inventoryService.receiveDelivery(receipt);
@@ -242,12 +253,15 @@ public class DeliveryReceivePageController {
     }
 
     private DeliveryReceipt buildManualReceipt(PharmacyService pharmacyService, String receiptNumber, Integer purchaseOrderId,
-                                              Integer pharmacyLocationId, Integer[] itemIds, String[] itemCodes, BigDecimal[] orderedQuantities, BigDecimal[] quantities,
+                                              Integer pharmacyLocationId, Integer[] productMasterItemIds,
+                                              Integer[] itemIds, String[] itemCodes, String[] programs,
+                                              BigDecimal[] orderedQuantities, BigDecimal[] quantities,
                                               BigDecimal[] acceptedQuantities, BigDecimal[] unitPrices, String[] confirmationItemNos,
                                               String[] batchNumbers, String[] expiryDates, String[] rejectionReasonCodes,
                                               String[] rejectionReasonDetails, String[] lineNotes,
                                               String deliveryDate) throws ParseException {
-        if ((itemIds == null || itemIds.length == 0) && (itemCodes == null || itemCodes.length == 0)) {
+        if ((productMasterItemIds == null || productMasterItemIds.length == 0)
+                && (itemIds == null || itemIds.length == 0) && (itemCodes == null || itemCodes.length == 0)) {
             throw new IllegalArgumentException("Add at least one item line before receiving stock");
         }
         DeliveryReceipt receipt = baseReceipt(pharmacyService, receiptNumber, purchaseOrderId, pharmacyLocationId);
@@ -255,14 +269,28 @@ public class DeliveryReceivePageController {
             receipt.setDateCreated(parseFlexibleDate(deliveryDate));
         }
         List<DeliveryReceiptLine> lines = new ArrayList<DeliveryReceiptLine>();
-        int lineCount = maxLength(itemIds, itemCodes, orderedQuantities, quantities, acceptedQuantities, unitPrices,
+        int lineCount = maxLength(productMasterItemIds, itemIds, itemCodes, programs, orderedQuantities, quantities, acceptedQuantities, unitPrices,
                 confirmationItemNos, batchNumbers, expiryDates, rejectionReasonCodes, rejectionReasonDetails, lineNotes);
         for (int i = 0; i < lineCount; i++) {
+            Integer productMasterItemId = productMasterItemIds != null && productMasterItemIds.length > i ? productMasterItemIds[i] : null;
             Integer itemId = itemIds != null && itemIds.length > i ? itemIds[i] : null;
             String itemCode = itemCodes != null && itemCodes.length > i ? trim(itemCodes, i) : "";
             String fallbackItemName = findPurchaseOrderItemName(receipt.getPurchaseOrder(), itemCode);
-            String fallbackProgram = findPurchaseOrderItemProgram(receipt.getPurchaseOrder(), itemCode);
-            Item item = itemId == null ? null : pharmacyService.getItem(itemId);
+            ProductMasterItem productMasterItem = productMasterItemId == null ? null : pharmacyService.getProductMasterItem(productMasterItemId);
+            if (productMasterItem == null) {
+                productMasterItem = findPurchaseOrderProductMasterItem(receipt.getPurchaseOrder(), itemCode);
+            }
+            String fallbackProgram = firstPresent(productMasterItem == null ? null : productMasterItem.getProgram(),
+                    trim(programs, i), findPurchaseOrderItemProgram(receipt.getPurchaseOrder(), itemCode));
+            Item item = null;
+            if (productMasterItem != null) {
+                item = DeliveryReceiptSupport.resolveOrCreateMappedItem(pharmacyService, productMasterItem);
+                itemCode = firstPresent(productMasterItem.getNpcCode(), itemCode);
+                fallbackItemName = firstPresent(productMasterItem.getItemName(), fallbackItemName);
+            }
+            if (item == null) {
+                item = itemId == null ? null : pharmacyService.getItem(itemId);
+            }
             if (item == null && !itemCode.isEmpty()) {
                 item = DeliveryReceiptSupport.resolveOrCreateItemByCode(pharmacyService, itemCode, fallbackItemName, fallbackProgram);
             }
@@ -275,6 +303,8 @@ public class DeliveryReceivePageController {
             validateAcceptedQuantity(item, quantity, acceptedQuantity, i);
             DeliveryReceiptLine line = new DeliveryReceiptLine();
             line.setItem(item);
+            line.setProductMasterItem(productMasterItem);
+            line.setProgram(fallbackProgram);
             line.setBatchNumber(trim(batchNumbers, i));
             line.setOrderedQuantity(orderedQuantity);
             line.setReceivedQuantity(quantity);
@@ -307,7 +337,7 @@ public class DeliveryReceivePageController {
         DeliveryReceipt receipt = baseReceipt(pharmacyService, receiptNumber, purchaseOrderId, pharmacyLocationId);
         List<DeliveryReceiptLine> lines = new ArrayList<DeliveryReceiptLine>();
         if (isCsvFile(receiptFile)) {
-            parseCsvLines(pharmacyService, receiptFile, lines);
+            parseCsvLines(pharmacyService, receipt.getPurchaseOrder(), receiptFile, lines);
             if (lines.isEmpty()) {
                 throw new IllegalArgumentException("Uploaded CSV file does not contain any valid stock lines");
             }
@@ -329,7 +359,14 @@ public class DeliveryReceivePageController {
                     continue;
                 }
                 String itemCode = cellValue(row, headerIndexes, "itemcode", formatter, 0);
-                Item item = DeliveryReceiptSupport.resolveOrCreateItemByCode(pharmacyService, itemCode);
+                String program = optionalCellValue(row, headerIndexes, "program", formatter);
+                ProductMasterItem productMasterItem = resolveProductMasterItem(pharmacyService, null,
+                        receipt.getPurchaseOrder(), itemCode, program);
+                program = firstPresent(productMasterItem == null ? null : productMasterItem.getProgram(), program);
+                Item item = productMasterItem == null
+                        ? DeliveryReceiptSupport.resolveOrCreateItemByCode(pharmacyService, itemCode,
+                        findPurchaseOrderItemName(receipt.getPurchaseOrder(), itemCode), program)
+                        : DeliveryReceiptSupport.resolveOrCreateMappedItem(pharmacyService, productMasterItem);
                 if (item == null) {
                     throw new IllegalArgumentException("Unknown item code in upload: " + itemCode + " at row " + (rowIndex + 1));
                 }
@@ -339,6 +376,8 @@ public class DeliveryReceivePageController {
                 }
                 DeliveryReceiptLine line = new DeliveryReceiptLine();
                 line.setItem(item);
+                line.setProductMasterItem(productMasterItem);
+                line.setProgram(program);
                 line.setBatchNumber(cellValue(row, headerIndexes, "batchnumber", formatter, 6));
                 BigDecimal requestedQuantity = firstDecimalValue(row, formatter, headerIndexes, new String[]{"requestedquantity", "orderedquantity"}, 2);
                 line.setOrderedQuantity(requestedQuantity == null ? quantity : requestedQuantity);
@@ -366,7 +405,8 @@ public class DeliveryReceivePageController {
         return receipt;
     }
 
-    private void parseCsvLines(PharmacyService pharmacyService, MultipartFile receiptFile, List<DeliveryReceiptLine> lines) throws IOException, ParseException {
+    private void parseCsvLines(PharmacyService pharmacyService, PurchaseOrder purchaseOrder,
+                               MultipartFile receiptFile, List<DeliveryReceiptLine> lines) throws IOException, ParseException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(receiptFile.getInputStream(), StandardCharsets.UTF_8));
         String headerLine = reader.readLine();
         if (headerLine == null) {
@@ -403,7 +443,13 @@ public class DeliveryReceivePageController {
                 continue;
             }
             String itemCode = csvValue(rowValues, headerIndexes, "itemcode", 0);
-            Item item = DeliveryReceiptSupport.resolveOrCreateItemByCode(pharmacyService, itemCode);
+            String program = csvValue(rowValues, headerIndexes, "program", -1);
+            ProductMasterItem productMasterItem = resolveProductMasterItem(pharmacyService, null, purchaseOrder, itemCode, program);
+            program = firstPresent(productMasterItem == null ? null : productMasterItem.getProgram(), program);
+            Item item = productMasterItem == null
+                    ? DeliveryReceiptSupport.resolveOrCreateItemByCode(pharmacyService, itemCode,
+                    findPurchaseOrderItemName(purchaseOrder, itemCode), program)
+                    : DeliveryReceiptSupport.resolveOrCreateMappedItem(pharmacyService, productMasterItem);
             if (item == null) {
                 throw new IllegalArgumentException("Unknown item code in upload: " + itemCode + " at row " + rowIndex);
             }
@@ -413,6 +459,8 @@ public class DeliveryReceivePageController {
             }
             DeliveryReceiptLine line = new DeliveryReceiptLine();
             line.setItem(item);
+            line.setProductMasterItem(productMasterItem);
+            line.setProgram(program);
             line.setBatchNumber(csvValue(rowValues, headerIndexes, "batchnumber", 6));
             BigDecimal requestedQuantity = firstDecimalValue(rowValues, headerIndexes, new String[]{"requestedquantity", "orderedquantity"}, 2);
             line.setOrderedQuantity(requestedQuantity == null ? quantity : requestedQuantity);
@@ -474,6 +522,18 @@ public class DeliveryReceivePageController {
                 && !"CLOSED".equalsIgnoreCase(dispatchStatus);
     }
 
+    private List<String> productMasterPrograms(List<ProductMasterItem> productMasterItems) {
+        Set<String> programs = new TreeSet<String>(String.CASE_INSENSITIVE_ORDER);
+        if (productMasterItems != null) {
+            for (ProductMasterItem item : productMasterItems) {
+                if (item != null && item.getProgram() != null && !item.getProgram().trim().isEmpty()) {
+                    programs.add(item.getProgram().trim());
+                }
+            }
+        }
+        return new ArrayList<String>(programs);
+    }
+
     private boolean rowIsBlank(Row row, DataFormatter formatter) {
         for (int i = 0; i < row.getLastCellNum(); i++) {
             if (!cellValue(row, i, formatter).isEmpty()) {
@@ -504,6 +564,11 @@ public class DeliveryReceivePageController {
     private String cellValue(Row row, Map<String, Integer> headerIndexes, String headerName, DataFormatter formatter, int defaultIndex) {
         Integer index = headerIndexes.get(headerName);
         return cellValue(row, index == null ? defaultIndex : index, formatter);
+    }
+
+    private String optionalCellValue(Row row, Map<String, Integer> headerIndexes, String headerName, DataFormatter formatter) {
+        Integer index = headerIndexes.get(headerName);
+        return index == null ? "" : cellValue(row, index, formatter);
     }
 
     private String firstCellValue(Row row, DataFormatter formatter, Map<String, Integer> headerIndexes, String[] headerNames, int defaultIndex) {
@@ -729,7 +794,10 @@ public class DeliveryReceivePageController {
                 PurchaseOrderItem matchingOrderItem = purchaseOrderItemsByCode.get(receiptItem.getNpcCode());
                 Map<String, Object> row = new LinkedHashMap<String, Object>();
                 row.put("itemId", itemIdByCode.get(receiptItem.getNpcCode()));
+                row.put("productMasterItemId", matchingOrderItem == null || matchingOrderItem.getProductMasterItem() == null
+                        ? null : matchingOrderItem.getProductMasterItem().getProductMasterItemId());
                 row.put("itemCode", receiptItem.getNpcCode());
+                row.put("program", matchingOrderItem == null ? null : matchingOrderItem.getProgram());
                 row.put("itemName", receiptItem.getDescription() != null ? receiptItem.getDescription()
                         : (matchingOrderItem == null ? "" : matchingOrderItem.getItemName()));
                 row.put("unit", receiptItem.getUnits());
@@ -754,7 +822,9 @@ public class DeliveryReceivePageController {
         for (PurchaseOrderItem item : purchaseOrder.getItems()) {
             Map<String, Object> row = new LinkedHashMap<String, Object>();
             row.put("itemId", itemIdByCode.get(item.getItemCode()));
+            row.put("productMasterItemId", item.getProductMasterItem() == null ? null : item.getProductMasterItem().getProductMasterItemId());
             row.put("itemCode", item.getItemCode());
+            row.put("program", item.getProgram());
             row.put("itemName", item.getItemName());
             row.put("unit", null);
             row.put("purchaseUnitPrice", item.getUnitPrice());
@@ -797,6 +867,50 @@ public class DeliveryReceivePageController {
             }
         }
         return null;
+    }
+
+    private ProductMasterItem findPurchaseOrderProductMasterItem(PurchaseOrder purchaseOrder, String itemCode) {
+        if (purchaseOrder == null || purchaseOrder.getItems() == null || itemCode == null || itemCode.trim().isEmpty()) {
+            return null;
+        }
+        for (PurchaseOrderItem purchaseOrderItem : purchaseOrder.getItems()) {
+            if (purchaseOrderItem != null && purchaseOrderItem.getItemCode() != null
+                    && itemCode.trim().equalsIgnoreCase(purchaseOrderItem.getItemCode().trim())
+                    && purchaseOrderItem.getProductMasterItem() != null) {
+                return purchaseOrderItem.getProductMasterItem();
+            }
+        }
+        return null;
+    }
+
+    private ProductMasterItem resolveProductMasterItem(PharmacyService pharmacyService, Integer productMasterItemId,
+                                                       PurchaseOrder purchaseOrder, String itemCode, String program) {
+        ProductMasterItem productMasterItem = productMasterItemId == null ? null : pharmacyService.getProductMasterItem(productMasterItemId);
+        if (productMasterItem != null) {
+            return productMasterItem;
+        }
+        productMasterItem = findPurchaseOrderProductMasterItem(purchaseOrder, itemCode);
+        if (productMasterItem != null) {
+            return productMasterItem;
+        }
+        String code = itemCode == null ? "" : itemCode.trim();
+        String selectedProgram = program == null ? "" : program.trim();
+        if (!code.isEmpty()) {
+            return pharmacyService.getProductMasterItemByNpcCodeAndProgram(code, selectedProgram);
+        }
+        return null;
+    }
+
+    private String firstPresent(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty()) {
+                return value.trim();
+            }
+        }
+        return "";
     }
 
     private void validateAcceptedQuantity(Item item, BigDecimal receivedQuantity, BigDecimal acceptedQuantity, int lineIndex) {

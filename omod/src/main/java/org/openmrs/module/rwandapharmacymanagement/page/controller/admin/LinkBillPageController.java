@@ -1,6 +1,7 @@
 package org.openmrs.module.rwandapharmacymanagement.page.controller.admin;
 
 import org.openmrs.Patient;
+import org.openmrs.api.context.Context;
 import org.openmrs.module.rwandapharmacymanagement.api.DispensingService;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import javax.servlet.http.HttpSession;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,8 +45,10 @@ public class LinkBillPageController {
             }
             Map<String, Object> row = new LinkedHashMap<String, Object>();
             row.put("request", request);
-            row.put("suggestedBillId", request.getPatient() == null ? null
-                    : dispensingService.findLatestPatientBillId(request.getPatient().getPatientId()));
+            Integer suggestedBillId = request.getPatient() == null ? null
+                    : dispensingService.findLatestPatientBillId(request.getPatient().getPatientId());
+            row.put("suggestedBillId", suggestedBillId);
+            row.put("suggestedConsommationId", findConsommationIdByPatientBillId(suggestedBillId));
             rows.add(row);
         }
         model.addAttribute("rows", rows);
@@ -56,7 +60,8 @@ public class LinkBillPageController {
 
     public String post(@SpringBean("dispensingService") DispensingService dispensingService,
                        @RequestParam("requestId") Integer requestId,
-                       @RequestParam("patientBillId") Integer patientBillId,
+                       @RequestParam(value = "patientBillId", required = false) Integer patientBillId,
+                       @RequestParam(value = "consommationId", required = false) Integer consommationId,
                        HttpSession session,
                        UiUtils ui) {
         try {
@@ -64,6 +69,7 @@ public class LinkBillPageController {
             if (request == null || !isMissingLinkedBillPrescription(request)) {
                 throw new IllegalArgumentException("Request was not found or does not need bill linking.");
             }
+            patientBillId = resolvePatientBillId(patientBillId, consommationId);
             Boolean paid = dispensingService.isPatientBillPaid(patientBillId);
             if (paid == null) {
                 throw new IllegalArgumentException("Patient bill " + patientBillId + " was not found.");
@@ -81,6 +87,77 @@ public class LinkBillPageController {
             FlashMessageSupport.set(session, FLASH_ERROR_MESSAGE, e.getMessage());
             return "redirect:" + ui.pageLink("rwandapharmacymanagement", "admin/linkBill");
         }
+    }
+
+    private Integer resolvePatientBillId(Integer patientBillId, Integer consommationId) {
+        if (patientBillId != null) {
+            return patientBillId;
+        }
+        if (consommationId == null) {
+            throw new IllegalArgumentException("Enter either a patient bill ID or a consommation ID.");
+        }
+        try {
+            Class<?> billingServiceClass = Context.loadClass("org.openmrs.module.mohbilling.service.BillingService");
+            Object billingService = Context.getService(billingServiceClass);
+            if (billingService == null) {
+                throw new IllegalArgumentException("MOH Billing service is not available.");
+            }
+            Object consommation = billingServiceClass.getMethod("getConsommation", Integer.class)
+                    .invoke(billingService, consommationId);
+            Object patientBill = invokeNoArg(consommation, "getPatientBill");
+            Integer resolvedPatientBillId = extractInteger(patientBill, "getPatientBillId");
+            if (resolvedPatientBillId == null) {
+                throw new IllegalArgumentException("Consommation " + consommationId + " has no patient bill.");
+            }
+            return resolvedPatientBillId;
+        }
+        catch (IllegalArgumentException e) {
+            throw e;
+        }
+        catch (Exception e) {
+            throw new IllegalArgumentException("Consommation " + consommationId + " was not found.");
+        }
+    }
+
+    private Integer findConsommationIdByPatientBillId(Integer patientBillId) {
+        if (patientBillId == null) {
+            return null;
+        }
+        try {
+            Class<?> billingServiceClass = Context.loadClass("org.openmrs.module.mohbilling.service.BillingService");
+            Class<?> patientBillClass = Context.loadClass("org.openmrs.module.mohbilling.model.PatientBill");
+            Object billingService = Context.getService(billingServiceClass);
+            if (billingService == null) {
+                return null;
+            }
+            Object patientBill = billingServiceClass.getMethod("getPatientBill", Integer.class)
+                    .invoke(billingService, patientBillId);
+            Object consommation = patientBill == null ? null
+                    : billingServiceClass.getMethod("getConsommationByPatientBill", patientBillClass)
+                    .invoke(billingService, patientBill);
+            return extractInteger(consommation, "getConsommationId");
+        }
+        catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Object invokeNoArg(Object target, String methodName) {
+        if (target == null) {
+            return null;
+        }
+        try {
+            Method method = target.getClass().getMethod(methodName);
+            return method.invoke(target);
+        }
+        catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Integer extractInteger(Object target, String methodName) {
+        Object value = invokeNoArg(target, methodName);
+        return value instanceof Integer ? (Integer) value : null;
     }
 
     private boolean isMissingLinkedBillPrescription(PatientDispensingRequest request) {

@@ -105,7 +105,7 @@ public class MainToDispensingPageController {
     private List<PharmacyLocation> getDispensingPharmacies(PharmacyService pharmacyService) {
         List<PharmacyLocation> dispensingPharmacies = new ArrayList<PharmacyLocation>();
         for (PharmacyLocation location : pharmacyService.getAllPharmacyLocations()) {
-            if (location != null && Boolean.TRUE.equals(location.getActive())
+            if (location != null && !Boolean.FALSE.equals(location.getActive())
                     && location.getLocationType() == org.openmrs.module.rwandapharmacymanagement.model.enums.PharmacyLocationType.DISPENSING_PHARMACY) {
                 dispensingPharmacies.add(location);
             }

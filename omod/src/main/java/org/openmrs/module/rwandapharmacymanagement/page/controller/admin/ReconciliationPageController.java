@@ -92,7 +92,7 @@ public class ReconciliationPageController {
 
     private boolean isUsablePharmacy(PharmacyLocation pharmacyLocation) {
         return pharmacyLocation != null && pharmacyLocation.getPharmacyLocationId() != null
-                && Boolean.TRUE.equals(pharmacyLocation.getActive());
+                && !Boolean.FALSE.equals(pharmacyLocation.getActive());
     }
 
     private void rememberDispensingSelection(PharmacyService pharmacyService, HttpSession session, Integer pharmacyLocationId) {

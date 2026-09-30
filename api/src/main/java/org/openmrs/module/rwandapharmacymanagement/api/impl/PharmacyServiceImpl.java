@@ -168,15 +168,20 @@ public class PharmacyServiceImpl extends BaseOpenmrsService implements PharmacyS
                         && existing.getPharmacyLocationId().equals(pharmacyLocation.getPharmacyLocationId())) {
                     continue;
                 }
-                if (Boolean.TRUE.equals(existing.getMainStore())
-                        || existing.getLocationType() == org.openmrs.module.rwandapharmacymanagement.model.enums.PharmacyLocationType.MAIN_PHARMACY) {
-                    existing.setMainStore(Boolean.FALSE);
-                    existing.setLocationType(org.openmrs.module.rwandapharmacymanagement.model.enums.PharmacyLocationType.DISPENSING_PHARMACY);
-                    pharmacyDao.savePharmacyLocation(existing);
+                if (isActiveMainPharmacy(existing)) {
+                    throw new IllegalArgumentException("An active main pharmacy is already configured: " + existing.getName());
                 }
             }
         }
         return pharmacyDao.savePharmacyLocation(pharmacyLocation);
+    }
+
+    private boolean isActiveMainPharmacy(PharmacyLocation pharmacyLocation) {
+        return pharmacyLocation != null
+                && !Boolean.TRUE.equals(pharmacyLocation.getVoided())
+                && !Boolean.FALSE.equals(pharmacyLocation.getActive())
+                && (Boolean.TRUE.equals(pharmacyLocation.getMainStore())
+                || pharmacyLocation.getLocationType() == org.openmrs.module.rwandapharmacymanagement.model.enums.PharmacyLocationType.MAIN_PHARMACY);
     }
 
     @Override

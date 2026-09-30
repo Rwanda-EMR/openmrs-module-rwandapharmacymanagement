@@ -49,7 +49,7 @@ public final class DeliveryReceiptSupport {
         Item item = new Item();
         item.setCode(normalizedCode);
         item.setName(normalizedName);
-        item.setProgram("");
+        item.setProgram(normalizedProgram);
         item.setSupplierManaged(Boolean.TRUE);
         item.setStockable(Boolean.TRUE);
         item.setDispensable(Boolean.TRUE);
@@ -69,21 +69,32 @@ public final class DeliveryReceiptSupport {
         if (mappedItem != null) {
             return mappedItem;
         }
+        String npcCode = normalized(productMasterItem.getNpcCode());
+        String program = normalized(productMasterItem.getProgram());
+        if (!npcCode.isEmpty()) {
+            Item existingByCodeAndProgram = pharmacyService.getItemByCodeAndProgram(npcCode, program);
+            if (existingByCodeAndProgram != null) {
+                pharmacyService.mapProductMasterItemToItem(productMasterItem, existingByCodeAndProgram);
+                return existingByCodeAndProgram;
+            }
+        }
         String itemName = normalized(productMasterItem.getItemName());
-        Item existingByName = findExistingItemByExactName(pharmacyService, itemName);
+        Item existingByName = findExistingItemByExactNameAndProgram(pharmacyService, itemName, program);
         if (existingByName != null) {
             pharmacyService.mapProductMasterItemToItem(productMasterItem, existingByName);
             return existingByName;
         }
-        Item existingByCode = pharmacyService.getItemByCode(normalized(productMasterItem.getNpcCode()));
-        if (existingByCode != null) {
-            pharmacyService.mapProductMasterItemToItem(productMasterItem, existingByCode);
-            return existingByCode;
+        if (program.isEmpty()) {
+            Item existingByCode = pharmacyService.getItemByCode(npcCode);
+            if (existingByCode != null) {
+                pharmacyService.mapProductMasterItemToItem(productMasterItem, existingByCode);
+                return existingByCode;
+            }
         }
         Item item = new Item();
-        item.setCode(normalized(productMasterItem.getNpcCode()));
+        item.setCode(npcCode);
         item.setName(itemName);
-        item.setProgram("");
+        item.setProgram(program);
         item.setSupplierManaged(Boolean.TRUE);
         item.setStockable(Boolean.TRUE);
         item.setDispensable(Boolean.TRUE);
@@ -137,6 +148,21 @@ public final class DeliveryReceiptSupport {
         }
         for (Item item : matches) {
             if (item != null && item.getName() != null && itemName.equalsIgnoreCase(normalized(item.getName()))) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    private static Item findExistingItemByExactNameAndProgram(PharmacyService pharmacyService, String itemName, String program) {
+        List<Item> matches = pharmacyService.searchItems(itemName, 20);
+        if (matches == null) {
+            return null;
+        }
+        String normalizedProgram = normalized(program);
+        for (Item item : matches) {
+            if (item != null && item.getName() != null && itemName.equalsIgnoreCase(normalized(item.getName()))
+                    && normalizedProgram.equalsIgnoreCase(normalized(item.getProgram()))) {
                 return item;
             }
         }

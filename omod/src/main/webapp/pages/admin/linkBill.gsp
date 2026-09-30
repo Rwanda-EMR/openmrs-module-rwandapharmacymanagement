@@ -87,10 +87,17 @@
                             <input type="hidden" name="requestId" value="${ request.patientDispensingRequestId ?: '' }"/>
                             <div class="bill-field">
                                 <label>Patient bill ID</label>
-                                <input type="number" name="patientBillId" value="${ row.suggestedBillId ?: '' }" required="required"/>
+                                <input type="number" name="patientBillId" value="${ row.suggestedBillId ?: '' }"/>
+                            </div>
+                            <div class="bill-field" style="margin-top:8px;">
+                                <label>Consommation ID</label>
+                                <input type="number" name="consommationId" value="${ row.suggestedConsommationId ?: '' }"/>
                             </div>
                             <% if (row.suggestedBillId) { %>
                             <div class="bill-muted">Suggested latest bill: ${ row.suggestedBillId }</div>
+                            <% } %>
+                            <% if (row.suggestedConsommationId) { %>
+                            <div class="bill-muted">Suggested consommation: ${ row.suggestedConsommationId }</div>
                             <% } %>
                             <button type="submit" class="bill-btn bill-btn-primary" style="margin-top:8px;">Link bill</button>
                         </form>

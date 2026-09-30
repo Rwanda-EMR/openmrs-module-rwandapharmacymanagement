@@ -59,6 +59,11 @@ public interface DispensingDao {
 
     List<DispenseRecord> getDispenseRecords(Date fromInclusive, Date toExclusive, Integer pharmacyLocationId);
 
+    List<PatientDispensingRequest> getPatientDispensingRequests(Date fromInclusive,
+                                                                 Date toExclusive,
+                                                                 Integer pharmacyLocationId,
+                                                                 RequestType requestType);
+
     List<PatientDispensingRequest> getPaymentExceptionApprovedRequests(Date fromInclusive,
                                                                        Date toExclusive,
                                                                        Integer pharmacyLocationId,
@@ -70,6 +75,8 @@ public interface DispensingDao {
                                                                   RequestType requestType);
 
     PatientDispensingRequest getRequest(Integer requestId);
+
+    PatientDispensingRequest getRequestForUpdate(Integer requestId);
 
     PatientDispensingRequest saveRequest(PatientDispensingRequest patientDispensingRequest);
 

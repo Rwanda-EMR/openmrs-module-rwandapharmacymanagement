@@ -1,5 +1,14 @@
 <%
     ui.decorateWith("rwandapharmacymanagement", "simplePage")
+    def exportParams = [startDate: startDate, endDate: endDate, status: selectedStatus]
+    if (selectedPharmacyLocationId) {
+        exportParams.pharmacyLocationId = selectedPharmacyLocationId
+    }
+    if (selectedItemId) {
+        exportParams.itemId = selectedItemId
+    }
+    def exportExcelUrl = ui.pageLink("rwandapharmacymanagement", "report/writeOffDisposalReportExport", exportParams + [format: "excel"])
+    def exportPdfUrl = ui.pageLink("rwandapharmacymanagement", "report/writeOffDisposalReportExport", exportParams + [format: "pdf"])
 %>
 <h2>Write-off and Disposal Report</h2>
 <p style="color:#64748b;">Tracks stock removed from available inventory and whether the physical disposal was recorded.</p>
@@ -41,6 +50,12 @@
     </div>
     <button type="submit">Load report</button>
 </form>
+
+<p>
+    <a href="${ exportExcelUrl }">Export Excel</a>
+    |
+    <a href="${ exportPdfUrl }">Export PDF</a>
+</p>
 
 <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:12px 0;">
     <div><strong>Write-offs:</strong> ${ totals?.writeOffCount ?: 0 }</div>

@@ -111,7 +111,7 @@ public final class CurrentPharmacySupport {
         }
         List<PharmacyLocation> candidates = new ArrayList<PharmacyLocation>();
         for (PharmacyLocation pharmacyLocation : pharmacyService.getAllPharmacyLocations()) {
-            if (pharmacyLocation == null || !Boolean.TRUE.equals(pharmacyLocation.getActive())
+            if (pharmacyLocation == null || Boolean.FALSE.equals(pharmacyLocation.getActive())
                     || Boolean.TRUE.equals(pharmacyLocation.getMainStore())) {
                 continue;
             }

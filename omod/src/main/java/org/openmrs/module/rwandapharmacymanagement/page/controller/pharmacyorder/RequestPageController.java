@@ -114,7 +114,7 @@ public class RequestPageController {
     private List<PharmacyLocation> getActivePharmacies(PharmacyService pharmacyService) {
         List<PharmacyLocation> pharmacies = new ArrayList<PharmacyLocation>();
         for (PharmacyLocation pharmacy : pharmacyService.getAllPharmacyLocations()) {
-            if (pharmacy != null && Boolean.TRUE.equals(pharmacy.getActive()) && pharmacy.getPharmacyLocationId() != null) {
+            if (pharmacy != null && !Boolean.FALSE.equals(pharmacy.getActive()) && pharmacy.getPharmacyLocationId() != null) {
                 pharmacies.add(pharmacy);
             }
         }

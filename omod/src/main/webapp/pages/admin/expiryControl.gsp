@@ -24,6 +24,14 @@
 <% } %>
 <% if (activePharmacy) { %>
 <p><strong>Main pharmacy:</strong> ${ activePharmacy.name }</p>
+<form method="get" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 12px;">
+    <input type="hidden" name="pharmacyLocationId" value="${ activePharmacy.pharmacyLocationId }"/>
+    <input type="search" name="q" value="${ q ?: '' }" placeholder="Search item name, code, programme, category, or batch" style="min-width:320px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;"/>
+    <button type="submit">Search</button>
+    <% if (q) { %>
+    <a href="${ ui.pageLink('rwandapharmacymanagement', 'admin/expiryControl', [pharmacyLocationId: activePharmacy.pharmacyLocationId]) }">Clear</a>
+    <% } %>
+</form>
 <table>
     <thead>
     <tr>
@@ -56,6 +64,7 @@
             <form method="post" id="expiry-form-${ balance.inventoryBalanceId }" style="margin:0;">
                 <input type="hidden" name="action" value="updateExpiry"/>
                 <input type="hidden" name="pharmacyLocationId" value="${ activePharmacy.pharmacyLocationId }"/>
+                <input type="hidden" name="q" value="${ q ?: '' }"/>
                 <input type="hidden" name="inventoryBalanceId" value="${ balance.inventoryBalanceId }"/>
                 <input type="date" class="openmrs-date-field" name="expiryDate" value="${ balance.expiryDate ? balance.expiryDate.format('yyyy-MM-dd') : '' }" required="required"/>
             </form>
@@ -65,6 +74,7 @@
             <form method="post" id="writeoff-form-${ balance.inventoryBalanceId }" style="margin:0;display:grid;gap:4px;min-width:220px;">
                 <input type="hidden" name="action" value="writeOff"/>
                 <input type="hidden" name="pharmacyLocationId" value="${ activePharmacy.pharmacyLocationId }"/>
+                <input type="hidden" name="q" value="${ q ?: '' }"/>
                 <input type="hidden" name="inventoryBalanceId" value="${ balance.inventoryBalanceId }"/>
                 <input type="number" name="quantity" step="0.01" min="0.01" max="${ quantityOnHand }" value="${ quantityOnHand }" required="required"/>
                 <input type="text" name="reason" placeholder="Write-off reason" value="Expired stock" required="required"/>
@@ -82,12 +92,15 @@
     </tr>
     <% } %>
     <% if (!stockBalances) { %>
-    <tr><td colspan="7">No stock batches are available for this pharmacy.</td></tr>
+    <tr><td colspan="7">${ q ? 'No stock batches match that search.' : 'No stock batches are available for this pharmacy.' }</td></tr>
     <% } %>
     </tbody>
 </table>
 
 <h3 style="margin-top:24px;">Written-off Stock Awaiting Disposal</h3>
+<p>
+    <a href="${ ui.pageLink('rwandapharmacymanagement', 'admin/expiryControlExport') }">Download write-off and disposal report</a>
+</p>
 <table>
     <thead>
     <tr>
@@ -119,6 +132,7 @@
             <form method="post" id="dispose-form-${ tx.stockTransactionId }" style="margin:0;display:grid;gap:4px;min-width:220px;">
                 <input type="hidden" name="action" value="dispose"/>
                 <input type="hidden" name="pharmacyLocationId" value="${ activePharmacy.pharmacyLocationId }"/>
+                <input type="hidden" name="q" value="${ q ?: '' }"/>
                 <input type="hidden" name="writeOffStockTransactionId" value="${ tx.stockTransactionId }"/>
                 <input type="text" name="disposalMethod" placeholder="Disposal method" required="required"/>
                 <input type="text" name="notes" placeholder="Notes / witness"/>

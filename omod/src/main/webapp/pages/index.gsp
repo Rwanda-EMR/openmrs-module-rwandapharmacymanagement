@@ -56,11 +56,15 @@
         <span class="tile-icon">☰</span>
         <span class="tile-label">Patient Queue <% if ((queueCounts['queue/patientQueue'] ?: 0) > 0) { %><span class="tile-count-badge">${ queueCounts['queue/patientQueue'] }</span><% } %></span>
     </a>
-    <a class="tile tile-dispense" href="${ ui.pageLink("rwandapharmacymanagement", "dispense/withOrder") }">
-        <span class="tile-icon">✓</span>
-        <span class="tile-label">Dispense With Order</span>
-    </a>
-    <a class="tile tile-supplier" href="${ ui.pageLink("rwandapharmacymanagement", "supplier/deliveryReceive") }">
+	    <a class="tile tile-dispense" href="${ ui.pageLink("rwandapharmacymanagement", "dispense/withOrder") }">
+	        <span class="tile-icon">✓</span>
+	        <span class="tile-label">Dispense With Order</span>
+	    </a>
+	    <a class="tile tile-dispense" href="${ ui.pageLink("rwandapharmacymanagement", "report/patientRequestReport") }">
+	        <span class="tile-icon">☰</span>
+	        <span class="tile-label">Patient Request Report</span>
+	    </a>
+	    <a class="tile tile-supplier" href="${ ui.pageLink("rwandapharmacymanagement", "supplier/deliveryReceive") }">
         <span class="tile-icon">⇣</span>
         <span class="tile-label">Receive Delivery</span>
     </a>
@@ -101,5 +105,9 @@
     <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "report/writeOffDisposalReport") }">
         <span class="tile-icon">⌧</span>
         <span class="tile-label">Write-off and Disposal Report</span>
+    </a>
+    <a class="tile tile-supplier" href="${ ui.pageLink("rwandapharmacymanagement", "report/purchaseOrderReconciliationReport") }">
+        <span class="tile-icon">≣</span>
+        <span class="tile-label">PO Reconciliation Report</span>
     </a>
 </div>

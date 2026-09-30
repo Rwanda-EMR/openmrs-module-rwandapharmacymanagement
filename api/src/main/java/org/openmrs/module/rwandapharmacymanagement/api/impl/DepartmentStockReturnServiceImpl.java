@@ -248,7 +248,7 @@ public class DepartmentStockReturnServiceImpl extends BaseOpenmrsService impleme
 
     private void requireDepartmentStore(PharmacyLocation departmentLocation) {
         if (departmentLocation == null || departmentLocation.getPharmacyLocationId() == null
-                || !Boolean.TRUE.equals(departmentLocation.getActive())
+                || Boolean.FALSE.equals(departmentLocation.getActive())
                 || departmentLocation.getLocationType() != PharmacyLocationType.DEPARTMENT_STORE) {
             throw new IllegalArgumentException("Department store is required");
         }
@@ -256,7 +256,7 @@ public class DepartmentStockReturnServiceImpl extends BaseOpenmrsService impleme
 
     private void requireReceivingPharmacy(PharmacyLocation destinationPharmacyLocation) {
         if (destinationPharmacyLocation == null || destinationPharmacyLocation.getPharmacyLocationId() == null
-                || !Boolean.TRUE.equals(destinationPharmacyLocation.getActive())
+                || Boolean.FALSE.equals(destinationPharmacyLocation.getActive())
                 || destinationPharmacyLocation.getLocationType() == PharmacyLocationType.DEPARTMENT_STORE) {
             throw new IllegalArgumentException("Choose an active receiving pharmacy");
         }

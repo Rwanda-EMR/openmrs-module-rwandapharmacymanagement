@@ -68,6 +68,7 @@
     <li>Open the request to view or dispense.</li>
 </ol>
 <p>The serve page only offers batches from the active pharmacy. Hidden prescription items cannot be dispensed, even if stock exists.</p>
+<p>After the serve form passes validation, the submit buttons are disabled while the request is being processed. This prevents accidental double-click dispensing from the same browser page.</p>
 <p>Use <strong>Dispensing history</strong> to review completed patient dispensing records. Use <strong>Dispense without order</strong> only where the workflow is enabled and the user has the required privilege.</p>
 
 <h3>4.3 Drug Not Available</h3>
@@ -338,6 +339,7 @@
     <tr><td>Department dispense shows main pharmacy batches</td><td>Check active pharmacy selection and location mapping. Department pharmacy dispense should use the active dispensing pharmacy only.</td></tr>
     <tr><td>Hidden item still appears available</td><td>Refresh product/stock pages and confirm the item is hidden in Item visibility control. Hidden items should behave as unavailable to requesters and patient queue dispensing.</td></tr>
     <tr><td>Prescription billing creates fewer lines than requested</td><td>Check billing mappings, duplicate billable service mappings, hidden/unavailable items, and linked patient bill status.</td></tr>
+    <tr><td>Item movement shows duplicate patient dispense rows</td><td>Check <code>rpm_dispense_record</code>, <code>rpm_dispense_record_line</code>, and <code>rpm_stock_transaction</code> for the same request, item, quantity, batch, user, and close timestamps. New dispense stock transactions store the request id in <code>reference_number</code>.</td></tr>
 </table>
 
 </body>

@@ -123,7 +123,7 @@ public class ReturnQueuePageController {
         }
         List<PharmacyLocation> candidates = new ArrayList<PharmacyLocation>();
         for (PharmacyLocation pharmacyLocation : pharmacyService.getAllPharmacyLocations()) {
-            if (pharmacyLocation == null || !Boolean.TRUE.equals(pharmacyLocation.getActive())
+            if (pharmacyLocation == null || Boolean.FALSE.equals(pharmacyLocation.getActive())
                     || pharmacyLocation.getLocationType() == org.openmrs.module.rwandapharmacymanagement.model.enums.PharmacyLocationType.DEPARTMENT_STORE) {
                 continue;
             }

@@ -40,6 +40,14 @@ public class NotBillableItemsReportExportPageController {
                 ? java.util.Collections.<DispenseRecord>emptyList()
                 : dispensingService.getDispenseRecordsForRequests(requestIds(lines));
         List<NotBillableItemsReportSupport.Row> rows = NotBillableItemsReportSupport.buildRows(lines, dispenseRecords);
+        NotBillableItemsReportSupport.Totals totals = NotBillableItemsReportSupport.totals(rows);
+        List<List<String>> summaryRows = ReportExportSummarySupport.rows(
+                "Lines", ReportExportSummarySupport.integer(totals.lineCount),
+                "Prescriptions", ReportExportSummarySupport.integer(totals.prescriptionCount),
+                "Consumables", ReportExportSummarySupport.integer(totals.consumableCount),
+                "Dispensed", ReportExportSummarySupport.integer(totals.dispensedCount),
+                "Pending", ReportExportSummarySupport.integer(totals.pendingCount)
+        );
         List<String> headers = Arrays.asList("Request date", "Patient", "Identifier", "Request", "Line",
                 "Type", "Item", "Item code", "Quantity", "Reason", "Requested by", "Requesting location",
                 "Target pharmacy", "Bill", "Payment confirmed", "Line status", "Dispensed", "Quantity dispensed",
@@ -73,13 +81,13 @@ public class NotBillableItemsReportExportPageController {
         String title = "Not Billable Items Report " + NotBillableItemsReportSupport.formatDate(startDate) + " to "
                 + NotBillableItemsReportSupport.formatDate(endDate);
         if ("excel".equalsIgnoreCase(format)) {
-            byte[] workbook = StockReportExcelRenderer.render("Not Billable Items", headers, body);
+            byte[] workbook = StockReportExcelRenderer.render("Not Billable Items", summaryRows, headers, body);
             response.setContentType("application/vnd.ms-excel");
             response.setHeader("Content-Disposition", "attachment; filename=\"not-billable-items-report.xls\"");
             response.setContentLength(workbook.length);
             response.getOutputStream().write(workbook);
         } else if ("pdf".equalsIgnoreCase(format)) {
-            byte[] pdf = StockReportPdfRenderer.render(title, headers, body);
+            byte[] pdf = StockReportPdfRenderer.render(title, summaryRows, headers, body);
             response.setContentType("application/pdf");
             response.setHeader("Content-Disposition", "attachment; filename=\"not-billable-items-report.pdf\"");
             response.setContentLength(pdf.length);

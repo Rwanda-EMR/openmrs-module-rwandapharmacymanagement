@@ -304,6 +304,14 @@ public class DispensingServiceImplTest {
         }
 
         @Override
+        public List<PatientDispensingRequest> getPatientDispensingRequests(Date fromInclusive,
+                                                                           Date toExclusive,
+                                                                           Integer pharmacyLocationId,
+                                                                           RequestType requestType) {
+            return Collections.emptyList();
+        }
+
+        @Override
         public List<PatientDispensingRequest> getPaymentExceptionApprovedRequests(Date fromInclusive,
                                                                                   Date toExclusive,
                                                                                   Integer pharmacyLocationId,
@@ -322,6 +330,11 @@ public class DispensingServiceImplTest {
         @Override
         public PatientDispensingRequest getRequest(Integer requestId) {
             return request;
+        }
+
+        @Override
+        public PatientDispensingRequest getRequestForUpdate(Integer requestId) {
+            return getRequest(requestId);
         }
 
         @Override

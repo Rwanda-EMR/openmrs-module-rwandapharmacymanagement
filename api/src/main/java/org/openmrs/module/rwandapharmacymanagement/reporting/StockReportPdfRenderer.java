@@ -25,6 +25,10 @@ public final class StockReportPdfRenderer {
     }
 
     public static byte[] render(String title, List<String> headers, List<List<String>> rows) {
+        return render(title, null, headers, rows);
+    }
+
+    public static byte[] render(String title, List<List<String>> summaryRows, List<String> headers, List<List<String>> rows) {
         try {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             int columnCount = headers == null ? 0 : headers.size();
@@ -36,6 +40,24 @@ public final class StockReportPdfRenderer {
             document.open();
             document.add(new Paragraph(title, TITLE_FONT));
             document.add(new Paragraph(" "));
+            if (summaryRows != null && !summaryRows.isEmpty()) {
+                PdfPTable summaryTable = new PdfPTable(2);
+                summaryTable.setWidthPercentage(45);
+                summaryTable.setHorizontalAlignment(com.itextpdf.text.Element.ALIGN_LEFT);
+                for (List<String> row : summaryRows) {
+                    String label = row == null || row.isEmpty() ? "" : row.get(0);
+                    String value = row == null || row.size() < 2 ? "" : row.get(1);
+                    PdfPCell labelCell = new PdfPCell(new Phrase(label, HEADER_FONT));
+                    labelCell.setBackgroundColor(new BaseColor(31, 95, 153));
+                    labelCell.setPadding(4f);
+                    summaryTable.addCell(labelCell);
+                    PdfPCell valueCell = new PdfPCell(new Phrase(value, BODY_FONT));
+                    valueCell.setPadding(4f);
+                    summaryTable.addCell(valueCell);
+                }
+                document.add(summaryTable);
+                document.add(new Paragraph(" "));
+            }
             PdfPTable table = new PdfPTable(columnCount);
             table.setWidthPercentage(100);
             table.setSplitLate(false);

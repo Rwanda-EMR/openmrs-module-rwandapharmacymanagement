@@ -4,6 +4,7 @@ import org.hibernate.SessionFactory;
 import org.hibernate.criterion.Criterion;
 import org.hibernate.criterion.Disjunction;
 import org.hibernate.criterion.Order;
+import org.hibernate.criterion.Projections;
 import org.hibernate.criterion.Restrictions;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.rwandapharmacymanagement.db.DispensingDao;
@@ -304,10 +305,11 @@ public class HibernateDispensingDao implements DispensingDao {
         if (patient == null) {
             return 0L;
         }
-        Object count = sessionFactory.getCurrentSession()
-                .createQuery("select count(r.patientDispensingRequestId) from PatientDispensingRequest r where r.voided = false and r.patient = :patient and (r.requestType is null or r.requestType = :requestType)")
-                .setParameter("patient", patient)
-                .setParameter("requestType", RequestType.PRESCRIPTION)
+        Object count = sessionFactory.getCurrentSession().createCriteria(PatientDispensingRequest.class)
+                .add(Restrictions.eq("voided", false))
+                .add(Restrictions.eq("patient", patient))
+                .add(prescriptionHistoryRestriction())
+                .setProjection(Projections.rowCount())
                 .uniqueResult();
         return count instanceof Number ? ((Number) count).longValue() : 0L;
     }
@@ -340,10 +342,11 @@ public class HibernateDispensingDao implements DispensingDao {
         if (patient == null) {
             return 0L;
         }
-        Object count = sessionFactory.getCurrentSession()
-                .createQuery("select count(r.patientDispensingRequestId) from PatientDispensingRequest r where r.voided = false and r.patient = :patient and r.requestType = :requestType")
-                .setParameter("patient", patient)
-                .setParameter("requestType", RequestType.CONSUMABLE)
+        Object count = sessionFactory.getCurrentSession().createCriteria(PatientDispensingRequest.class)
+                .add(Restrictions.eq("voided", false))
+                .add(Restrictions.eq("patient", patient))
+                .add(Restrictions.eq("requestType", RequestType.CONSUMABLE))
+                .setProjection(Projections.rowCount())
                 .uniqueResult();
         return count instanceof Number ? ((Number) count).longValue() : 0L;
     }
@@ -627,6 +630,10 @@ public class HibernateDispensingDao implements DispensingDao {
             if (billIdColumn == null) {
                 return null;
             }
+            Boolean paidByPatientDue = isPatientBillPaidByPatientDue(patientBillId, billIdColumn);
+            if (paidByPatientDue != null) {
+                return paidByPatientDue;
+            }
             Boolean paidByPayments = isPatientBillPaidByPayments(patientBillId, billIdColumn);
             if (paidByPayments != null) {
                 return paidByPayments;
@@ -640,6 +647,52 @@ public class HibernateDispensingDao implements DispensingDao {
         catch (RuntimeException ignored) {
             return null;
         }
+    }
+
+    private Boolean isPatientBillPaidByPatientDue(Integer patientBillId, String billIdColumn) {
+        BigDecimal patientBillDue = patientDueFromPatientBill(patientBillId, billIdColumn);
+        if (patientBillDue != null && patientBillDue.compareTo(BigDecimal.ZERO) <= 0) {
+            return Boolean.TRUE;
+        }
+        BigDecimal consommationDue = patientDueFromConsommation(patientBillId, billIdColumn);
+        return consommationDue != null && consommationDue.compareTo(BigDecimal.ZERO) <= 0 ? Boolean.TRUE : null;
+    }
+
+    private BigDecimal patientDueFromPatientBill(Integer patientBillId, String billIdColumn) {
+        String patientDueColumn = resolveExistingBillingColumn("patient_due", "patient_due_amount", "amount_due",
+                "due_amount", "patient_amount_due", "patient_due_balance");
+        if (patientDueColumn == null) {
+            return null;
+        }
+        Object result = sessionFactory.getCurrentSession()
+                .createSQLQuery("select " + patientDueColumn + " from moh_bill_patient_bill where "
+                        + billIdColumn + " = :patientBillId")
+                .setParameter("patientBillId", patientBillId)
+                .setMaxResults(1)
+                .uniqueResult();
+        return bigDecimalValue(result);
+    }
+
+    private BigDecimal patientDueFromConsommation(Integer patientBillId, String billIdColumn) {
+        String consommationTable = resolveExistingTable("moh_bill_consommation", "moh_bill_consumption");
+        if (consommationTable == null) {
+            return null;
+        }
+        String consommationBillColumn = resolveExistingColumn(consommationTable, "patient_bill_id", "patient_bill", "bill_id");
+        String patientDueColumn = resolveExistingColumn(consommationTable, "patient_due", "patient_due_amount",
+                "amount_due", "due_amount", "patient_amount_due", "patient_due_balance");
+        if (consommationBillColumn == null || patientDueColumn == null) {
+            return null;
+        }
+        String voidedColumn = resolveExistingColumn(consommationTable, "voided", "is_voided");
+        String voidedClause = voidedColumn == null ? "" : " and (c." + voidedColumn + " = 0 or c." + voidedColumn + " is null)";
+        Object result = sessionFactory.getCurrentSession()
+                .createSQLQuery("select min(c." + patientDueColumn + ") from " + consommationTable + " c "
+                        + "join moh_bill_patient_bill pb on pb." + billIdColumn + " = c." + consommationBillColumn + " "
+                        + "where pb." + billIdColumn + " = :patientBillId" + voidedClause)
+                .setParameter("patientBillId", patientBillId)
+                .uniqueResult();
+        return bigDecimalValue(result);
     }
 
     private Boolean isPatientBillPaidByPayments(Integer patientBillId, String billIdColumn) {
@@ -771,6 +824,38 @@ public class HibernateDispensingDao implements DispensingDao {
     }
 
     @Override
+    public List<PatientDispensingRequest> getPatientDispensingRequests(Date fromInclusive,
+                                                                       Date toExclusive,
+                                                                       Integer pharmacyLocationId,
+                                                                       RequestType requestType) {
+        org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(PatientDispensingRequest.class);
+        criteria.add(Restrictions.eq("voided", false));
+        if (fromInclusive != null) {
+            criteria.add(Restrictions.ge("dateCreated", fromInclusive));
+        }
+        if (toExclusive != null) {
+            criteria.add(Restrictions.lt("dateCreated", toExclusive));
+        }
+        if (requestType != null) {
+            criteria.add(Restrictions.eq("requestType", requestType));
+        }
+        if (pharmacyLocationId != null) {
+            criteria.createAlias("targetPharmacyLocation", "targetPharmacyLocation", org.hibernate.sql.JoinType.LEFT_OUTER_JOIN);
+            criteria.createAlias("lines", "line", org.hibernate.sql.JoinType.LEFT_OUTER_JOIN);
+            criteria.createAlias("line.routedPharmacyLocation", "routedPharmacyLocation", org.hibernate.sql.JoinType.LEFT_OUTER_JOIN);
+            Disjunction pharmacyMatch = Restrictions.disjunction();
+            pharmacyMatch.add(Restrictions.eq("targetPharmacyLocation.pharmacyLocationId", pharmacyLocationId));
+            pharmacyMatch.add(Restrictions.eq("routedPharmacyLocation.pharmacyLocationId", pharmacyLocationId));
+            pharmacyMatch.add(Restrictions.isNull("targetPharmacyLocation"));
+            criteria.add(pharmacyMatch);
+            criteria.setResultTransformer(org.hibernate.Criteria.DISTINCT_ROOT_ENTITY);
+        }
+        criteria.addOrder(Order.desc("dateCreated"));
+        criteria.addOrder(Order.desc("patientDispensingRequestId"));
+        return criteria.list();
+    }
+
+    @Override
     public List<PatientDispensingRequest> getPaymentExceptionApprovedRequests(Date fromInclusive,
                                                                               Date toExclusive,
                                                                               Integer pharmacyLocationId,
@@ -841,6 +926,18 @@ public class HibernateDispensingDao implements DispensingDao {
     @Override
     public PatientDispensingRequest getRequest(Integer requestId) {
         return (PatientDispensingRequest) sessionFactory.getCurrentSession().get(PatientDispensingRequest.class, requestId);
+    }
+
+    @Override
+    public PatientDispensingRequest getRequestForUpdate(Integer requestId) {
+        if (requestId == null) {
+            return null;
+        }
+        sessionFactory.getCurrentSession()
+                .createSQLQuery("select patient_dispensing_request_id from rpm_patient_dispensing_request where patient_dispensing_request_id = :requestId for update")
+                .setInteger("requestId", requestId)
+                .uniqueResult();
+        return getRequest(requestId);
     }
 
     @Override

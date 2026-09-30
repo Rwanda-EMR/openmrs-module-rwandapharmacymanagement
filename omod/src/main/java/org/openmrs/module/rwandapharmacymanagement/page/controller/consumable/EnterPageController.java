@@ -352,7 +352,7 @@ public class EnterPageController {
 
     private boolean isConsumableProductMasterItem(ProductMasterItem productMasterItem) {
         return productMasterItem != null
-                && Boolean.TRUE.equals(productMasterItem.getActive())
+                && !Boolean.FALSE.equals(productMasterItem.getActive())
                 && !MATERIAL_TYPE_DRUG.equalsIgnoreCase(safe(productMasterItem.getMaterialType()));
     }
 
@@ -361,7 +361,7 @@ public class EnterPageController {
         for (InventoryBalance balance : inventoryService.getInventoryForPharmacy(null)) {
             if (balance == null || balance.getPharmacyLocation() == null
                     || balance.getPharmacyLocation().getPharmacyLocationId() == null
-                    || !Boolean.TRUE.equals(balance.getPharmacyLocation().getActive())
+                    || Boolean.FALSE.equals(balance.getPharmacyLocation().getActive())
                     || !supportsConsumableOrderingSource(balance.getPharmacyLocation())
                     || balance.getItem() == null || balance.getItem().getItemId() == null
                     || Boolean.FALSE.equals(balance.getItem().getVisibleToRequesters())
@@ -414,7 +414,7 @@ public class EnterPageController {
         for (InventoryBalance balance : inventoryService.getInventoryForPharmacy(null)) {
             if (balance == null || balance.getPharmacyLocation() == null
                     || balance.getPharmacyLocation().getPharmacyLocationId() == null
-                    || !Boolean.TRUE.equals(balance.getPharmacyLocation().getActive())
+                    || Boolean.FALSE.equals(balance.getPharmacyLocation().getActive())
                     || !supportsConsumableOrderingSource(balance.getPharmacyLocation())
                     || balance.getItem() == null
                     || Boolean.FALSE.equals(balance.getItem().getVisibleToRequesters())

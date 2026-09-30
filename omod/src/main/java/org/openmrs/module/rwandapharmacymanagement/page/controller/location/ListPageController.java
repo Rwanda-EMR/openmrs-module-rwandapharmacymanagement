@@ -25,11 +25,13 @@ public class ListPageController {
                     @RequestParam(value = "page", required = false) Integer page,
                     @RequestParam(value = "pageSize", required = false) Integer pageSize) {
         List<PharmacyLocation> allPharmacyLocations = pharmacyService.getAllPharmacyLocations();
+        PharmacyLocation mainStore = pharmacyService.getMainStore();
         int currentPage = PaginationSupport.sanitizePage(page);
         int currentPageSize = PaginationSupport.sanitizePageSize(pageSize);
         currentPage = PaginationSupport.clampPage(currentPage, currentPageSize, allPharmacyLocations.size());
         model.addAttribute("pharmacyLocations", PaginationSupport.slice(allPharmacyLocations, currentPage, currentPageSize));
         model.addAttribute("allPharmacyLocations", allPharmacyLocations);
+        model.addAttribute("activeMainPharmacyLocationId", mainStore == null ? null : mainStore.getPharmacyLocationId());
         PaginationSupport.addAttributes(model, "location", currentPage, currentPageSize, allPharmacyLocations.size());
         model.addAttribute("locations", Context.getLocationService().getAllLocations(false));
         model.addAttribute("locationTags", Context.getLocationService().getAllLocationTags(false));

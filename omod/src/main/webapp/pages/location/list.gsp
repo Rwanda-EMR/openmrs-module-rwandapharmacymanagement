@@ -32,8 +32,8 @@
         <p>
             <label>Type</label><br/>
             <select name="locationType" id="locationType">
-                <option value="MAIN_PHARMACY">Main Pharmacy</option>
-                <option value="DISPENSING_PHARMACY">Dispensing Pharmacy</option>
+                <option value="MAIN_PHARMACY" id="main-pharmacy-type-option" ${ activeMainPharmacyLocationId ? 'disabled="disabled" style="display:none;"' : '' }>Main Pharmacy</option>
+                <option value="DISPENSING_PHARMACY" ${ activeMainPharmacyLocationId ? 'selected="selected"' : '' }>Dispensing Pharmacy</option>
                 <option value="DEPARTMENT_STORE">Department Store</option>
             </select>
         </p>
@@ -131,9 +131,26 @@
             Array.prototype.slice.call(openmrsLocationTagField.options).forEach(function(option) {
                 option.selected = selectedTags.indexOf(option.value) >= 0;
             });
+            updateMainPharmacyOption(record);
             typeField.value = record ? (record.type || 'DISPENSING_PHARMACY') : 'DISPENSING_PHARMACY';
+            updateMainPharmacyOption(record);
             if (editor) {
                 editor.value = record ? (record.id || '') : '';
+            }
+        }
+
+        function updateMainPharmacyOption(record) {
+            var mainOption = document.getElementById('main-pharmacy-type-option');
+            if (!mainOption) {
+                return;
+            }
+            var activeMainId = "${ activeMainPharmacyLocationId ?: '' }";
+            var editingCurrentMain = record && activeMainId && String(record.id || '') === String(activeMainId);
+            var shouldHide = activeMainId && !editingCurrentMain;
+            mainOption.disabled = !!shouldHide;
+            mainOption.style.display = shouldHide ? 'none' : '';
+            if (shouldHide && typeField.value === 'MAIN_PHARMACY') {
+                typeField.value = 'DISPENSING_PHARMACY';
             }
         }
 

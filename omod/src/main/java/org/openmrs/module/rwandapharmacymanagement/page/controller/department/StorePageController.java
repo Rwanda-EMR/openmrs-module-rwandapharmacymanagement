@@ -173,7 +173,7 @@ public class StorePageController {
         List<PharmacyLocation> directMatches = new ArrayList<PharmacyLocation>();
         List<PharmacyLocation> tagMatches = new ArrayList<PharmacyLocation>();
         for (PharmacyLocation pharmacyLocation : pharmacyService.getAllPharmacyLocations()) {
-            if (pharmacyLocation == null || !Boolean.TRUE.equals(pharmacyLocation.getActive())
+            if (pharmacyLocation == null || Boolean.FALSE.equals(pharmacyLocation.getActive())
                     || pharmacyLocation.getLocationType() != PharmacyLocationType.DEPARTMENT_STORE) {
                 continue;
             }
@@ -194,7 +194,7 @@ public class StorePageController {
     private List<PharmacyLocation> supplyingPharmacies(PharmacyService pharmacyService) {
         List<PharmacyLocation> locations = new ArrayList<PharmacyLocation>();
         for (PharmacyLocation location : pharmacyService.getAllPharmacyLocations()) {
-            if (location != null && Boolean.TRUE.equals(location.getActive())
+            if (location != null && !Boolean.FALSE.equals(location.getActive())
                     && location.getLocationType() != PharmacyLocationType.DEPARTMENT_STORE) {
                 locations.add(location);
             }

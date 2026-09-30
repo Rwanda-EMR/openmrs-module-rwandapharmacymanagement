@@ -267,7 +267,7 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
     }
 
     private void validateConsumable(ProductMasterItem productMasterItem) {
-        if (productMasterItem == null || !Boolean.TRUE.equals(productMasterItem.getActive())) {
+        if (productMasterItem == null || Boolean.FALSE.equals(productMasterItem.getActive())) {
             throw new IllegalArgumentException("Selected consumable item was not found");
         }
         if (MATERIAL_TYPE_DRUG.equalsIgnoreCase(safe(productMasterItem.getMaterialType()))) {
@@ -398,6 +398,10 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
                 invokeSetter(billedItem, "setConsommation", consommation, consommationClass);
                 createPatientServiceBillWithBillingUtil(billedItem, patientServiceBillClass);
             }
+            Object persistedConsommation = billingServiceClass.getMethod("getConsommationByPatientBill", patientBillClass)
+                    .invoke(billingService, patientBill);
+            validateCreatedConsumableBillItems(persistedConsommation == null ? consommation : persistedConsommation,
+                    billedItems.size());
             BigDecimal globalAmount = extractBigDecimal(globalBill, "getGlobalAmount");
             invokeSetter(globalBill, "setGlobalAmount", (globalAmount == null ? BigDecimal.ZERO : globalAmount).add(totalAmount), BigDecimal.class);
             saveGlobalBillWithBillingUtil(globalBill, Context.loadClass("org.openmrs.module.mohbilling.model.GlobalBill"));
@@ -413,6 +417,28 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
         catch (Exception ex) {
             throw new IllegalStateException("Unable to create MOH Billing bill for consumables", ex);
         }
+    }
+
+    private void validateCreatedConsumableBillItems(Object consommation, int expectedItemCount) {
+        int actualItemCount = countActiveBillItems(consommation);
+        if (actualItemCount != expectedItemCount) {
+            throw new IllegalStateException("MOH Billing created " + actualItemCount + " consumable bill item(s), expected "
+                    + expectedItemCount + ". The request was not linked to the incomplete bill.");
+        }
+    }
+
+    private int countActiveBillItems(Object consommation) {
+        Object billItems = consommation == null ? null : invokeNoArg(consommation, "getBillItems");
+        if (!(billItems instanceof Iterable)) {
+            return 0;
+        }
+        int count = 0;
+        for (Object billItem : (Iterable<?>) billItems) {
+            if (billItem != null && !extractBoolean(billItem, "getVoided")) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private boolean hasBillingMapping(PreparedLine line) {
@@ -1063,7 +1089,8 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
             }
             Object consommation = billingServiceClass.getMethod("getConsommationByPatientBill", patientBillClass)
                     .invoke(billingService, patientBill);
-            BigDecimal billAmount = extractBigDecimal(patientBill, "getAmount");
+            Object globalBill = consommation == null ? null : invokeNoArg(consommation, "getGlobalBill");
+            BigDecimal billAmount = activeConsumableBillItemsTotal(consommation);
             invokeSetter(patientBill, "setAmount", BigDecimal.ZERO, BigDecimal.class);
             invokeSetter(patientBill, "setVoided", Boolean.TRUE, Boolean.class);
             invokeSetter(patientBill, "setVoidedBy", Context.getAuthenticatedUser(), Context.loadClass("org.openmrs.User"));
@@ -1081,8 +1108,8 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
                         "org.openmrs.module.mohbilling.model.InsuranceBill", "saveInsuranceBill", reason);
                 zeroAndVoidNestedBill(billingServiceClass, billingService, consommation, "getThirdPartyBill",
                         "org.openmrs.module.mohbilling.model.ThirdPartyBill", "saveThirdPartyBill", reason);
+                detachConsommationFromGlobalBill(consommation);
                 billingServiceClass.getMethod("saveConsommation", consommationClass).invoke(billingService, consommation);
-                Object globalBill = invokeNoArg(consommation, "getGlobalBill");
                 if (globalBill != null && billAmount != null) {
                     BigDecimal globalAmount = extractBigDecimal(globalBill, "getGlobalAmount");
                     BigDecimal adjusted = (globalAmount == null ? BigDecimal.ZERO : globalAmount).subtract(billAmount);
@@ -1095,6 +1122,33 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
         catch (Exception e) {
             throw new IllegalStateException("Unable to void existing consumable bill before rebuilding it", e);
         }
+    }
+
+    private BigDecimal activeConsumableBillItemsTotal(Object consommation) {
+        Object billItems = consommation == null ? null : invokeNoArg(consommation, "getBillItems");
+        if (!(billItems instanceof Iterable)) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal total = BigDecimal.ZERO;
+        for (Object billItem : (Iterable<?>) billItems) {
+            if (billItem == null || extractBoolean(billItem, "getVoided")) {
+                continue;
+            }
+            BigDecimal quantity = extractBigDecimal(billItem, "getQuantity");
+            BigDecimal unitPrice = extractBigDecimal(billItem, "getUnitPrice");
+            if (quantity != null && unitPrice != null) {
+                total = total.add(quantity.multiply(unitPrice));
+            }
+        }
+        return total;
+    }
+
+    private void detachConsommationFromGlobalBill(Object consommation) throws Exception {
+        if (consommation == null || invokeNoArg(consommation, "getGlobalBill") == null) {
+            return;
+        }
+        invokeSetter(consommation, "setGlobalBill", null,
+                Context.loadClass("org.openmrs.module.mohbilling.model.GlobalBill"));
     }
 
     private void voidConsumableBillItems(Class<?> billingServiceClass,
@@ -1150,7 +1204,7 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
 
     private boolean isConsumableProductMasterItem(ProductMasterItem productMasterItem) {
         return productMasterItem != null
-                && Boolean.TRUE.equals(productMasterItem.getActive())
+                && !Boolean.FALSE.equals(productMasterItem.getActive())
                 && !MATERIAL_TYPE_DRUG.equalsIgnoreCase(safe(productMasterItem.getMaterialType()));
     }
 

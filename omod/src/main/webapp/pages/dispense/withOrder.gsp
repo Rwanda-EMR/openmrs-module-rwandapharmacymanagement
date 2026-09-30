@@ -388,6 +388,9 @@
     }
 
     function validateServeForm() {
+        if (window.__serveSubmitting) {
+            return false;
+        }
         var activeSubmit = window.__serveSubmitButton || null;
         if (activeSubmit && activeSubmit.name === 'markUnavailableLineId') {
             return true;
@@ -411,6 +414,16 @@
                 alert('Allocated quantity cannot exceed the prescribed quantity for this drug.');
                 return false;
             }
+        }
+        window.__serveSubmitting = true;
+        var submitButtons = document.querySelectorAll('#serve-request-form button[type="submit"]');
+        for (var b = 0; b < submitButtons.length; b++) {
+            submitButtons[b].disabled = true;
+            submitButtons[b].style.opacity = '0.65';
+            submitButtons[b].style.cursor = 'not-allowed';
+        }
+        if (activeSubmit) {
+            activeSubmit.textContent = '${ consumableRequest ? 'Serving request...' : 'Serving prescription...' }';
         }
         return true;
     }

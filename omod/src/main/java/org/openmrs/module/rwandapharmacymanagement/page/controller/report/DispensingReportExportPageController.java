@@ -35,6 +35,12 @@ public class DispensingReportExportPageController {
         List<DispenseRecord> records = dispensingService.getDispenseRecords(startDate,
                 DispensingReportSupport.nextDay(endDate), pharmacyLocationId);
         List<DispensingReportSupport.Row> rows = DispensingReportSupport.buildRows(records);
+        DispensingReportSupport.Totals totals = DispensingReportSupport.totals(rows);
+        List<List<String>> summaryRows = ReportExportSummarySupport.rows(
+                "Dispensed lines", ReportExportSummarySupport.integer(totals.lineCount),
+                "Total quantity", ReportExportSummarySupport.decimal(totals.quantityDispensed),
+                "Total value", ReportExportSummarySupport.decimal(totals.lineTotal)
+        );
         List<String> headers = Arrays.asList("Dispense date", "Patient", "Identifier", "Pharmacy", "Item dispensed",
                 "Item code", "Batch", "Expiry", "Quantity", "Unit price", "Total", "Prescription / request",
                 "Bill", "Status", "Requested by", "Requested where", "Target pharmacy", "Served by", "Served where");
@@ -65,13 +71,13 @@ public class DispensingReportExportPageController {
         String title = "Dispensing Report " + DispensingReportSupport.formatDate(startDate) + " to "
                 + DispensingReportSupport.formatDate(endDate);
         if ("excel".equalsIgnoreCase(format)) {
-            byte[] workbook = StockReportExcelRenderer.render("Dispensing Report", headers, body);
+            byte[] workbook = StockReportExcelRenderer.render("Dispensing Report", summaryRows, headers, body);
             response.setContentType("application/vnd.ms-excel");
             response.setHeader("Content-Disposition", "attachment; filename=\"dispensing-report.xls\"");
             response.setContentLength(workbook.length);
             response.getOutputStream().write(workbook);
         } else if ("pdf".equalsIgnoreCase(format)) {
-            byte[] pdf = StockReportPdfRenderer.render(title, headers, body);
+            byte[] pdf = StockReportPdfRenderer.render(title, summaryRows, headers, body);
             response.setContentType("application/pdf");
             response.setHeader("Content-Disposition", "attachment; filename=\"dispensing-report.pdf\"");
             response.setContentLength(pdf.length);

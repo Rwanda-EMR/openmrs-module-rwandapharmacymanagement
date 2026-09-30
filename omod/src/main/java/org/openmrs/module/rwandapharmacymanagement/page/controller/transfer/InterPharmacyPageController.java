@@ -102,7 +102,7 @@ public class InterPharmacyPageController {
         Integer activePharmacyId = activePharmacy == null ? null : activePharmacy.getPharmacyLocationId();
         boolean activeIsMainStore = activePharmacy != null && Boolean.TRUE.equals(activePharmacy.getMainStore());
         for (PharmacyLocation location : pharmacyService.getAllPharmacyLocations()) {
-            if (location == null || !Boolean.TRUE.equals(location.getActive()) || location.getPharmacyLocationId() == null) {
+            if (location == null || Boolean.FALSE.equals(location.getActive()) || location.getPharmacyLocationId() == null) {
                 continue;
             }
             if (activePharmacyId != null && activePharmacyId.equals(location.getPharmacyLocationId())) {

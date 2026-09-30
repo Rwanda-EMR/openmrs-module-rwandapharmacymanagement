@@ -28,7 +28,7 @@ final class StockReportSupport {
     static List<PharmacyLocation> getActivePharmacies(PharmacyService pharmacyService) {
         List<PharmacyLocation> pharmacies = new ArrayList<PharmacyLocation>();
         for (PharmacyLocation pharmacyLocation : pharmacyService.getAllPharmacyLocations()) {
-            if (pharmacyLocation != null && Boolean.TRUE.equals(pharmacyLocation.getActive())) {
+            if (pharmacyLocation != null && !Boolean.FALSE.equals(pharmacyLocation.getActive())) {
                 pharmacies.add(pharmacyLocation);
             }
         }

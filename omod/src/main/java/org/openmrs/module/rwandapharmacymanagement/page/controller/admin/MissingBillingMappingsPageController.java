@@ -60,7 +60,7 @@ public class MissingBillingMappingsPageController {
         Map<Integer, StockedItemSummary> byItemId = new LinkedHashMap<Integer, StockedItemSummary>();
         for (PharmacyLocation pharmacyLocation : pharmacyService.getAllPharmacyLocations()) {
             if (pharmacyLocation == null || pharmacyLocation.getPharmacyLocationId() == null
-                    || !Boolean.TRUE.equals(pharmacyLocation.getActive())) {
+                    || Boolean.FALSE.equals(pharmacyLocation.getActive())) {
                 continue;
             }
             List<InventoryBalance> balances = inventoryService.getInventoryForPharmacy(pharmacyLocation.getPharmacyLocationId());

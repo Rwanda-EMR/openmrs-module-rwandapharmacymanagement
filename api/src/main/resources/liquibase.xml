@@ -4,140 +4,152 @@
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-2.0.xsd">
 
-    <changeSet id="rpm-initial-schema" author="codex">
+    <changeSet id="rpm-liquibase-author-metadata" author="MoH Rwanda, PIH/IMB">
+        <comment>Normalize historical RPM Liquibase author metadata before renamed changesets are evaluated.</comment>
+        <update tableName="liquibasechangelog">
+            <column name="author" value="MoH Rwanda, PIH/IMB"/>
+            <where>author = 'codex' AND id LIKE 'rpm-%' AND (filename LIKE '%rwandapharmacymanagement%' OR filename LIKE '%liquibase.xml%')</where>
+        </update>
+    </changeSet>
+
+    <changeSet id="rpm-initial-schema" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-initial-schema.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-stock-transaction-performed-by" author="codex">
+    <changeSet id="rpm-stock-transaction-performed-by" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-stock-transaction-performed-by.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-product-master-and-suppliers" author="codex">
+    <changeSet id="rpm-product-master-and-suppliers" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-product-master-and-suppliers.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-purchase-orders" author="codex">
+    <changeSet id="rpm-purchase-orders" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-purchase-orders.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-purchase-order-facility-id-varchar" author="codex">
+    <changeSet id="rpm-purchase-order-facility-id-varchar" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-purchase-order-facility-id-varchar.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-product-master-drug-link" author="codex">
+    <changeSet id="rpm-product-master-drug-link" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-product-master-drug-link.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-delivery-receipt-purchase-order-link" author="codex">
+    <changeSet id="rpm-delivery-receipt-purchase-order-link" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-delivery-receipt-purchase-order-link.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-inter-pharmacy-transfer-workflow" author="codex">
+    <changeSet id="rpm-inter-pharmacy-transfer-workflow" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-inter-pharmacy-transfer-workflow.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-pharmacy-location-tag" author="codex">
+    <changeSet id="rpm-pharmacy-location-tag" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-pharmacy-location-tag.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-patient-request-billing-link" author="codex">
+    <changeSet id="rpm-patient-request-billing-link" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-patient-request-billing-link.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-request-line-order-link" author="codex">
+    <changeSet id="rpm-request-line-order-link" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-request-line-order-link.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-consumable-request-metadata" author="codex">
+    <changeSet id="rpm-consumable-request-metadata" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-consumable-request-metadata.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-requesting-location-link" author="codex">
+    <changeSet id="rpm-requesting-location-link" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-requesting-location-link.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-lab-supply-request-workflow" author="codex">
+    <changeSet id="rpm-lab-supply-request-workflow" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-lab-supply-request-workflow.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-purchase-order-fetched-receipt" author="codex">
+    <changeSet id="rpm-purchase-order-fetched-receipt" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-purchase-order-fetched-receipt.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-delivery-confirmation-line-metadata" author="codex">
+    <changeSet id="rpm-delivery-confirmation-line-metadata" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-delivery-confirmation-line-metadata.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-inter-pharmacy-transfer-line-costs" author="codex">
+    <changeSet id="rpm-inter-pharmacy-transfer-line-costs" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-inter-pharmacy-transfer-line-costs.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-lab-service-concept" author="codex">
+    <changeSet id="rpm-lab-service-concept" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-lab-service-concept.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-product-master-nullable-npc" author="codex">
+    <changeSet id="rpm-product-master-nullable-npc" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-product-master-nullable-npc.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-product-master-program-aware-prices" author="codex">
+    <changeSet id="rpm-product-master-program-aware-prices" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-product-master-program-aware-prices.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-pharmacy-location-tags-many" author="codex">
+    <changeSet id="rpm-pharmacy-location-tags-many" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-pharmacy-location-tags-many.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-pharmacy-item-request-workflow" author="codex">
+    <changeSet id="rpm-pharmacy-item-request-workflow" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-pharmacy-item-request-workflow.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-performance-indexes" author="codex">
+    <changeSet id="rpm-performance-indexes" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-performance-indexes.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-item-product-master-mapping" author="codex">
+    <changeSet id="rpm-item-product-master-mapping" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-item-product-master-mapping.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-request-line-uuid" author="codex">
+    <changeSet id="rpm-request-line-uuid" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-request-line-uuid.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-hie-prescription-identity" author="codex">
+    <changeSet id="rpm-hie-prescription-identity" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-hie-prescription-identity.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-hie-retry-log-metadata" author="codex">
+    <changeSet id="rpm-hie-retry-log-metadata" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-hie-retry-log-metadata.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-payment-exceptions" author="codex">
+    <changeSet id="rpm-payment-exceptions" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-payment-exceptions.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-inventory-balance-unique-active" author="codex">
+    <changeSet id="rpm-inventory-balance-unique-active" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-inventory-balance-unique-active.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-department-bulk-request-workflow" author="codex">
+    <changeSet id="rpm-department-bulk-request-workflow" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-department-bulk-request-workflow.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-department-stock-return-workflow" author="codex">
+    <changeSet id="rpm-department-stock-return-workflow" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-department-stock-return-workflow.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-item-requester-visibility" author="codex">
+    <changeSet id="rpm-item-requester-visibility" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-item-requester-visibility.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-inter-pharmacy-transfer-line-batches" author="codex">
+    <changeSet id="rpm-inter-pharmacy-transfer-line-batches" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-inter-pharmacy-transfer-line-batches.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
-    <changeSet id="rpm-request-line-billing-control" author="codex">
+    <changeSet id="rpm-request-line-billing-control" author="MoH Rwanda, PIH/IMB">
         <sqlFile path="sql/migrations/rpm-request-line-billing-control.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-delivery-receipt-line-program" author="MoH Rwanda, PIH/IMB">
+        <sqlFile path="sql/migrations/rpm-delivery-receipt-line-program.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
 </databaseChangeLog>

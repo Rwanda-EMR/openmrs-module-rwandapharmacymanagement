@@ -10,7 +10,7 @@ import java.io.UnsupportedEncodingException;
 public final class DeliveryReceiptTemplateRenderer {
 
     private static final String UTF_8 = "UTF-8";
-    private static final String FORMAT_INSTRUCTION = "Allowed format: itemCode=0000000000, itemName=text, requestedQuantity=0, purchaseUnitPrice=0, receivedQuantity=0, receivingPrice=0, batchNumber=text, expiryDate=yyyy-MM-dd or N/A";
+    private static final String FORMAT_INSTRUCTION = "Allowed format: itemCode=0000000000, itemName=text, program=text, requestedQuantity=0, purchaseUnitPrice=0, receivedQuantity=0, receivingPrice=0, batchNumber=text, expiryDate=yyyy-MM-dd or N/A";
 
     private DeliveryReceiptTemplateRenderer() {
     }
@@ -19,7 +19,7 @@ public final class DeliveryReceiptTemplateRenderer {
         StringBuilder builder = new StringBuilder();
         appendFormatInstruction(builder);
         appendHeader(builder);
-        appendRow(builder, "N02BE0106E", "PARACETAMOL 500MG", "", "", "15", "1250", "BATCH-001", "2028-06-30");
+        appendRow(builder, "N02BE0106E", "PARACETAMOL 500MG", "CP", "", "", "15", "1250", "BATCH-001", "2028-06-30");
         return toCsvBytes(builder);
     }
 
@@ -36,6 +36,7 @@ public final class DeliveryReceiptTemplateRenderer {
                         builder,
                         item.getItemCode(),
                         item.getItemName(),
+                        item.getProgram(),
                         item.getQuantity() == null ? "" : item.getQuantity().stripTrailingZeros().toPlainString(),
                         item.getUnitPrice() == null ? "" : item.getUnitPrice().stripTrailingZeros().toPlainString(),
                         "",
@@ -56,6 +57,7 @@ public final class DeliveryReceiptTemplateRenderer {
         appendRow(builder,
                 "itemCode",
                 "itemName",
+                "program",
                 "requestedQuantity",
                 "purchaseUnitPrice",
                 "receivedQuantity",
