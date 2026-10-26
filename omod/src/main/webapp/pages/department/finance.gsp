@@ -18,6 +18,8 @@
     .dept-line-remove input { width:155px; border:1px solid #cbd5e1; border-radius:4px; font-size:12px; padding:5px 7px; }
     .dept-removed { display:inline-block; padding:3px 8px; border-radius:999px; background:#fff1f2; color:#991b1b; font-size:11px; font-weight:600; }
     .dept-muted { color:#64748b; font-size:12px; }
+    .dept-stock-badge { display:inline-block; padding:3px 8px; border-radius:999px; background:#eff6ff; color:#1d4ed8; font-size:11px; font-weight:600; white-space:nowrap; }
+    .dept-stock-low { background:#fff1f2; color:#be123c; }
 </style>
 
 <div class="dept-card">
@@ -34,9 +36,10 @@
             <p class="dept-muted">Mode: ${ request.workflowMode ?: '' } | Requested by ${ request.creator ?: '' } | ${ request.dateCreated ? ui.formatDatePretty(request.dateCreated) : '' }</p>
             <p>${ request.justification ?: '' }</p>
             <table class="dept-table">
-                <thead><tr><th>Item</th><th>Prev requested</th><th>Prev received</th><th>Used</th><th>Remaining</th><th>Requested</th><th>Approved</th><th>Justification</th></tr></thead>
+                <thead><tr><th>Item</th><th>Prev requested</th><th>Prev received</th><th>Used</th><th>Remaining</th><th>Requested</th><th>Supplying pharmacy available</th><th>Approved</th><th>Justification</th></tr></thead>
                 <tbody>
                 <% request.lines?.each { line ->
+                    def servingAvailability = servingAvailabilityByLineId ? servingAvailabilityByLineId[line.departmentBulkRequestLineId] : null
                     def lineIsRemoved = line.voided == true
                 %>
                 <tr>
@@ -57,6 +60,7 @@
                     <td>${ line.previousUsedQuantity ?: 0 }</td>
                     <td>${ line.currentRemainingQuantity ?: 0 }</td>
                     <td>${ line.requestedQuantity ?: 0 }</td>
+                    <td><span class="dept-stock-badge ${ servingAvailability?.insufficient ? 'dept-stock-low' : '' }">${ servingAvailability?.quantity ?: '0' }</span></td>
                     <td>
                         <% if (lineIsRemoved) { %>
                         <span class="dept-muted">Not approvable</span>

@@ -1,5 +1,7 @@
 package org.openmrs.module.rwandapharmacymanagement.page.controller.pharmacyorder;
 
+import org.openmrs.api.context.Context;
+import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.TransferPreviousInfo;
@@ -7,7 +9,9 @@ import org.openmrs.module.rwandapharmacymanagement.model.InterPharmacyTransfer;
 import org.openmrs.module.rwandapharmacymanagement.model.InterPharmacyTransferLine;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
+import org.openmrs.module.rwandapharmacymanagement.web.support.CurrentPharmacySupport;
 import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
+import org.openmrs.module.rwandapharmacymanagement.web.support.NavigationVisibilitySupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
@@ -36,12 +40,16 @@ public class ApprovePageController {
                     @SpringBean("inventoryService") InventoryService inventoryService,
                     @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
                     HttpSession session) {
-        PharmacyLocation selectedPharmacy = pharmacyLocationId == null ? null : pharmacyService.getPharmacyLocation(pharmacyLocationId);
-        List<InterPharmacyTransfer> requests = getPendingApprovalRequests(inventoryService, selectedPharmacy);
-        model.addAttribute("pharmacies", pharmacyService.getAllPharmacyLocations());
+        requireApprovalPrivilege();
+        List<PharmacyLocation> accessiblePharmacies = getAccessibleApprovalPharmacies(pharmacyService, session);
+        PharmacyLocation selectedPharmacy = resolveSelectedApprovalPharmacy(accessiblePharmacies, pharmacyLocationId);
+        List<InterPharmacyTransfer> requests = getPendingApprovalRequests(inventoryService, accessiblePharmacies,
+                selectedPharmacy);
+        model.addAttribute("pharmacies", accessiblePharmacies);
         model.addAttribute("selectedPharmacy", selectedPharmacy);
         model.addAttribute("requests", requests);
         model.addAttribute("requestingQuantityByLineId", buildRequestingQuantityByLineId(inventoryService, requests));
+        model.addAttribute("servingAvailabilityByLineId", buildServingAvailabilityByLineId(inventoryService, requests));
         model.addAttribute("previousInfoByLineId", buildPreviousInfoByLineId(inventoryService, requests));
         model.addAttribute("approved", FlashMessageSupport.consumeBoolean(session, FLASH_APPROVED));
         model.addAttribute("rejected", FlashMessageSupport.consumeBoolean(session, FLASH_REJECTED));
@@ -49,6 +57,7 @@ public class ApprovePageController {
     }
 
     public String post(@SpringBean("inventoryService") InventoryService inventoryService,
+                       @SpringBean("pharmacyService") PharmacyService pharmacyService,
                        @RequestParam("transferId") Integer transferId,
                        @RequestParam(value = "pharmacyLocationId", required = false) Integer pharmacyLocationId,
                        @RequestParam("action") String action,
@@ -57,9 +66,13 @@ public class ApprovePageController {
                        @RequestParam(value = "lineVoidReason", required = false) String lineVoidReason,
                        HttpSession session,
                        UiUtils ui) {
+        requireApprovalPrivilege();
         InterPharmacyTransfer transfer = inventoryService.getTransfer(transferId);
         if (transfer == null || !"REQUESTED".equalsIgnoreCase(transfer.getTransferStatus())) {
             throw new IllegalArgumentException("Only requested pharmacy orders can be approved or rejected");
+        }
+        if (!isTransferSourceAccessible(transfer, getAccessibleApprovalPharmacies(pharmacyService, session))) {
+            throw new IllegalArgumentException("Only the pharmacy responsible for serving this request can approve or reject it");
         }
         if ("removeLine".equalsIgnoreCase(action)) {
             inventoryService.removeTransferLine(transferId, transferLineId, lineVoidReason);
@@ -77,10 +90,20 @@ public class ApprovePageController {
     }
 
     private List<InterPharmacyTransfer> getPendingApprovalRequests(InventoryService inventoryService,
+                                                                   List<PharmacyLocation> accessiblePharmacies,
                                                                    PharmacyLocation selectedPharmacy) {
-        Integer selectedSourceId = selectedPharmacy == null ? null : selectedPharmacy.getPharmacyLocationId();
-        List<InterPharmacyTransfer> requests = new ArrayList<InterPharmacyTransfer>(
-                inventoryService.getTransfers("REQUESTED", selectedSourceId, null, 200));
+        List<InterPharmacyTransfer> requests = new ArrayList<InterPharmacyTransfer>();
+        if (selectedPharmacy != null && selectedPharmacy.getPharmacyLocationId() != null) {
+            requests.addAll(inventoryService.getTransfers("REQUESTED", selectedPharmacy.getPharmacyLocationId(),
+                    null, 200));
+        } else if (accessiblePharmacies != null) {
+            for (PharmacyLocation pharmacyLocation : accessiblePharmacies) {
+                if (pharmacyLocation != null && pharmacyLocation.getPharmacyLocationId() != null) {
+                    requests.addAll(inventoryService.getTransfers("REQUESTED",
+                            pharmacyLocation.getPharmacyLocationId(), null, 200));
+                }
+            }
+        }
         Collections.sort(requests, new Comparator<InterPharmacyTransfer>() {
             @Override
             public int compare(InterPharmacyTransfer left, InterPharmacyTransfer right) {
@@ -99,6 +122,82 @@ public class ApprovePageController {
             }
         });
         return requests;
+    }
+
+    private List<PharmacyLocation> getAccessibleApprovalPharmacies(PharmacyService pharmacyService, HttpSession session) {
+        List<PharmacyLocation> pharmacies = new ArrayList<PharmacyLocation>();
+        PharmacyLocation mainStore = pharmacyService.getMainStore();
+        if (NavigationVisibilitySupport.matchesCurrentOpenmrsLocation(mainStore)) {
+            pharmacies.add(mainStore);
+        }
+        PharmacyLocation selectedDispensingPharmacy = CurrentPharmacySupport.resolveCurrentPharmacy(pharmacyService, session);
+        if (selectedDispensingPharmacy != null) {
+            pharmacies.add(selectedDispensingPharmacy);
+        } else {
+            pharmacies.addAll(CurrentPharmacySupport.getCandidatePharmacies(pharmacyService));
+        }
+        return deduplicatePharmacies(pharmacies);
+    }
+
+    private List<PharmacyLocation> deduplicatePharmacies(List<PharmacyLocation> pharmacies) {
+        List<PharmacyLocation> unique = new ArrayList<PharmacyLocation>();
+        if (pharmacies == null) {
+            return unique;
+        }
+        for (PharmacyLocation pharmacyLocation : pharmacies) {
+            if (pharmacyLocation == null || pharmacyLocation.getPharmacyLocationId() == null) {
+                continue;
+            }
+            boolean exists = false;
+            for (PharmacyLocation existing : unique) {
+                if (pharmacyLocation.getPharmacyLocationId().equals(existing.getPharmacyLocationId())) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                unique.add(pharmacyLocation);
+            }
+        }
+        return unique;
+    }
+
+    private PharmacyLocation resolveSelectedApprovalPharmacy(List<PharmacyLocation> accessiblePharmacies,
+                                                             Integer pharmacyLocationId) {
+        if (accessiblePharmacies == null || accessiblePharmacies.isEmpty()) {
+            return null;
+        }
+        if (pharmacyLocationId == null) {
+            return accessiblePharmacies.size() == 1 ? accessiblePharmacies.get(0) : null;
+        }
+        for (PharmacyLocation pharmacyLocation : accessiblePharmacies) {
+            if (pharmacyLocation != null && pharmacyLocationId.equals(pharmacyLocation.getPharmacyLocationId())) {
+                return pharmacyLocation;
+            }
+        }
+        throw new IllegalArgumentException("Selected pharmacy is not responsible for approvals at your current location");
+    }
+
+    private boolean isTransferSourceAccessible(InterPharmacyTransfer transfer, List<PharmacyLocation> accessiblePharmacies) {
+        Integer sourceId = transfer == null || transfer.getSourcePharmacyLocation() == null
+                ? null : transfer.getSourcePharmacyLocation().getPharmacyLocationId();
+        if (sourceId == null || accessiblePharmacies == null) {
+            return false;
+        }
+        for (PharmacyLocation pharmacyLocation : accessiblePharmacies) {
+            if (pharmacyLocation != null && sourceId.equals(pharmacyLocation.getPharmacyLocationId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void requireApprovalPrivilege() {
+        if (Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_TRANSFER_STOCK)
+                || Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER)) {
+            return;
+        }
+        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_MAIN_TO_DISPENSING_TRANSFER);
     }
 
     private Map<Integer, String> buildRequestingQuantityByLineId(InventoryService inventoryService,
@@ -131,6 +230,42 @@ public class ApprovePageController {
             }
         }
         return quantityByLineId;
+    }
+
+    private Map<Integer, Map<String, Object>> buildServingAvailabilityByLineId(InventoryService inventoryService,
+                                                                               List<InterPharmacyTransfer> requests) {
+        Map<Integer, Map<String, Object>> availabilityByLineId = new LinkedHashMap<Integer, Map<String, Object>>();
+        Map<Integer, Map<Integer, BigDecimal>> quantitiesByPharmacyId = new LinkedHashMap<Integer, Map<Integer, BigDecimal>>();
+        if (requests == null) {
+            return availabilityByLineId;
+        }
+        for (InterPharmacyTransfer request : requests) {
+            if (request == null || request.getSourcePharmacyLocation() == null
+                    || request.getSourcePharmacyLocation().getPharmacyLocationId() == null
+                    || request.getLines() == null) {
+                continue;
+            }
+            Integer servingPharmacyId = request.getSourcePharmacyLocation().getPharmacyLocationId();
+            Map<Integer, BigDecimal> quantitiesByItemId = quantitiesByPharmacyId.get(servingPharmacyId);
+            if (quantitiesByItemId == null) {
+                quantitiesByItemId = buildQuantityByItemId(inventoryService, servingPharmacyId);
+                quantitiesByPharmacyId.put(servingPharmacyId, quantitiesByItemId);
+            }
+            for (InterPharmacyTransferLine line : request.getLines()) {
+                if (line == null || line.getInterPharmacyTransferLineId() == null || line.getItem() == null
+                        || line.getItem().getItemId() == null) {
+                    continue;
+                }
+                BigDecimal available = quantitiesByItemId.containsKey(line.getItem().getItemId())
+                        ? quantitiesByItemId.get(line.getItem().getItemId()) : BigDecimal.ZERO;
+                BigDecimal requested = line.getQuantity() == null ? BigDecimal.ZERO : line.getQuantity();
+                Map<String, Object> values = new LinkedHashMap<String, Object>();
+                values.put("quantity", formatQuantity(available));
+                values.put("insufficient", Boolean.valueOf(available.compareTo(requested) < 0));
+                availabilityByLineId.put(line.getInterPharmacyTransferLineId(), values);
+            }
+        }
+        return availabilityByLineId;
     }
 
     private Map<Integer, BigDecimal> buildQuantityByItemId(InventoryService inventoryService, Integer pharmacyLocationId) {

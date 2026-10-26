@@ -136,10 +136,7 @@ public class ManagementPageController {
         if (purchaseOrder == null || purchaseOrder.getSupplier() == null) {
             return false;
         }
-        String code = purchaseOrder.getSupplier().getCode();
-        String name = purchaseOrder.getSupplier().getName();
-        return "RMS".equalsIgnoreCase(code == null ? "" : code.trim())
-                || (name != null && name.toUpperCase().contains("RMS"));
+        return Boolean.TRUE.equals(purchaseOrder.getSupplier().getApiEnabled());
     }
 
     private Date defaultFromDate() {

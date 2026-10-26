@@ -66,6 +66,8 @@ public final class RwandaPharmacyManagementConfig {
     public static final String GP_SMS_RETRY_BATCH_SIZE = MODULE_ID + ".sms.retryBatchSize";
 
     public static final String PRIVILEGE_DASHBOARD = "App: rwandapharmacymanagement.dashboard";
+    public static final String PRIVILEGE_CREATE_PRESCRIPTION = "Task: rwandapharmacymanagement.createPrescription";
+    public static final String PRIVILEGE_ORDER_CONSUMABLES = "Task: rwandapharmacymanagement.orderConsumables";
     public static final String PRIVILEGE_MANAGE_SETTINGS = "Task: rwandapharmacymanagement.manageSettings";
     public static final String PRIVILEGE_SUBMIT_SUPPLIER_ORDERS = "Task: rwandapharmacymanagement.submitSupplierOrders";
     public static final String PRIVILEGE_APPROVE_PURCHASE_ORDERS = "Task: rwandapharmacymanagement.approvePurchaseOrders";

@@ -519,11 +519,7 @@
             <td>
                 <div class="row-actions">
                     <% if (canAdjustStock) { %><a class="stock-btn" href="${ ui.pageLink("rwandapharmacymanagement", "admin/reconciliation", [pharmacyLocationId: mainStore?.pharmacyLocationId]) }">Adjust</a><% } %>
-                    <% if (cartItemKeyByItemId?.containsKey(item?.itemId)) { def matchingRow = cartRows.find { row -> row.itemId == item?.itemId } %>
-                    <a class="stock-btn stock-btn-added" href="${ ui.pageLink("rwandapharmacymanagement", "inventory/mainStore", [cart: 'true']) }">&#10003; In cart (${ matchingRow?.quantity ?: '' })</a>
-                    <% } else { %>
-                    <a class="stock-btn stock-btn-primary" href="${ ui.pageLink("rwandapharmacymanagement", "inventory/mainStore", [orderItemId: item?.itemId]) }">Order</a>
-                    <% } %>
+                    <a class="stock-btn stock-btn-primary" href="${ ui.pageLink("rwandapharmacymanagement", "inventory/mainStore", [cart: 'true']) }">Order cart</a>
                 </div>
             </td>
         </tr>
@@ -610,6 +606,7 @@
                         <form id="${ updateFormId }" method="post" style="margin:0;">
                             <input type="hidden" name="action" value="updateCart"/>
                             <input type="hidden" name="cartKey" value="${ row.cartKey }"/>
+                            <input type="hidden" name="supplierId" value="${ selectedSupplierId ?: '' }"/>
                             <input type="number" step="0.01" min="0" name="unitPrice" value="${ row.unitPrice ?: 0 }" style="width:92px;"/>
                         </form>
                     </td>
@@ -624,6 +621,7 @@
                         <form method="post" style="margin:0;">
                             <input type="hidden" name="action" value="removeFromCart"/>
                             <input type="hidden" name="cartKey" value="${ row.cartKey }"/>
+                            <input type="hidden" name="supplierId" value="${ selectedSupplierId ?: '' }"/>
                             <button type="submit" class="stock-btn stock-btn-danger" style="background:#d9534f;border-color:#c9302c;color:#fff;">&#10005; Remove</button>
                         </form>
                     </td>
@@ -640,9 +638,25 @@
             </table>
         </div>
         <div class="stock-cart-summary">${ cartCount } item(s) in cart | Total units ordered: ${ cartTotalQuantity }</div>
+        <div class="stock-field" style="margin:0 0 10px 0;max-width:360px;">
+            <form method="get" style="margin:0;">
+                <input type="hidden" name="cart" value="true"/>
+                <label>Select supplier first</label>
+                <select name="supplierId" data-no-searchable="true" required="required" onchange="this.form.submit()" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:3px;font-size:12px;">
+                    <option value="">Choose supplier</option>
+                    <% suppliers.each { supplier -> %>
+                    <option value="${ supplier.supplierId }" ${ selectedSupplierId == supplier.supplierId ? 'selected="selected"' : '' }>${ supplier.name }${ supplier.apiEnabled ? ' (API)' : '' }</option>
+                    <% } %>
+                </select>
+            </form>
+        </div>
+        <% if (!selectedSupplier) { %>
+        <div class="cart-empty-note">Choose a supplier to see orderable Product Master items.</div>
+        <% } else { %>
         <div class="stock-subpanel">
             <form method="post" style="margin:0;">
                 <input type="hidden" name="action" value="addProductMasterRowsToCart"/>
+                <input type="hidden" name="supplierId" value="${ selectedSupplierId ?: '' }"/>
                 <div class="stock-field" style="margin:0 0 8px 0;">
                     <label>Add item(s) from product master</label>
                 </div>
@@ -682,19 +696,12 @@
                 </div>
             </form>
         </div>
-        <div class="stock-field" style="margin:0 0 10px 0;max-width:320px;">
-            <label>Select supplier</label>
-            <select name="supplierId" data-no-searchable="true" form="submit-cart-form" required="required" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:3px;font-size:12px;">
-                <option value="">Choose supplier</option>
-                <% suppliers.each { supplier -> %>
-                <option value="${ supplier.supplierId }">${ supplier.name }</option>
-                <% } %>
-            </select>
-        </div>
+        <% } %>
         <div class="stock-modal-actions" style="flex-wrap:nowrap;">
             <form method="post" id="submit-cart-form" style="margin:0;">
                 <input type="hidden" name="action" value="submitCart"/>
-                <button type="submit" class="stock-btn stock-btn-primary" ${ !cartRows ? 'disabled="disabled"' : '' }>&#10003; Submit for approval</button>
+                <input type="hidden" name="supplierId" value="${ selectedSupplierId ?: '' }"/>
+                <button type="submit" class="stock-btn stock-btn-primary" ${ (!cartRows || !selectedSupplier) ? 'disabled="disabled"' : '' }>&#10003; Submit for approval</button>
             </form>
             <form method="post" style="margin:0;">
                 <input type="hidden" name="action" value="clearCart"/>

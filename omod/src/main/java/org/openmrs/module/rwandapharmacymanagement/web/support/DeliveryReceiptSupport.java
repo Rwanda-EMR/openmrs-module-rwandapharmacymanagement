@@ -34,7 +34,7 @@ public final class DeliveryReceiptSupport {
         if (productMasterItem == null && normalizedProgram.isEmpty()) {
             productMasterItem = pharmacyService.getProductMasterItemByNpcCode(normalizedCode);
         }
-        if (productMasterItem != null) {
+        if (productMasterItem != null && !Boolean.FALSE.equals(productMasterItem.getActive())) {
             return resolveOrCreateMappedItem(pharmacyService, productMasterItem);
         }
 

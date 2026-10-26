@@ -8,5 +8,6 @@ public enum RequestStatus {
     PARTIALLY_DISPENSED,
     DISPENSED,
     UNAVAILABLE,
+    NOT_SERVED,
     CANCELLED
 }

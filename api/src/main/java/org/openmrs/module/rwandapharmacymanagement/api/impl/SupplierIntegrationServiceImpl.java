@@ -258,6 +258,15 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
         if (purchaseOrder == null) {
             throw new IllegalArgumentException("Purchase order is required");
         }
+        String productMasterValidationError = validatePurchaseOrderProductMasterItems(purchaseOrder);
+        if (!isBlank(productMasterValidationError)) {
+            IntegrationLog log = createLog(IntegrationType.ORDER_SUBMISSION, IntegrationStatus.FAILED,
+                    productMasterValidationError);
+            purchaseOrder.setDispatchStatus("FAILED");
+            purchaseOrder.setDispatchReference(productMasterValidationError);
+            pharmacyService.savePurchaseOrder(purchaseOrder);
+            return integrationLogService.saveLog(log);
+        }
         if (isRmsPurchaseOrder(purchaseOrder)) {
             PurchaseOrderPriceRefreshResult refreshResult = refreshPurchaseOrderPrices(purchaseOrder);
             if (refreshResult.hasBlockingIssue()) {
@@ -891,6 +900,7 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
             return;
         }
         Set<String> processedProductKeys = new HashSet<String>();
+        Set<String> returnedProductKeys = new HashSet<String>();
         Map<String, ProductMasterItem> productMasterByCode = new HashMap<String, ProductMasterItem>();
         Map<String, SupplierProductMapping> mappingByCode = new HashMap<String, SupplierProductMapping>();
         for (SupplierProductMasterProgram program : programs) {
@@ -905,6 +915,7 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
                     continue;
                 }
                 processedProductKeys.add(productKey);
+                returnedProductKeys.add(productKey);
                 SupplierProductMapping mapping = mappingByCode.containsKey(npcCode)
                         ? mappingByCode.get(npcCode)
                         : pharmacyService.getSupplierProductMappingByCode(npcCode);
@@ -930,6 +941,7 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
                 productMasterItem.setProgram(programName);
                 productMasterItem.setMaterialType(normalized(itemDto.getMaterialType()));
                 productMasterItem.setActive(Boolean.TRUE);
+                productMasterItem.setSource(ProductMasterItem.SOURCE_API_SYNCED);
                 pharmacyService.saveProductMasterItem(productMasterItem);
                 productMasterByCode.put(productKey, productMasterItem);
 
@@ -940,6 +952,31 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
                     saveProductMasterMappingFailure(productMasterItem, mapping, e);
                 }
             }
+        }
+        deactivateMissingProductMasterItems(returnedProductKeys);
+    }
+
+    private void deactivateMissingProductMasterItems(Set<String> returnedProductKeys) {
+        if (returnedProductKeys == null) {
+            return;
+        }
+        for (ProductMasterItem productMasterItem : pharmacyService.getAllProductMasterItems()) {
+            if (productMasterItem == null || productMasterItem.getProductMasterItemId() == null) {
+                continue;
+            }
+            if (!ProductMasterItem.SOURCE_API_SYNCED.equalsIgnoreCase(normalized(productMasterItem.getSource()))) {
+                continue;
+            }
+            String npcCode = normalized(productMasterItem.getNpcCode());
+            if (npcCode.isEmpty()) {
+                continue;
+            }
+            String productKey = productMasterKey(npcCode, productMasterItem.getProgram());
+            if (returnedProductKeys.contains(productKey)) {
+                continue;
+            }
+            productMasterItem.setActive(Boolean.FALSE);
+            pharmacyService.saveProductMasterItem(productMasterItem);
         }
     }
 
@@ -1190,16 +1227,20 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
         java.util.ArrayList<SupplierOrderLine> lines = new java.util.ArrayList<SupplierOrderLine>();
         if (purchaseOrder.getItems() != null) {
             for (PurchaseOrderItem item : purchaseOrder.getItems()) {
+                ProductMasterItem productMasterItem = item.getProductMasterItem();
                 SupplierOrderLine line = new SupplierOrderLine();
                 line.setSupplierOrder(supplierOrder);
-                line.setSupplierProductCode(item.getItemCode());
-                line.setSupplierProductName(item.getItemName());
-                line.setProgramName(item.getProgram());
+                line.setSupplierProductCode(productMasterItem == null ? item.getItemCode() : productMasterItem.getNpcCode());
+                line.setSupplierProductName(productMasterItem == null ? item.getItemName() : productMasterItem.getItemName());
+                line.setProgramName(productMasterItem == null ? item.getProgram() : productMasterItem.getProgram());
                 line.setOrderedQuantity(item.getQuantity());
                 line.setUnitPrice(item.getUnitPrice());
                 line.setCreator(Context.getAuthenticatedUser());
                 line.setDateCreated(new Date());
-                Item localItem = pharmacyService.getItemByCodeAndProgram(item.getItemCode(), item.getProgram());
+                Item localItem = productMasterItem == null ? null : pharmacyService.getMappedItemForProductMasterItem(productMasterItem);
+                if (localItem == null) {
+                    localItem = pharmacyService.getItemByCodeAndProgram(item.getItemCode(), item.getProgram());
+                }
                 if (localItem == null && isBlank(item.getProgram())) {
                     localItem = pharmacyService.getItemByCode(item.getItemCode());
                 }
@@ -1328,10 +1369,36 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
         if (purchaseOrder == null || purchaseOrder.getSupplier() == null) {
             return false;
         }
-        String code = purchaseOrder.getSupplier().getCode();
-        String name = purchaseOrder.getSupplier().getName();
-        return "RMS".equalsIgnoreCase(code == null ? "" : code.trim())
-                || (name != null && name.toUpperCase(Locale.ENGLISH).contains("RMS"));
+        return Boolean.TRUE.equals(purchaseOrder.getSupplier().getApiEnabled());
+    }
+
+    private String validatePurchaseOrderProductMasterItems(PurchaseOrder purchaseOrder) {
+        if (purchaseOrder == null) {
+            return "Purchase order is required";
+        }
+        if (purchaseOrder.getItems() == null || purchaseOrder.getItems().isEmpty()) {
+            return "Purchase order must include at least one Product Master item";
+        }
+        boolean apiSupplier = isRmsPurchaseOrder(purchaseOrder);
+        List<String> invalidItems = new ArrayList<String>();
+        for (PurchaseOrderItem item : purchaseOrder.getItems()) {
+            ProductMasterItem productMasterItem = item == null ? null : item.getProductMasterItem();
+            if (productMasterItem == null) {
+                invalidItems.add(safe(item == null ? null : item.getItemName()));
+                continue;
+            }
+            if (Boolean.FALSE.equals(productMasterItem.getActive())) {
+                invalidItems.add(productMasterItem.getItemName() + " is inactive");
+                continue;
+            }
+            if (apiSupplier && !ProductMasterItem.SOURCE_API_SYNCED.equalsIgnoreCase(normalized(productMasterItem.getSource()))) {
+                invalidItems.add(productMasterItem.getItemName() + " is not from the API product master");
+            }
+        }
+        if (!invalidItems.isEmpty()) {
+            return "Purchase order contains items that are not orderable for the selected supplier: " + invalidItems;
+        }
+        return null;
     }
 
     private String resolveProductName(SupplierOrderLine line) {

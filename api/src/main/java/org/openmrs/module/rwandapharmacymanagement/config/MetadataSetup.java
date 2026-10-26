@@ -18,6 +18,8 @@ public class MetadataSetup implements Setup {
 
     private static final Set<String> PRIVILEGES = new LinkedHashSet<String>(Arrays.asList(
             RwandaPharmacyManagementConfig.PRIVILEGE_DASHBOARD,
+            RwandaPharmacyManagementConfig.PRIVILEGE_CREATE_PRESCRIPTION,
+            RwandaPharmacyManagementConfig.PRIVILEGE_ORDER_CONSUMABLES,
             "Task: rwandapharmacymanagement.manageItems",
             "Task: rwandapharmacymanagement.managePharmacies",
             "Task: rwandapharmacymanagement.manageSupplierSettings",
@@ -126,7 +128,12 @@ public class MetadataSetup implements Setup {
                 "Task: rwandapharmacymanagement.viewStock");
         saveRole(userService, "Rwanda Pharmacy Doctor",
                 RwandaPharmacyManagementConfig.PRIVILEGE_DASHBOARD,
-                "Task: rwandapharmacymanagement.viewPatientQueue");
+                "Task: rwandapharmacymanagement.viewPatientQueue",
+                RwandaPharmacyManagementConfig.PRIVILEGE_CREATE_PRESCRIPTION,
+                RwandaPharmacyManagementConfig.PRIVILEGE_ORDER_CONSUMABLES);
+        saveRole(userService, "Rwanda Pharmacy Nurse",
+                RwandaPharmacyManagementConfig.PRIVILEGE_DASHBOARD,
+                RwandaPharmacyManagementConfig.PRIVILEGE_ORDER_CONSUMABLES);
         saveRole(userService, "Rwanda Pharmacy Administrator",
                 RwandaPharmacyManagementConfig.PRIVILEGE_DASHBOARD,
                 "Task: rwandapharmacymanagement.manageItems",
@@ -146,6 +153,8 @@ public class MetadataSetup implements Setup {
                 "Task: rwandapharmacymanagement.viewPatientQueue",
                 "Task: rwandapharmacymanagement.dispenseWithOrder",
                 "Task: rwandapharmacymanagement.dispenseWithoutOrder",
+                RwandaPharmacyManagementConfig.PRIVILEGE_CREATE_PRESCRIPTION,
+                RwandaPharmacyManagementConfig.PRIVILEGE_ORDER_CONSUMABLES,
                 "Task: rwandapharmacymanagement.manageClinicalSafetyRules",
                 "Task: rwandapharmacymanagement.viewIntegrationLogs",
                 RwandaPharmacyManagementConfig.PRIVILEGE_MANAGE_SETTINGS);

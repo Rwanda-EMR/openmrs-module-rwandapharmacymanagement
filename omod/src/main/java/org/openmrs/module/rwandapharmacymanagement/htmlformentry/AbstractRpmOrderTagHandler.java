@@ -9,6 +9,7 @@ import org.openmrs.module.htmlformentry.FormSubmissionController;
 import org.openmrs.module.htmlformentry.handler.SubstitutionTagHandler;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
+import org.openmrs.module.rwandapharmacymanagement.util.ProductMasterPrivilegeSupport;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -55,11 +56,13 @@ public abstract class AbstractRpmOrderTagHandler extends SubstitutionTagHandler 
     }
 
     protected boolean isDrug(ProductMasterItem item) {
-        return isActive(item) && MATERIAL_TYPE_DRUG.equalsIgnoreCase(safe(item.getMaterialType())) && item.getDrug() != null;
+        return isActive(item) && MATERIAL_TYPE_DRUG.equalsIgnoreCase(safe(item.getMaterialType())) && item.getDrug() != null
+                && ProductMasterPrivilegeSupport.isAllowed(item);
     }
 
     protected boolean isConsumable(ProductMasterItem item) {
-        return isActive(item) && !MATERIAL_TYPE_DRUG.equalsIgnoreCase(safe(item.getMaterialType()));
+        return isActive(item) && !MATERIAL_TYPE_DRUG.equalsIgnoreCase(safe(item.getMaterialType()))
+                && ProductMasterPrivilegeSupport.isAllowed(item);
     }
 
     protected String attr(Map<String, String> parameters, String name, String defaultValue) {

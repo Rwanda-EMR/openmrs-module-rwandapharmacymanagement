@@ -37,6 +37,15 @@ public interface DispensingService extends OpenmrsService {
                                          String requestType,
                                          String dateFilter);
 
+    List<PatientDispensingRequest> getPendingRequestsForCleanup(Date fromInclusive,
+                                                                Date toExclusive,
+                                                                Integer pharmacyLocationId);
+
+    int markPendingRequestsNotServed(Date fromInclusive,
+                                     Date toExclusive,
+                                     Integer pharmacyLocationId,
+                                     String reason);
+
     List<PatientDispensingRequest> getPendingPaidRequests();
 
     Integer findLatestPatientBillId(Integer patientId);

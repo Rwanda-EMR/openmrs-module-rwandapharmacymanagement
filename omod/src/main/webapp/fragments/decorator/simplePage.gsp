@@ -7,6 +7,7 @@
     ui.includeCss("appui", "bootstrap.min.css")
     ui.includeCss("appui", "header.css")
 	    def queueCounts = context.loadClass("org.openmrs.module.rwandapharmacymanagement.web.support.QueueNotificationSupport").counts(session)
+	    def navVisibility = context.loadClass("org.openmrs.module.rwandapharmacymanagement.web.support.NavigationVisibilitySupport")
 		    def monitoredCountLinks = ["queue/patientQueue", "pharmacyorder/queue", "lab/queue", "pharmacyorder/approve", "department/finance", "department/dispense", "purchaseorder/management", "alerts/dashboard"]
 	    def hasAnyPrivilege = { required ->
 	        if (!required) {
@@ -17,6 +18,8 @@
 	        }
 	        return context.hasPrivilege(required)
 	    }
+	    def hasScope = { scope -> navVisibility.isVisible(scope) }
+	    def isVisibleLink = { link -> hasAnyPrivilege(link.privilegeAny ?: link.privilege) && hasScope(link.scope) }
         def notificationCount = { link ->
             if (!link || !monitoredCountLinks.contains(link.path)) {
                 return 0
@@ -35,7 +38,6 @@
             ]],
             [title: "Dispensing", links: [
 	                    [path: "queue/patientQueue", label: "Patient queue"],
-	                    [path: "report/patientRequestReport", label: "Patient request report"],
 	                    [path: "dispense/history", label: "Dispensing history"],
                     [path: "pharmacyorder/queue", label: "Pharmacy item request queue"],
 	                    [path: "pharmacyorder/history", label: "Pharmacy item request history", privilegeAny: ["Task: rwandapharmacymanagement.transferStock", "Task: rwandapharmacymanagement.approveMainToDispensingTransfer"]],
@@ -44,18 +46,18 @@
             ]],
 	            [title: "Stock", groups: [
                     [title: "Stores", links: [
-                            [path: "inventory/mainStore", label: "Main pharmacy"],
-                            [path: "inventory/dispensingStore", label: "Dispensing pharmacies"],
+                            [path: "inventory/mainStore", label: "Main pharmacy", scope: "MAIN_ONLY"],
+                            [path: "inventory/dispensingStore", label: "Dispensing pharmacies", scope: "DISPENSING_ONLY"],
 	                            [path: "inventory/valuation", label: "Stock valuation"],
-	                            [path: "admin/reconciliation", label: "Reconciliation", privilege: "Task: rwandapharmacymanagement.adjustStock"],
-	                            [path: "admin/expiryControl", label: "Batch expiry control", privilege: "Task: rwandapharmacymanagement.adjustStock"],
-	                            [path: "admin/itemVisibility", label: "Item visibility control", privilege: "Task: rwandapharmacymanagement.adjustStock"]
+	                            [path: "admin/reconciliation", label: "Reconciliation", privilege: "Task: rwandapharmacymanagement.adjustStock", scope: "PHARMACY_ANY"],
+	                            [path: "admin/expiryControl", label: "Batch expiry control", privilege: "Task: rwandapharmacymanagement.adjustStock", scope: "MAIN_ONLY"],
+	                            [path: "admin/itemVisibility", label: "Item visibility control", privilege: "Task: rwandapharmacymanagement.adjustStock", scope: "MAIN_ONLY"]
 	                    ]],
                     [title: "Transfers", links: [
-	                    [path: "pharmacyorder/approve", label: "Pharmacy transfer approval", privilegeAny: ["Task: rwandapharmacymanagement.transferStock", "Task: rwandapharmacymanagement.approveMainToDispensingTransfer"]],
-	                    [path: "transfer/mainToDispensing", label: "Main to dispensing", privilegeAny: ["Task: rwandapharmacymanagement.transferStock", "Task: rwandapharmacymanagement.approveMainToDispensingTransfer"]],
-                            [path: "transfer/returnToMain", label: "Return to main pharmacy", privilege: "Task: rwandapharmacymanagement.transferStock"],
-                            [path: "transfer/interPharmacy", label: "Dispensing to dispensing"]
+	                    [path: "pharmacyorder/approve", label: "Pharmacy transfer approval", privilegeAny: ["Task: rwandapharmacymanagement.transferStock", "Task: rwandapharmacymanagement.approveMainToDispensingTransfer"], scope: "PHARMACY_ANY"],
+	                    [path: "transfer/mainToDispensing", label: "Main to dispensing", privilegeAny: ["Task: rwandapharmacymanagement.transferStock", "Task: rwandapharmacymanagement.approveMainToDispensingTransfer"], scope: "PHARMACY_ANY"],
+                            [path: "transfer/returnToMain", label: "Return to main pharmacy", privilege: "Task: rwandapharmacymanagement.transferStock", scope: "PHARMACY_ANY"],
+                            [path: "transfer/interPharmacy", label: "Dispensing to dispensing", scope: "DISPENSING_ONLY"]
                     ]],
                     [title: "Department Requests", links: [
                             [path: "department/store", label: "Department store workspace", privilege: "Task: rwandapharmacymanagement.departmentStore"],
@@ -71,11 +73,11 @@
                     ]]
             ]],
             [title: "Supplier", links: [
-                    [path: "supplier/settings", label: "Configuration"],
-	                    [path: "purchaseorder/management", label: "Purchase orders", privilegeAny: ["Task: rwandapharmacymanagement.submitSupplierOrders", "Task: rwandapharmacymanagement.approvePurchaseOrders"]],
-                    [path: "supplier/productSync", label: "Product sync"],
-                    [path: "supplier/priceHistory", label: "Price history"],
-                    [path: "supplier/deliveryReceive", label: "Receive delivery"]
+                    [path: "supplier/settings", label: "Configuration", scope: "MAIN_ONLY"],
+	                    [path: "purchaseorder/management", label: "Purchase orders", privilegeAny: ["Task: rwandapharmacymanagement.submitSupplierOrders", "Task: rwandapharmacymanagement.approvePurchaseOrders"], scope: "MAIN_ONLY"],
+                    [path: "supplier/productSync", label: "Product sync", scope: "MAIN_ONLY"],
+                    [path: "supplier/priceHistory", label: "Price history", scope: "MAIN_ONLY"],
+                    [path: "supplier/deliveryReceive", label: "Receive delivery", scope: "MAIN_ONLY"]
             ]],
             [title: "Master Data", links: [
                     [path: "item/list", label: "Items"],
@@ -84,6 +86,7 @@
             ]],
             [title: "Control", links: [
                     [path: "alerts/dashboard", label: "Alerts"],
+                    [path: "admin/patientQueueCleanup", label: "Patient queue cleanup", privilege: "Task: rwandapharmacymanagement.manageSettings"],
                     [path: "admin/linkBill", label: "Link prescription bills"],
                     [path: "admin/missingBillingMappings", label: "Missing billing mappings", privilege: "Task: rwandapharmacymanagement.manageSettings"],
                     [path: "safety/rules", label: "Safety rules"],
@@ -92,14 +95,15 @@
             ]],
             [title: "Reports", links: [
                     [path: "report/pharmacyStock", label: "Individual pharmacy report"],
-		                    [path: "report/overallStock", label: "Overall hospital stock report"],
+		                    [path: "report/overallStock", label: "Overall hospital stock report", scope: "MAIN_ONLY"],
 		                    [path: "report/inventoryMovement", label: "Inventory movement report"],
-		                    [path: "report/writeOffDisposalReport", label: "Write-off and disposal report"],
+		                    [path: "report/writeOffDisposalReport", label: "Write-off and disposal report", scope: "MAIN_ONLY"],
 		                    [path: "report/dispensingReport", label: "Dispensing report"],
+	                    [path: "report/patientRequestReport", label: "Patient request report"],
 	                    [path: "report/paymentExceptionReport", label: "Payment exception report"],
 	                    [path: "report/notBillableItemsReport", label: "Not billable items report"],
 	                    [path: "report/itemMovement", label: "Item movement report"],
-	                    [path: "report/purchaseOrderReconciliationReport", label: "Purchase order reconciliation report"]
+	                    [path: "report/purchaseOrderReconciliationReport", label: "Purchase order reconciliation report", scope: "MAIN_ONLY"]
 	            ]]
     ]
 %>
@@ -632,9 +636,9 @@
         <div class="module-left-hdr">Rwanda Pharmacy</div>
 	        <% navSections.each { section ->
                 def visibleGroups = section.groups ? section.groups.collect { group ->
-                    [title: group.title, links: group.links.findAll { link -> hasAnyPrivilege(link.privilegeAny ?: link.privilege) }]
+                    [title: group.title, links: group.links.findAll { link -> isVisibleLink(link) }]
                 }.findAll { group -> group.links } : []
-                def visibleLinks = section.links ? section.links.findAll { link -> hasAnyPrivilege(link.privilegeAny ?: link.privilege) } : []
+                def visibleLinks = section.links ? section.links.findAll { link -> isVisibleLink(link) } : []
                 def sectionCount = notificationTotal(visibleLinks) + (visibleGroups.collect { group -> notificationTotal(group.links) }.sum() ?: 0)
                 if (visibleLinks || visibleGroups) {
             %>

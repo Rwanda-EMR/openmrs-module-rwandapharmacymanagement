@@ -10,6 +10,7 @@ import org.openmrs.Visit;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.impl.BaseOpenmrsService;
 import org.openmrs.module.rwandapharmacymanagement.api.ConsumableOrderService;
+import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.DispensingService;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
@@ -21,6 +22,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingReques
 import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestType;
+import org.openmrs.module.rwandapharmacymanagement.util.ProductMasterPrivilegeSupport;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Constructor;
@@ -88,6 +90,7 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
     public List<PatientDispensingRequest> createConsumableOrders(Patient patient,
                                                                  Location requestingLocation,
                                                                  List<ConsumableOrderLineCommand> lines) {
+        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_ORDER_CONSUMABLES);
         if (patient == null) {
             throw new IllegalArgumentException("Patient is required");
         }
@@ -150,6 +153,7 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
     @Override
     public PatientDispensingRequest updateConsumableLine(Integer requestId, Integer requestLineId,
                                                          ConsumableOrderLineCommand command) {
+        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_ORDER_CONSUMABLES);
         if (requestId == null || requestLineId == null || command == null) {
             throw new IllegalArgumentException("Request, request line, and updated consumable are required");
         }
@@ -170,6 +174,7 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
 
     @Override
     public PatientDispensingRequest voidConsumableLine(Integer requestId, Integer requestLineId, String voidReason) {
+        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_ORDER_CONSUMABLES);
         String reason = voidReason == null ? "" : voidReason.trim();
         if (reason.isEmpty()) {
             throw new IllegalArgumentException("A void reason is required");
@@ -273,6 +278,7 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
         if (MATERIAL_TYPE_DRUG.equalsIgnoreCase(safe(productMasterItem.getMaterialType()))) {
             throw new IllegalArgumentException("Drug items must be ordered from the prescription page");
         }
+        ProductMasterPrivilegeSupport.requireAllowed(productMasterItem);
     }
 
     private Item resolveLocalItem(ProductMasterItem productMasterItem) {

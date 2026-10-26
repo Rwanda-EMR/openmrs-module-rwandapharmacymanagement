@@ -3,6 +3,8 @@ package org.openmrs.module.rwandapharmacymanagement.page.controller.supplier;
 import org.openmrs.Location;
 import org.openmrs.Concept;
 import org.openmrs.ConceptName;
+import org.openmrs.Privilege;
+import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
 import org.openmrs.api.context.Context;
@@ -99,12 +101,24 @@ public class ProductSyncPageController {
     }
 
     public String post(@SpringBean("supplierIntegrationService") SupplierIntegrationService supplierIntegrationService,
+                       @SpringBean("pharmacyService") PharmacyService pharmacyService,
                        @RequestParam(value = "action", required = false) String action,
+                       @RequestParam(value = "productMasterItemId", required = false) Integer productMasterItemId,
+                       @RequestParam(value = "requiredPrivilege", required = false) String requiredPrivilege,
+                       @RequestParam(value = "restrictionReason", required = false) String restrictionReason,
                        HttpSession session,
                        UiUtils ui) {
         try {
             if ("updatePrices".equals(action)) {
                 supplierIntegrationService.syncPrices();
+                return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/productSync");
+            }
+            if ("saveRestriction".equals(action)) {
+                saveRestriction(pharmacyService, productMasterItemId, requiredPrivilege, restrictionReason);
+                return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/productSync");
+            }
+            if ("clearRestriction".equals(action)) {
+                saveRestriction(pharmacyService, productMasterItemId, null, null);
                 return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/productSync");
             }
             supplierIntegrationService.syncProductMaster();
@@ -114,6 +128,28 @@ public class ProductSyncPageController {
             FlashMessageSupport.set(session, FLASH_ERROR_MESSAGE, e.getMessage());
             return "redirect:" + ui.pageLink("rwandapharmacymanagement", "supplier/productSync");
         }
+    }
+
+    private void saveRestriction(PharmacyService pharmacyService, Integer productMasterItemId, String requiredPrivilege,
+                                 String restrictionReason) {
+        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_MANAGE_SETTINGS);
+        if (productMasterItemId == null) {
+            throw new IllegalArgumentException("Product master item is required");
+        }
+        ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(productMasterItemId);
+        if (productMasterItem == null) {
+            throw new IllegalArgumentException("Product master item was not found");
+        }
+        String privilege = trimToNull(requiredPrivilege);
+        if (privilege != null) {
+            Privilege openmrsPrivilege = Context.getUserService().getPrivilege(privilege);
+            if (openmrsPrivilege == null) {
+                throw new IllegalArgumentException("Select an existing OpenMRS privilege");
+            }
+        }
+        productMasterItem.setRequiredPrivilege(privilege);
+        productMasterItem.setRestrictionReason(trimToNull(restrictionReason));
+        pharmacyService.saveProductMasterItem(productMasterItem);
     }
 
     private void refreshSessionLocation() {
@@ -168,5 +204,13 @@ public class ProductSyncPageController {
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

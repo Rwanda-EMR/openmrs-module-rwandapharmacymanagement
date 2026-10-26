@@ -124,6 +124,41 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
     }
 
     @Override
+    public List<PatientDispensingRequest> getPendingRequestsForCleanup(Date fromInclusive,
+                                                                       Date toExclusive,
+                                                                       Integer pharmacyLocationId) {
+        validateCleanupDateRange(fromInclusive, toExclusive);
+        return dispensingDao.getPendingRequestsForCleanup(fromInclusive, toExclusive, pharmacyLocationId);
+    }
+
+    @Override
+    public int markPendingRequestsNotServed(Date fromInclusive,
+                                            Date toExclusive,
+                                            Integer pharmacyLocationId,
+                                            String reason) {
+        validateCleanupDateRange(fromInclusive, toExclusive);
+        String trimmedReason = reason == null ? "" : reason.trim();
+        if (trimmedReason.isEmpty()) {
+            throw new IllegalArgumentException("Reason is required when marking patient requests as not served");
+        }
+        List<PatientDispensingRequest> requests = dispensingDao.getPendingRequestsForCleanup(fromInclusive, toExclusive,
+                pharmacyLocationId);
+        int updated = 0;
+        for (PatientDispensingRequest request : requests) {
+            if (request == null || (request.getRequestStatus() != RequestStatus.PENDING_PAYMENT
+                    && request.getRequestStatus() != RequestStatus.PENDING_DISPENSE)) {
+                continue;
+            }
+            request.setRequestStatus(RequestStatus.NOT_SERVED);
+            request.setVoidReason(trimmedReason);
+            markActiveLinesNotServed(request, trimmedReason);
+            dispensingDao.saveRequest(request);
+            updated++;
+        }
+        return updated;
+    }
+
+    @Override
     public List<PatientDispensingRequest> getPendingPaidRequests() {
         List<PatientDispensingRequest> requests = dispensingDao.getPendingPaidRequests();
         if (paymentStatusService == null || requests == null) {
@@ -230,6 +265,7 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
         }
         if (request.getRequestStatus() == RequestStatus.DISPENSED
                 || request.getRequestStatus() == RequestStatus.CANCELLED
+                || request.getRequestStatus() == RequestStatus.NOT_SERVED
                 || request.getRequestStatus() == RequestStatus.UNAVAILABLE) {
             throw new IllegalArgumentException("Payment exception can only be approved for active requests");
         }
@@ -332,11 +368,43 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
             if (line == null || line.getLineStatus() == RequestStatus.DISPENSED
                     || line.getLineStatus() == RequestStatus.UNAVAILABLE
                     || line.getLineStatus() == RequestStatus.CANCELLED
+                    || line.getLineStatus() == RequestStatus.NOT_SERVED
                     || line.getLineStatus() == RequestStatus.PARTIALLY_DISPENSED) {
                 continue;
             }
             line.setLineStatus(Boolean.TRUE.equals(line.getBillable()) ? status : RequestStatus.PENDING_DISPENSE);
             dispensingDao.saveRequestLine(line);
+        }
+    }
+
+    private void markActiveLinesNotServed(PatientDispensingRequest request, String reason) {
+        if (request == null || request.getLines() == null) {
+            return;
+        }
+        for (PatientDispensingRequestLine line : request.getLines()) {
+            if (line == null || Boolean.TRUE.equals(line.getVoided()) || isTerminalLineStatus(line.getLineStatus())) {
+                continue;
+            }
+            line.setLineStatus(RequestStatus.NOT_SERVED);
+            line.setVoidReason(reason);
+            dispensingDao.saveRequestLine(line);
+        }
+    }
+
+    private boolean isTerminalLineStatus(RequestStatus status) {
+        return status == RequestStatus.DISPENSED
+                || status == RequestStatus.PARTIALLY_DISPENSED
+                || status == RequestStatus.UNAVAILABLE
+                || status == RequestStatus.NOT_SERVED
+                || status == RequestStatus.CANCELLED;
+    }
+
+    private void validateCleanupDateRange(Date fromInclusive, Date toExclusive) {
+        if (fromInclusive == null || toExclusive == null) {
+            throw new IllegalArgumentException("Start and end dates are required");
+        }
+        if (!fromInclusive.before(toExclusive)) {
+            throw new IllegalArgumentException("End date must be after start date");
         }
     }
 
@@ -642,6 +710,7 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
         boolean hasQueueableLine = false;
         boolean hasDispensedLine = false;
         boolean hasUnavailableLine = false;
+        boolean hasNotServedLine = false;
         for (PatientDispensingRequestLine line : request.getLines()) {
             if (line == null || Boolean.TRUE.equals(line.getVoided())) {
                 continue;
@@ -652,9 +721,12 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
                 hasDispensedLine = true;
             } else if (status == RequestStatus.UNAVAILABLE) {
                 hasUnavailableLine = true;
+            } else if (status == RequestStatus.NOT_SERVED) {
+                hasNotServedLine = true;
             }
             if (status != RequestStatus.DISPENSED
                     && status != RequestStatus.UNAVAILABLE
+                    && status != RequestStatus.NOT_SERVED
                     && status != RequestStatus.CANCELLED) {
                 hasQueueableLine = true;
             }
@@ -666,6 +738,8 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
             request.setRequestStatus(RequestStatus.DISPENSED);
         } else if (hasUnavailableLine) {
             request.setRequestStatus(RequestStatus.UNAVAILABLE);
+        } else if (hasNotServedLine) {
+            request.setRequestStatus(RequestStatus.NOT_SERVED);
         } else {
             request.setRequestStatus(RequestStatus.CANCELLED);
         }
@@ -702,6 +776,7 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
             }
             if (line.getLineStatus() == RequestStatus.DISPENSED
                     || line.getLineStatus() == RequestStatus.UNAVAILABLE
+                    || line.getLineStatus() == RequestStatus.NOT_SERVED
                     || line.getLineStatus() == RequestStatus.CANCELLED) {
                 return;
             }
@@ -800,7 +875,8 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
         if (withoutOrder || request == null) {
             return;
         }
-        if (request.getRequestStatus() == RequestStatus.CANCELLED || request.getRequestStatus() == RequestStatus.DISPENSED
+        if (request.getRequestStatus() == RequestStatus.CANCELLED || request.getRequestStatus() == RequestStatus.NOT_SERVED
+                || request.getRequestStatus() == RequestStatus.DISPENSED
                 || Boolean.TRUE.equals(request.getVoided())) {
             throw new IllegalArgumentException("Cancelled or completed prescription requests cannot be dispensed");
         }
@@ -868,6 +944,7 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
         return line != null
                 && !Boolean.TRUE.equals(line.getVoided())
                 && line.getLineStatus() != RequestStatus.CANCELLED
+                && line.getLineStatus() != RequestStatus.NOT_SERVED
                 && line.getLineStatus() != RequestStatus.UNAVAILABLE
                 && line.getLineStatus() != RequestStatus.DISPENSED;
     }
@@ -903,14 +980,18 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
         boolean allActiveLinesDispensed = true;
         boolean anyQuantityServed = false;
         boolean anyUnavailableLine = false;
+        boolean anyNotServedLine = false;
         for (PatientDispensingRequestLine requestLine : request.getLines()) {
             if (requestLine == null) {
                 continue;
             }
             if (requestLine.getLineStatus() == RequestStatus.CANCELLED
-                    || requestLine.getLineStatus() == RequestStatus.UNAVAILABLE) {
+                    || requestLine.getLineStatus() == RequestStatus.UNAVAILABLE
+                    || requestLine.getLineStatus() == RequestStatus.NOT_SERVED) {
                 if (requestLine.getLineStatus() == RequestStatus.UNAVAILABLE) {
                     anyUnavailableLine = true;
+                } else if (requestLine.getLineStatus() == RequestStatus.NOT_SERVED) {
+                    anyNotServedLine = true;
                 }
                 dispensingDao.saveRequestLine(requestLine);
                 continue;
@@ -940,7 +1021,8 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
             dispensingDao.saveRequestLine(requestLine);
         }
         if (!hasActiveLine) {
-            request.setRequestStatus(anyUnavailableLine ? RequestStatus.UNAVAILABLE : RequestStatus.CANCELLED);
+            request.setRequestStatus(anyUnavailableLine ? RequestStatus.UNAVAILABLE
+                    : (anyNotServedLine ? RequestStatus.NOT_SERVED : RequestStatus.CANCELLED));
             dispensingDao.saveRequest(request);
             return;
         }

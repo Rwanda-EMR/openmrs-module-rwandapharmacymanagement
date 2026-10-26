@@ -3,6 +3,7 @@ package org.openmrs.module.rwandapharmacymanagement.page.controller.consumable;
 import org.openmrs.Location;
 import org.openmrs.Patient;
 import org.openmrs.api.context.Context;
+import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.ConsumableOrderService;
 import org.openmrs.module.rwandapharmacymanagement.api.DispensingService;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
@@ -16,6 +17,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingReques
 import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus;
+import org.openmrs.module.rwandapharmacymanagement.util.ProductMasterPrivilegeSupport;
 import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
@@ -50,6 +52,7 @@ public class EnterPageController {
                     @RequestParam(value = "patientId", required = false) String patientIdOrUuid,
                     @RequestParam(value = "historyPage", required = false) Integer historyPage,
                     HttpSession session) {
+        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_ORDER_CONSUMABLES);
         Patient patient = resolvePatient(patientIdOrUuid);
         Location currentLocation = Context.getUserContext() == null ? null : Context.getUserContext().getLocation();
         List<Map<String, Object>> orderableItems = buildOrderableItems(pharmacyService, inventoryService);
@@ -98,6 +101,7 @@ public class EnterPageController {
                        @RequestParam(value = "billingExclusionReason", required = false) String[] billingExclusionReasons,
                        HttpSession session,
                        UiUtils ui) {
+        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_ORDER_CONSUMABLES);
         Patient patient = resolvePatient(patientIdOrUuid);
         if (patient == null) {
             patient = resolvePatient(patientUuid);
@@ -353,7 +357,8 @@ public class EnterPageController {
     private boolean isConsumableProductMasterItem(ProductMasterItem productMasterItem) {
         return productMasterItem != null
                 && !Boolean.FALSE.equals(productMasterItem.getActive())
-                && !MATERIAL_TYPE_DRUG.equalsIgnoreCase(safe(productMasterItem.getMaterialType()));
+                && !MATERIAL_TYPE_DRUG.equalsIgnoreCase(safe(productMasterItem.getMaterialType()))
+                && ProductMasterPrivilegeSupport.isAllowed(productMasterItem);
     }
 
     private List<Item> getStockedConsumableItems(PharmacyService pharmacyService, InventoryService inventoryService) {

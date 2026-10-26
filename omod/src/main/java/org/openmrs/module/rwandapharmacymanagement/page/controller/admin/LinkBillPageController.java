@@ -192,6 +192,7 @@ public class LinkBillPageController {
         return status == RequestStatus.DISPENSED
                 || status == RequestStatus.PARTIALLY_DISPENSED
                 || status == RequestStatus.UNAVAILABLE
+                || status == RequestStatus.NOT_SERVED
                 || status == RequestStatus.CANCELLED;
     }
 

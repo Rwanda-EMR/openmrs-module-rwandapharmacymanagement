@@ -12,7 +12,7 @@
         "url": "rwandapharmacymanagement/prescription/enter.page?patientId={{patient.uuid}}",
         "icon": "icon-edit",
         "order": 45,
-        "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
+        "requiredPrivilege": "Task: rwandapharmacymanagement.createPrescription"
       }
     ],
     "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"

@@ -20,6 +20,8 @@
     .poa-line-title { color:#0f172a; font-weight:600; line-height:1.3; }
     .poa-qty-badge { display:inline-block; margin-left:6px; padding:2px 7px; border-radius:999px; background:#f1f5f9; color:#475569; font-size:11px; font-weight:600; }
     .poa-requesting-stock { display:inline-block; margin-left:6px; padding:2px 7px; border-radius:999px; background:#ecfdf5; color:#047857; font-size:11px; font-weight:600; }
+    .poa-serving-stock { display:inline-block; margin-left:6px; padding:2px 7px; border-radius:999px; background:#eff6ff; color:#1d4ed8; font-size:11px; font-weight:600; }
+    .poa-serving-stock-low { background:#fff1f2; color:#be123c; }
     .poa-line-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; align-items:center; min-width:330px; }
     .poa-line-remove { display:flex; gap:6px; align-items:center; margin:0; }
     .poa-line-remove input { width:155px; border:1px solid #cbd5e1; border-radius:4px; font-size:12px; padding:5px 7px; }
@@ -71,6 +73,7 @@
                 <td>
                     <% request.lines?.each { line ->
                         def previousInfo = previousInfoByLineId ? previousInfoByLineId[line.interPharmacyTransferLineId] : null
+                        def servingAvailability = servingAvailabilityByLineId ? servingAvailabilityByLineId[line.interPharmacyTransferLineId] : null
                         def lineIsRemoved = line.voided == true
                     %>
                     <div class="poa-line">
@@ -78,6 +81,7 @@
                             <div class="poa-line-title">
                                 ${ line.item?.name ?: '' }
                                 <span class="poa-qty-badge">Qty ${ line.quantity ?: 0 }</span>
+                                <span class="poa-serving-stock ${ servingAvailability?.insufficient ? 'poa-serving-stock-low' : '' }">Serving pharmacy available ${ servingAvailability?.quantity ?: '0' }</span>
                                 <span class="poa-requesting-stock">Requesting pharmacy stock ${ requestingQuantityByLineId ? (requestingQuantityByLineId[line.interPharmacyTransferLineId] ?: '0') : '0' }</span>
                                 <% if (lineIsRemoved) { %>
                                 <span class="poa-removed">Removed${ line.voidReason ? ': ' + line.voidReason : '' }</span>

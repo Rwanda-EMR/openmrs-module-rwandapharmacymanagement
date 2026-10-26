@@ -31,22 +31,24 @@
     <tr><td>Pharmacy item request</td><td>User requests specific items from one selected pharmacy. One request cannot mix different pharmacies.</td></tr>
     <tr><td>Pharmacy item request queue</td><td>Pharmacy staff approve and issue items requested by users from their pharmacy.</td></tr>
     <tr><td>Lab request / lab queue</td><td>Lab users request items and pharmacy staff approve/issue lab supplies.</td></tr>
-    <tr><td>Main pharmacy</td><td>Main store inventory, purchase order cart, delivery receiving, and reconciliation.</td></tr>
+    <tr><td>Main pharmacy</td><td>Main store inventory, purchase order cart, and main-pharmacy stock operations.</td></tr>
     <tr><td>Dispensing pharmacies</td><td>Dispensing stock view, request cart, and pharmacy-specific stock operations.</td></tr>
     <tr><td>Main to dispensing</td><td>Dispensing pharmacy requests stock from main; Head of Finance approval is required before transfer.</td></tr>
     <tr><td>Return to main pharmacy</td><td>Main pharmacy requests items back from a dispensing pharmacy; the dispensing pharmacy approves or rejects.</td></tr>
     <tr><td>Dispensing to dispensing</td><td>One dispensing pharmacy requests stock from another dispensing pharmacy.</td></tr>
     <tr><td>Purchase orders</td><td>Create, edit, approve, reject, dispatch, and retry supplier purchase orders.</td></tr>
-    <tr><td>Receive delivery</td><td>Receive RMS/API deliveries, uploaded supplier templates, or direct delivery entries.</td></tr>
-    <tr><td>Reports</td><td>Stock, valuation, inventory movement, and item movement reports with exports.</td></tr>
-    <tr><td>Control</td><td>Alerts, link bills, safety rules, reconciliation, settings, and integration logs.</td></tr>
+    <tr><td>Receive delivery</td><td>Main pharmacy receives RMS/API deliveries, uploaded supplier templates, or direct delivery entries.</td></tr>
+    <tr><td>Reports</td><td>Stock, valuation, patient request, inventory movement, and item movement reports with exports.</td></tr>
+    <tr><td>Control</td><td>Alerts, patient queue cleanup, link bills, safety rules, settings, and integration logs.</td></tr>
 </table>
 
 <h2>3. Current Pharmacy Selection</h2>
 <p>If the logged-in OpenMRS location is connected to more than one pharmacy, some pages ask the user to choose the active pharmacy. The selection is remembered for the session. Pages such as patient queue, dispensing store, pharmacy request queue, and transfer approvals use this active pharmacy to filter what the user sees.</p>
+<p>The navigation also uses the current OpenMRS location mapping. Main-pharmacy-only links are hidden from dispensing pharmacy users, dispensing-only links are hidden from main pharmacy users, and shared pharmacy pages such as reconciliation remain visible only when the current location maps to a pharmacy.</p>
 
 <h2>4. Prescriptions</h2>
 <h3>4.1 Creating a Prescription</h3>
+<p>Prescriptions can be created from the patient dashboard prescription page or from an HTML Form Entry form that contains the embedded prescription order section.</p>
 <ol>
     <li>Open the patient dashboard.</li>
     <li>Click <strong>Prescription</strong>.</li>
@@ -55,6 +57,7 @@
     <li>Submit the prescription.</li>
 </ol>
 <p>The system creates OpenMRS drug orders, creates a patient dispensing request, links a bill when available, and can send SMS/HIE notifications if enabled.</p>
+<p>When a clinical form contains an embedded prescription order section, add one or more prescription lines in the section before saving the form. The prescription request is queued when the form is saved. If the embedded section is left empty and it is not configured as required, no pharmacy request is created from that section.</p>
 <div class="note"><strong>Billing note:</strong> if the configured payment mode is strict, only the bill linked to the request is checked. If it is latest, the system may use the latest patient bill when no bill was passed from the prescription page.</div>
 <div class="note"><strong>Repeat prescription note:</strong> if the same patient already has an active order for the same drug, the module replaces the active same-drug order before saving the new one. This avoids OpenMRS blocking repeat prescribing within 24 hours.</div>
 <p>Dose unit is intentionally not displayed on the dispensing workflow and is sent blank to HIE because the system cannot reliably determine whether the product is tablet, capsule, liquid, injection, or another form from the available data.</p>
@@ -64,6 +67,7 @@
     <li>Open <strong>Patient queue</strong>.</li>
     <li>Select the active pharmacy if prompted.</li>
     <li>Use tabs such as Recent, Ready, Waiting Payment, Exception Approved, Older Pending, or Search All to find requests.</li>
+    <li>Search by patient name, patient identifier, request ID, prescription group/SMS identifier, or UPID when UPID is configured.</li>
     <li>Requests with unpaid linked bills remain in payment status. Paid, exception-approved, or unbillable requests move to pending dispense.</li>
     <li>Open the request to view or dispense.</li>
 </ol>
@@ -71,10 +75,20 @@
 <p>After the serve form passes validation, the submit buttons are disabled while the request is being processed. This prevents accidental double-click dispensing from the same browser page.</p>
 <p>Use <strong>Dispensing history</strong> to review completed patient dispensing records. Use <strong>Dispense without order</strong> only where the workflow is enabled and the user has the required privilege.</p>
 
-<h3>4.3 Drug Not Available</h3>
+<h3>4.3 Patient Queue Cleanup</h3>
+<p>Administrators can open <strong>Control &gt; Patient queue cleanup</strong> to mark old pending patient requests as <strong>Not served</strong>.</p>
+<ol>
+    <li>Select a date range and optionally a pharmacy.</li>
+    <li>Preview matching pending payment/pending dispense requests.</li>
+    <li>Enter a reason, confirm the action, and mark the matched requests as not served.</li>
+</ol>
+<p>Requests marked <strong>Not served</strong> are treated as terminal and are removed from the patient queue.</p>
+
+<h3>4.4 Drug Not Available</h3>
 <p>The <strong>Item not available in all pharmacies</strong> action is available from the prescription workflow so the user can record unavailable items even when stock status may be uncertain.</p>
 
 <h2>5. Consumable Requests</h2>
+<p>Consumable requests can be created from the patient dashboard consumable request page or from an HTML Form Entry form that contains the embedded consumables order section.</p>
 <ol>
     <li>Open the patient dashboard.</li>
     <li>Click the consumable request app/action.</li>
@@ -82,6 +96,7 @@
     <li>Submit the request.</li>
 </ol>
 <p>Consumables are billable and should be mapped in MOH Billing. Billing mappings are validated when the order is submitted, not while loading the consumable order page.</p>
+<p>When a clinical form contains an embedded consumables order section, add one or more consumable lines in the section before saving the form. The consumable request is queued when the form is saved. If the embedded section is left empty and it is not configured as required, no pharmacy request is created from that section.</p>
 <p>If a patient has an active visit registration but the selected insurance has no open global bill, the page warns the user before the request is submitted. This normally means the open bill does not match the active visit insurance/policy being used by the request.</p>
 
 <h2>6. User Pharmacy Item Request</h2>
@@ -141,7 +156,7 @@
 </ol>
 <p>Hidden items are treated as unavailable on prescription/requester-facing pages and cannot be dispensed from the patient queue.</p>
 <h3>9.6 Reconciliation</h3>
-<p>Use <strong>Reconciliation</strong> for controlled stock corrections. Select the pharmacy, item, batch, quantity adjustment, and reason. The change creates an auditable stock transaction.</p>
+<p>Use <strong>Reconciliation</strong> for controlled stock corrections in either the main pharmacy or a dispensing pharmacy, when the user has stock adjustment permission and the current location is mapped to that pharmacy. Select the pharmacy, item, batch, quantity adjustment, and reason. The change creates an auditable stock transaction.</p>
 
 <h2>10. Pharmacy Transfers</h2>
 <h3>10.1 Main to Dispensing Transfer</h3>
@@ -150,7 +165,8 @@
     <li>The destination pharmacy is the active dispensing pharmacy.</li>
     <li>The user requests items from main pharmacy.</li>
     <li>The Head of Finance opens the review/approval page and approves, rejects, or removes unavailable lines with a reason.</li>
-    <li>The review page shows the current quantity in the requesting pharmacy, and <strong>Previous info</strong> shows calculated previous balance, received quantity, and dispensed/transferred-out quantity based on dates.</li>
+    <li>Transfer approval is restricted to the pharmacy responsible for serving the request. A user only sees and acts on requests where their current pharmacy is the supplying pharmacy.</li>
+    <li>The review page shows the current quantity in the requesting pharmacy, the current quantity available in the serving pharmacy, and <strong>Previous info</strong> shows calculated previous balance, received quantity, and dispensed/transferred-out quantity based on dates.</li>
     <li>Approved requests are transferred using transfer labels and buttons. A single requested item can be served from more than one batch number when needed.</li>
 </ol>
 <p>Transferred requests can be downloaded as a PDF from transfer history/review pages.</p>
@@ -307,6 +323,7 @@
     <tr><td>Overall hospital stock report</td><td>Stock across all pharmacies.</td></tr>
     <tr><td>Inventory movement report</td><td>Movements over a selected period.</td></tr>
     <tr><td>Dispensing report</td><td>Patient dispensing activity with export options.</td></tr>
+    <tr><td>Patient request report</td><td>Patient prescription and consumable request records, including active and terminal request states.</td></tr>
     <tr><td>Payment exception report</td><td>Payment exception approvals and related dispensing requests.</td></tr>
     <tr><td>Item movement report</td><td>All movements for one selected item, all pharmacies or one pharmacy, including batch, expiry, received, issued, balance, and months of stock.</td></tr>
     <tr><td>Stock valuation</td><td>Stock values using available unit costs.</td></tr>
@@ -318,8 +335,8 @@
     <tr><th>Role</th><th>Main responsibility</th></tr>
     <tr><td>Doctor/clinician</td><td>Create prescriptions from patient dashboard.</td></tr>
     <tr><td>Dispenser</td><td>Use patient queue and dispense requests.</td></tr>
-    <tr><td>Main store manager</td><td>Main stock, purchase order cart, deliveries, transfers, reconciliation.</td></tr>
-    <tr><td>Dispensing store manager</td><td>Dispensing stock and dispensing pharmacy transfers.</td></tr>
+    <tr><td>Main store manager</td><td>Main stock, purchase order cart, deliveries, transfers, and reconciliation where permitted.</td></tr>
+    <tr><td>Dispensing store manager</td><td>Dispensing stock, dispensing pharmacy transfers, and reconciliation where permitted.</td></tr>
     <tr><td>Department store user</td><td>Department workspace, department stock visibility, department requests, and internal stock issue.</td></tr>
     <tr><td>Head of Finance</td><td>Approve main-to-dispensing transfers.</td></tr>
     <tr><td>Health Facility Leader</td><td>Approve purchase orders.</td></tr>
@@ -336,6 +353,8 @@
     <tr><td>Billing mapped shown incorrectly</td><td>Check item concept/drug concept and MOH Billing facility service/billable service mapping.</td></tr>
     <tr><td>Transfer fails for stock</td><td>Check batch number, available balance, and whether the item is stocked in the selected source pharmacy.</td></tr>
     <tr><td>Main-to-dispensing transfer says user is not at main pharmacy</td><td>Check the logged-in OpenMRS session location, pharmacy-location mapping, and whether the active location is mapped to the main store.</td></tr>
+    <tr><td>Transfer approval page does not show a request</td><td>Check that the current OpenMRS location maps to the request's supplying pharmacy. Approval is restricted to the pharmacy responsible for serving the request.</td></tr>
+    <tr><td>Main-only page is hidden for a user</td><td>Check whether the logged-in OpenMRS location maps to the main pharmacy. The menu hides main-pharmacy-only pages from dispensing pharmacy locations.</td></tr>
     <tr><td>Department dispense shows main pharmacy batches</td><td>Check active pharmacy selection and location mapping. Department pharmacy dispense should use the active dispensing pharmacy only.</td></tr>
     <tr><td>Hidden item still appears available</td><td>Refresh product/stock pages and confirm the item is hidden in Item visibility control. Hidden items should behave as unavailable to requesters and patient queue dispensing.</td></tr>
     <tr><td>Prescription billing creates fewer lines than requested</td><td>Check billing mappings, duplicate billable service mappings, hidden/unavailable items, and linked patient bill status.</td></tr>

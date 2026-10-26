@@ -36,6 +36,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingReques
 import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestType;
+import org.openmrs.module.rwandapharmacymanagement.util.ProductMasterPrivilegeSupport;
 import org.springframework.transaction.support.TransactionSynchronizationAdapter;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -107,6 +108,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
                                                        Location encounterLocation,
                                                        List<PrescriptionLineCommand> lines,
                                                        Integer patientBillId) {
+        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_CREATE_PRESCRIPTION);
         if (patient == null) {
             throw new IllegalArgumentException("Patient is required");
         }
@@ -213,6 +215,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
                                                            Integer requestLineId,
                                                            Provider orderingProvider,
                                                            List<PrescriptionLineCommand> lines) {
+        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_CREATE_PRESCRIPTION);
         if (requestId == null || requestLineId == null) {
             throw new IllegalArgumentException("Request and request line are required");
         }
@@ -615,6 +618,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         return status == RequestStatus.DISPENSED
                 || status == RequestStatus.PARTIALLY_DISPENSED
                 || status == RequestStatus.UNAVAILABLE
+                || status == RequestStatus.NOT_SERVED
                 || status == RequestStatus.CANCELLED;
     }
 
@@ -858,6 +862,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
     public PatientDispensingRequest voidPrescriptionLine(Integer requestId,
                                                          Integer requestLineId,
                                                          String voidReason) {
+        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_CREATE_PRESCRIPTION);
         if (requestId == null || requestLineId == null) {
             throw new IllegalArgumentException("Request and request line are required");
         }
@@ -2851,6 +2856,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         if (productMasterItem.getDrug() == null) {
             throw new IllegalArgumentException("Selected product master drug is not linked to an OpenMRS drug");
         }
+        ProductMasterPrivilegeSupport.requireAllowed(productMasterItem);
     }
 
     private org.openmrs.module.rwandapharmacymanagement.model.Item ensureLocalItem(ProductMasterItem productMasterItem) {

@@ -56,6 +56,7 @@ public class MainStorePageController {
                     @RequestParam(value = "q", required = false) String query,
                     @RequestParam(value = "page", required = false) Integer page,
                     @RequestParam(value = "pageSize", required = false) Integer pageSize,
+                    @RequestParam(value = "supplierId", required = false) Integer supplierId,
                     HttpSession session) {
         org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation mainStore = pharmacyService.getMainStore();
         List<InventoryBalance> allStockBalances = mainStore == null
@@ -86,11 +87,39 @@ public class MainStorePageController {
         model.addAttribute("orderSubmitted", Boolean.FALSE);
         model.addAttribute("mainStoreName", mainStore == null ? "Main Pharmacy" : mainStore.getName());
         model.addAttribute("q", trimToEmpty(query));
-        List<ProductMasterItem> productMasterItems = pharmacyService.getAllProductMasterItems();
+        Supplier selectedSupplier = supplierId == null ? null : pharmacyService.getSupplier(supplierId);
+        List<ProductMasterItem> productMasterItems = filterProductMasterItemsForSupplier(
+                pharmacyService.getAllProductMasterItems(), selectedSupplier);
         model.addAttribute("productMasterItems", productMasterItems);
         model.addAttribute("productMasterPrograms", productMasterPrograms(productMasterItems));
         model.addAttribute("suppliers", pharmacyService.getAllSuppliers());
+        model.addAttribute("selectedSupplier", selectedSupplier);
+        model.addAttribute("selectedSupplierId", supplierId);
         model.addAttribute("errorReference", FlashMessageSupport.consumeString(session, FLASH_ERROR_REFERENCE));
+    }
+
+    private List<ProductMasterItem> filterProductMasterItemsForSupplier(List<ProductMasterItem> productMasterItems,
+                                                                        Supplier supplier) {
+        List<ProductMasterItem> filtered = new ArrayList<ProductMasterItem>();
+        if (productMasterItems == null || supplier == null) {
+            return filtered;
+        }
+        for (ProductMasterItem item : productMasterItems) {
+            if (isProductMasterItemAllowedForSupplier(item, supplier)) {
+                filtered.add(item);
+            }
+        }
+        return filtered;
+    }
+
+    private boolean isProductMasterItemAllowedForSupplier(ProductMasterItem item, Supplier supplier) {
+        if (item == null || Boolean.FALSE.equals(item.getActive())) {
+            return false;
+        }
+        if (supplier != null && Boolean.TRUE.equals(supplier.getApiEnabled())) {
+            return ProductMasterItem.SOURCE_API_SYNCED.equalsIgnoreCase(trimToEmpty(item.getSource()));
+        }
+        return true;
     }
 
     private List<String> productMasterPrograms(List<ProductMasterItem> productMasterItems) {
@@ -158,29 +187,27 @@ public class MainStorePageController {
                        UiUtils ui) {
         try {
             if ("addToCart".equals(action)) {
-                addLocalItemToCart(session, pharmacyService, itemId, quantity);
-                persistDraftCart(pharmacyService, getCart(session, pharmacyService));
-                return "redirect:" + ui.pageLink("rwandapharmacymanagement", "inventory/mainStore");
+                throw new IllegalArgumentException("Select a supplier and add items from Product Master");
             }
             if ("addProductMasterToCart".equals(action)) {
-                addProductMasterItemToCart(session, pharmacyService, productMasterItemId, quantity);
+                addProductMasterItemToCart(session, pharmacyService, supplierId, productMasterItemId, quantity);
                 persistDraftCart(pharmacyService, getCart(session, pharmacyService));
-                return redirectToCart(ui);
+                return redirectToCart(ui, supplierId);
             }
             if ("addProductMasterRowsToCart".equals(action)) {
-                addProductMasterItemsToCart(session, pharmacyService, productMasterItemIds, productMasterQuantities);
+                addProductMasterItemsToCart(session, pharmacyService, supplierId, productMasterItemIds, productMasterQuantities);
                 persistDraftCart(pharmacyService, getCart(session, pharmacyService));
-                return redirectToCart(ui);
+                return redirectToCart(ui, supplierId);
             }
             if ("updateCart".equals(action)) {
                 updateCart(session, pharmacyService, cartKey, quantity, unitPrice);
                 persistDraftCart(pharmacyService, getCart(session, pharmacyService));
-                return redirectToCart(ui);
+                return redirectToCart(ui, supplierId);
             }
             if ("removeFromCart".equals(action)) {
                 removeFromCart(session, pharmacyService, cartKey);
                 persistDraftCart(pharmacyService, getCart(session, pharmacyService));
-                return redirectToCart(ui);
+                return redirectToCart(ui, supplierId);
             }
             if ("clearCart".equals(action)) {
                 session.removeAttribute(CART_SESSION_KEY);
@@ -199,9 +226,13 @@ public class MainStorePageController {
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "inventory/mainStore");
     }
 
-    private String redirectToCart(UiUtils ui) {
-        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "inventory/mainStore",
-                Collections.<String, Object>singletonMap("cart", "true"));
+    private String redirectToCart(UiUtils ui, Integer supplierId) {
+        Map<String, Object> params = new LinkedHashMap<String, Object>();
+        params.put("cart", "true");
+        if (supplierId != null) {
+            params.put("supplierId", supplierId);
+        }
+        return "redirect:" + ui.pageLink("rwandapharmacymanagement", "inventory/mainStore", params);
     }
 
     private String redirectToCartError(UiUtils ui, HttpSession session, RuntimeException e) {
@@ -250,12 +281,16 @@ public class MainStorePageController {
     }
 
     private void addProductMasterItemToCart(HttpSession session, PharmacyService pharmacyService,
-                                            Integer productMasterItemId, BigDecimal quantity) {
+                                            Integer supplierId, Integer productMasterItemId, BigDecimal quantity) {
         if (productMasterItemId == null || quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
             return;
         }
+        Supplier supplier = supplierId == null ? null : pharmacyService.getSupplier(supplierId);
+        if (supplier == null) {
+            throw new IllegalArgumentException("Select a supplier before adding Product Master items");
+        }
         ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(productMasterItemId);
-        if (productMasterItem == null) {
+        if (!isProductMasterItemAllowedForSupplier(productMasterItem, supplier)) {
             return;
         }
         Item mappedItem = pharmacyService.getMappedItemForProductMasterItem(productMasterItem);
@@ -285,14 +320,14 @@ public class MainStorePageController {
     }
 
     private void addProductMasterItemsToCart(HttpSession session, PharmacyService pharmacyService,
-                                             Integer[] productMasterItemIds, BigDecimal[] productMasterQuantities) {
+                                             Integer supplierId, Integer[] productMasterItemIds, BigDecimal[] productMasterQuantities) {
         if (productMasterItemIds == null || productMasterQuantities == null) {
             return;
         }
         for (int i = 0; i < productMasterItemIds.length; i++) {
             Integer currentItemId = productMasterItemIds[i];
             BigDecimal currentQuantity = productMasterQuantities.length > i ? productMasterQuantities[i] : null;
-            addProductMasterItemToCart(session, pharmacyService, currentItemId, currentQuantity);
+            addProductMasterItemToCart(session, pharmacyService, supplierId, currentItemId, currentQuantity);
         }
     }
 
@@ -326,6 +361,7 @@ public class MainStorePageController {
         if (supplier == null) {
             return;
         }
+        validateCartForSupplier(pharmacyService, cart, supplier);
         persistDraftCart(pharmacyService, cart);
         List<PurchaseOrder> draftOrders = pharmacyService.getDraftPurchaseOrdersForUser(Context.getAuthenticatedUser());
         for (PurchaseOrder purchaseOrder : draftOrders) {
@@ -345,6 +381,20 @@ public class MainStorePageController {
             pharmacyService.savePurchaseOrder(purchaseOrder);
         }
         session.removeAttribute(CART_SESSION_KEY);
+    }
+
+    private void validateCartForSupplier(PharmacyService pharmacyService, LinkedHashMap<String, CartLine> cart,
+                                         Supplier supplier) {
+        if (cart == null || cart.isEmpty()) {
+            return;
+        }
+        for (CartLine line : cart.values()) {
+            ProductMasterItem productMasterItem = line.getProductMasterItemId() == null
+                    ? null : pharmacyService.getProductMasterItem(line.getProductMasterItemId());
+            if (!isProductMasterItemAllowedForSupplier(productMasterItem, supplier)) {
+                throw new IllegalArgumentException("Cart contains an item that is not orderable for the selected supplier");
+            }
+        }
     }
 
     private LinkedHashMap<String, CartLine> draftCart(PharmacyService pharmacyService) {
@@ -374,14 +424,15 @@ public class MainStorePageController {
         CartLine line = new CartLine();
         ProductMasterItem productMasterItem = item.getProductMasterItem();
         if (productMasterItem != null && productMasterItem.getProductMasterItemId() != null) {
+            if (Boolean.FALSE.equals(productMasterItem.getActive())) {
+                return null;
+            }
             line.setCartKey(cartKeyForProductMaster(productMasterItem.getProductMasterItemId()));
             line.setProductMasterItemId(productMasterItem.getProductMasterItemId());
             Item mappedItem = pharmacyService.getMappedItemForProductMasterItem(productMasterItem);
             line.setItemId(mappedItem == null ? null : mappedItem.getItemId());
         } else {
-            Item localItem = item.getItemCode() == null ? null : pharmacyService.getItemByCodeAndProgram(item.getItemCode(), item.getProgram());
-            line.setItemId(localItem == null ? null : localItem.getItemId());
-            line.setCartKey(localItem == null ? "POI-" + item.getPurchaseOrderItemId() : cartKeyForItem(localItem.getItemId()));
+            return null;
         }
         line.setItemName(item.getItemName());
         line.setItemCode(item.getItemCode());
@@ -428,8 +479,19 @@ public class MainStorePageController {
             for (CartLine cartLine : entry.getValue()) {
                 PurchaseOrderItem item = purchaseOrderItemFromCartLine(pharmacyService, draftOrder, cartLine,
                         entry.getKey(), orderNumber);
+                if (item == null) {
+                    continue;
+                }
                 totalCost = totalCost.add(item.getTotalPrice());
                 draftOrder.getItems().add(item);
+            }
+            if (draftOrder.getItems().isEmpty()) {
+                draftOrder.setVoided(Boolean.TRUE);
+                draftOrder.setVoidedBy(Context.getAuthenticatedUser());
+                draftOrder.setDateVoided(new Date());
+                draftOrder.setVoidReason("No active Product Master items remained in the draft cart");
+                pharmacyService.savePurchaseOrder(draftOrder);
+                continue;
             }
             draftOrder.setTotalCost(totalCost);
             pharmacyService.savePurchaseOrder(draftOrder);
@@ -440,9 +502,12 @@ public class MainStorePageController {
                                                             CartLine cartLine, String program, String orderNumber) {
         PurchaseOrderItem item = new PurchaseOrderItem();
         item.setPurchaseOrder(purchaseOrder);
-        if (cartLine.getProductMasterItemId() != null) {
-            item.setProductMasterItem(pharmacyService.getProductMasterItem(cartLine.getProductMasterItemId()));
+        ProductMasterItem productMasterItem = cartLine.getProductMasterItemId() == null
+                ? null : pharmacyService.getProductMasterItem(cartLine.getProductMasterItemId());
+        if (productMasterItem == null || Boolean.FALSE.equals(productMasterItem.getActive())) {
+            return null;
         }
+        item.setProductMasterItem(productMasterItem);
         item.setOrderNumber(requiredText(orderNumber, "draft"));
         item.setProgram(requiredText(program, "General"));
         item.setItemName(requiredText(cartLine.getItemName(), "Unknown item"));

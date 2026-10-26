@@ -37,6 +37,10 @@ public interface DispensingDao {
                                          String requestType,
                                          String dateFilter);
 
+    List<PatientDispensingRequest> getPendingRequestsForCleanup(Date fromInclusive,
+                                                                Date toExclusive,
+                                                                Integer pharmacyLocationId);
+
     List<PatientDispensingRequest> getPendingPaidRequests();
 
     List<PatientDispensingRequest> getPatientPrescriptionHistory(Integer patientId, int firstResult, int maxResults);

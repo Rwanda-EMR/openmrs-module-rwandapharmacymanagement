@@ -119,6 +119,7 @@ public class ListPageController {
         productMasterItem.setMaterialType(normalizedMaterialType);
         productMasterItem.setDrug(drug);
         productMasterItem.setActive(Boolean.TRUE);
+        productMasterItem.setSource(ProductMasterItem.SOURCE_MANUAL);
         pharmacyService.saveProductMasterItem(productMasterItem);
         pharmacyService.mapProductMasterItemToItem(productMasterItem, item);
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "item/list");

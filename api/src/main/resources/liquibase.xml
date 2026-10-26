@@ -152,4 +152,12 @@
         <sqlFile path="sql/migrations/rpm-delivery-receipt-line-program.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
+    <changeSet id="rpm-product-master-source" author="MoH Rwanda, PIH/IMB">
+        <sqlFile path="sql/migrations/rpm-product-master-source.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="rpm-product-master-restriction" author="MoH Rwanda, PIH/IMB">
+        <sqlFile path="sql/migrations/rpm-product-master-restriction.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>

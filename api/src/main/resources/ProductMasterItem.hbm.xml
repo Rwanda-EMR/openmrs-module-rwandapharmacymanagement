@@ -14,6 +14,9 @@
         <property name="itemPrice" column="item_price" type="big_decimal"/>
         <many-to-one name="drug" class="org.openmrs.Drug" column="drug_id"/>
         <property name="active" column="active" type="boolean"/>
+        <property name="source" column="source" type="string"/>
+        <property name="requiredPrivilege" column="required_privilege" type="string"/>
+        <property name="restrictionReason" column="restriction_reason" type="string"/>
         <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
         <property name="dateCreated" column="date_created"/>
         <property name="voided" column="voided" type="boolean"/>

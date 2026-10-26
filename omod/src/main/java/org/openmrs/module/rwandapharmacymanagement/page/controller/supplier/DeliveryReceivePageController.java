@@ -137,8 +137,10 @@ public class DeliveryReceivePageController {
                 if (receiptItem == null || receiptItem.getNpcCode() == null || itemIdByCode.containsKey(receiptItem.getNpcCode())) {
                     continue;
                 }
-                Item item = DeliveryReceiptSupport.resolveOrCreateItemByCode(pharmacyService,
-                        receiptItem.getNpcCode(), receiptItem.getDescription());
+                ProductMasterItem productMasterItem = resolveProductMasterItem(pharmacyService,
+                        receiptItem.getProductMasterItemId(), selectedPurchaseOrder, receiptItem.getNpcCode(), null);
+                Item item = productMasterItem == null ? null
+                        : DeliveryReceiptSupport.resolveOrCreateMappedItem(pharmacyService, productMasterItem);
                 if (item != null) {
                     itemIdByCode.put(receiptItem.getNpcCode(), item.getItemId());
                 }
@@ -280,20 +282,15 @@ public class DeliveryReceivePageController {
             if (productMasterItem == null) {
                 productMasterItem = findPurchaseOrderProductMasterItem(receipt.getPurchaseOrder(), itemCode);
             }
+            if (productMasterItem == null) {
+                throw new IllegalArgumentException("Select a Product Master item for line " + (i + 1));
+            }
             String fallbackProgram = firstPresent(productMasterItem == null ? null : productMasterItem.getProgram(),
                     trim(programs, i), findPurchaseOrderItemProgram(receipt.getPurchaseOrder(), itemCode));
             Item item = null;
-            if (productMasterItem != null) {
-                item = DeliveryReceiptSupport.resolveOrCreateMappedItem(pharmacyService, productMasterItem);
-                itemCode = firstPresent(productMasterItem.getNpcCode(), itemCode);
-                fallbackItemName = firstPresent(productMasterItem.getItemName(), fallbackItemName);
-            }
-            if (item == null) {
-                item = itemId == null ? null : pharmacyService.getItem(itemId);
-            }
-            if (item == null && !itemCode.isEmpty()) {
-                item = DeliveryReceiptSupport.resolveOrCreateItemByCode(pharmacyService, itemCode, fallbackItemName, fallbackProgram);
-            }
+            item = DeliveryReceiptSupport.resolveOrCreateMappedItem(pharmacyService, productMasterItem);
+            itemCode = firstPresent(productMasterItem.getNpcCode(), itemCode);
+            fallbackItemName = firstPresent(productMasterItem.getItemName(), fallbackItemName);
             BigDecimal quantity = quantities != null && quantities.length > i ? quantities[i] : null;
             BigDecimal orderedQuantity = orderedQuantities != null && orderedQuantities.length > i ? orderedQuantities[i] : quantity;
             BigDecimal acceptedQuantity = acceptedQuantities != null && acceptedQuantities.length > i ? acceptedQuantities[i] : quantity;
@@ -362,11 +359,12 @@ public class DeliveryReceivePageController {
                 String program = optionalCellValue(row, headerIndexes, "program", formatter);
                 ProductMasterItem productMasterItem = resolveProductMasterItem(pharmacyService, null,
                         receipt.getPurchaseOrder(), itemCode, program);
+                if (productMasterItem == null) {
+                    throw new IllegalArgumentException("Unknown Product Master item code in upload: " + itemCode
+                            + " at row " + (rowIndex + 1));
+                }
                 program = firstPresent(productMasterItem == null ? null : productMasterItem.getProgram(), program);
-                Item item = productMasterItem == null
-                        ? DeliveryReceiptSupport.resolveOrCreateItemByCode(pharmacyService, itemCode,
-                        findPurchaseOrderItemName(receipt.getPurchaseOrder(), itemCode), program)
-                        : DeliveryReceiptSupport.resolveOrCreateMappedItem(pharmacyService, productMasterItem);
+                Item item = DeliveryReceiptSupport.resolveOrCreateMappedItem(pharmacyService, productMasterItem);
                 if (item == null) {
                     throw new IllegalArgumentException("Unknown item code in upload: " + itemCode + " at row " + (rowIndex + 1));
                 }
@@ -445,11 +443,11 @@ public class DeliveryReceivePageController {
             String itemCode = csvValue(rowValues, headerIndexes, "itemcode", 0);
             String program = csvValue(rowValues, headerIndexes, "program", -1);
             ProductMasterItem productMasterItem = resolveProductMasterItem(pharmacyService, null, purchaseOrder, itemCode, program);
+            if (productMasterItem == null) {
+                throw new IllegalArgumentException("Unknown Product Master item code in upload: " + itemCode + " at row " + rowIndex);
+            }
             program = firstPresent(productMasterItem == null ? null : productMasterItem.getProgram(), program);
-            Item item = productMasterItem == null
-                    ? DeliveryReceiptSupport.resolveOrCreateItemByCode(pharmacyService, itemCode,
-                    findPurchaseOrderItemName(purchaseOrder, itemCode), program)
-                    : DeliveryReceiptSupport.resolveOrCreateMappedItem(pharmacyService, productMasterItem);
+            Item item = DeliveryReceiptSupport.resolveOrCreateMappedItem(pharmacyService, productMasterItem);
             if (item == null) {
                 throw new IllegalArgumentException("Unknown item code in upload: " + itemCode + " at row " + rowIndex);
             }
@@ -896,7 +894,8 @@ public class DeliveryReceivePageController {
         String code = itemCode == null ? "" : itemCode.trim();
         String selectedProgram = program == null ? "" : program.trim();
         if (!code.isEmpty()) {
-            return pharmacyService.getProductMasterItemByNpcCodeAndProgram(code, selectedProgram);
+            ProductMasterItem byCode = pharmacyService.getProductMasterItemByNpcCodeAndProgram(code, selectedProgram);
+            return byCode != null && !Boolean.FALSE.equals(byCode.getActive()) ? byCode : null;
         }
         return null;
     }

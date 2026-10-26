@@ -6,7 +6,9 @@ import org.hibernate.criterion.Disjunction;
 import org.hibernate.criterion.Order;
 import org.hibernate.criterion.Projections;
 import org.hibernate.criterion.Restrictions;
+import org.openmrs.PatientIdentifierType;
 import org.openmrs.api.context.Context;
+import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.db.DispensingDao;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecord;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecordLine;
@@ -105,10 +107,13 @@ public class HibernateDispensingDao implements DispensingDao {
                                                 String queueTab,
                                                 String requestType,
                                                 String dateFilter) {
+        Integer upidIdentifierTypeId = resolveUpidIdentifierTypeId();
         Number count = (Number) sessionFactory.getCurrentSession()
                 .createSQLQuery("select count(distinct r.patient_dispensing_request_id) "
-                        + pendingRequestSqlFromWhere(pharmacyLocationId, search, queueTab, requestType, dateFilter))
-                .setProperties(pendingRequestSqlParameters(pharmacyLocationId, search, requestType))
+                        + pendingRequestSqlFromWhere(pharmacyLocationId, search, queueTab, requestType, dateFilter,
+                        upidIdentifierTypeId))
+                .setProperties(pendingRequestSqlParameters(pharmacyLocationId, search, requestType,
+                        upidIdentifierTypeId))
                 .uniqueResult();
         return count == null ? 0L : count.longValue();
     }
@@ -120,11 +125,14 @@ public class HibernateDispensingDao implements DispensingDao {
                                                        String queueTab,
                                                        String requestType,
                                                        String dateFilter) {
+        Integer upidIdentifierTypeId = resolveUpidIdentifierTypeId();
         List results = sessionFactory.getCurrentSession()
                 .createSQLQuery("select distinct r.patient_dispensing_request_id, r.date_created "
-                        + pendingRequestSqlFromWhere(pharmacyLocationId, search, queueTab, requestType, dateFilter)
+                        + pendingRequestSqlFromWhere(pharmacyLocationId, search, queueTab, requestType, dateFilter,
+                        upidIdentifierTypeId)
                         + " order by r.date_created desc, r.patient_dispensing_request_id desc")
-                .setProperties(pendingRequestSqlParameters(pharmacyLocationId, search, requestType))
+                .setProperties(pendingRequestSqlParameters(pharmacyLocationId, search, requestType,
+                        upidIdentifierTypeId))
                 .setFirstResult(Math.max(0, firstResult))
                 .setMaxResults(Math.max(1, maxResults))
                 .list();
@@ -143,12 +151,18 @@ public class HibernateDispensingDao implements DispensingDao {
                                              String search,
                                              String queueTab,
                                              String requestType,
-                                             String dateFilter) {
+                                             String dateFilter,
+                                             Integer upidIdentifierTypeId) {
         StringBuilder sql = new StringBuilder();
         sql.append("from rpm_patient_dispensing_request r ")
                 .append("left join rpm_patient_dispensing_request_line l on l.patient_dispensing_request_id = r.patient_dispensing_request_id ")
-                .append("left join patient_identifier pi on pi.patient_id = r.patient_id and coalesce(pi.voided, 0) = 0 ")
-                .append("left join person_name pn on pn.person_id = r.patient_id and coalesce(pn.voided, 0) = 0 ")
+                .append("left join patient_identifier pi on pi.patient_id = r.patient_id and coalesce(pi.voided, 0) = 0 ");
+        if (upidIdentifierTypeId != null) {
+            sql.append("left join patient_identifier upid_pi on upid_pi.patient_id = r.patient_id ")
+                    .append("and coalesce(upid_pi.voided, 0) = 0 ")
+                    .append("and upid_pi.identifier_type = :upidIdentifierTypeId ");
+        }
+        sql.append("left join person_name pn on pn.person_id = r.patient_id and coalesce(pn.voided, 0) = 0 ")
                 .append("where coalesce(r.voided, 0) = 0 ")
                 .append("and r.request_status in ('PENDING_PAYMENT', 'PENDING_DISPENSE', 'IN_PROGRESS') ");
         if (pharmacyLocationId != null) {
@@ -156,8 +170,11 @@ public class HibernateDispensingDao implements DispensingDao {
                     .append("or l.routed_pharmacy_location_id = :pharmacyLocationId or r.target_pharmacy_location_id is null) ");
         }
         if (hasText(search)) {
-            sql.append("and (lower(coalesce(pi.identifier, '')) like :search ")
-                    .append("or lower(concat_ws(' ', coalesce(pn.given_name, ''), coalesce(pn.middle_name, ''), ")
+            sql.append("and (lower(coalesce(pi.identifier, '')) like :search ");
+            if (upidIdentifierTypeId != null) {
+                sql.append("or lower(coalesce(upid_pi.identifier, '')) like :search ");
+            }
+            sql.append("or lower(concat_ws(' ', coalesce(pn.given_name, ''), coalesce(pn.middle_name, ''), ")
                     .append("coalesce(pn.family_name, ''), coalesce(pn.family_name2, ''))) like :search ")
                     .append("or cast(r.patient_id as char) like :search ")
                     .append("or cast(r.patient_dispensing_request_id as char) like :search ")
@@ -193,8 +210,12 @@ public class HibernateDispensingDao implements DispensingDao {
         return sql.toString();
     }
 
-    private Map<String, Object> pendingRequestSqlParameters(Integer pharmacyLocationId, String search, String requestType) {
+    private Map<String, Object> pendingRequestSqlParameters(Integer pharmacyLocationId, String search, String requestType,
+                                                            Integer upidIdentifierTypeId) {
         Map<String, Object> parameters = new HashMap<String, Object>();
+        if (upidIdentifierTypeId != null) {
+            parameters.put("upidIdentifierTypeId", upidIdentifierTypeId);
+        }
         if (pharmacyLocationId != null) {
             parameters.put("pharmacyLocationId", pharmacyLocationId);
         }
@@ -209,6 +230,16 @@ public class HibernateDispensingDao implements DispensingDao {
             parameters.put("requestType", requestType.trim().toUpperCase());
         }
         return parameters;
+    }
+
+    private Integer resolveUpidIdentifierTypeId() {
+        String uuid = Context.getAdministrationService().getGlobalProperty(
+                RwandaPharmacyManagementConfig.GP_HIE_PATIENT_IDENTIFIER_TYPE_UUID, "");
+        if (!hasText(uuid)) {
+            return null;
+        }
+        PatientIdentifierType identifierType = Context.getPatientService().getPatientIdentifierTypeByUuid(uuid.trim());
+        return identifierType == null ? null : identifierType.getPatientIdentifierTypeId();
     }
 
     private String normalizeFilter(String value) {
@@ -262,6 +293,36 @@ public class HibernateDispensingDao implements DispensingDao {
             criteria.setResultTransformer(org.hibernate.Criteria.DISTINCT_ROOT_ENTITY);
         }
         return criteria;
+    }
+
+    @Override
+    public List<PatientDispensingRequest> getPendingRequestsForCleanup(Date fromInclusive,
+                                                                       Date toExclusive,
+                                                                       Integer pharmacyLocationId) {
+        org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(PatientDispensingRequest.class);
+        criteria.add(Restrictions.eq("voided", false));
+        criteria.add(Restrictions.in("requestStatus", new Object[] {
+                org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.PENDING_PAYMENT,
+                org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.PENDING_DISPENSE
+        }));
+        if (fromInclusive != null) {
+            criteria.add(Restrictions.ge("dateCreated", fromInclusive));
+        }
+        if (toExclusive != null) {
+            criteria.add(Restrictions.lt("dateCreated", toExclusive));
+        }
+        if (pharmacyLocationId != null) {
+            criteria.createAlias("targetPharmacyLocation", "targetPharmacyLocation", org.hibernate.sql.JoinType.LEFT_OUTER_JOIN);
+            criteria.createAlias("lines", "line", org.hibernate.sql.JoinType.LEFT_OUTER_JOIN);
+            criteria.createAlias("line.routedPharmacyLocation", "routedPharmacyLocation", org.hibernate.sql.JoinType.LEFT_OUTER_JOIN);
+            Disjunction pharmacyMatch = Restrictions.disjunction();
+            pharmacyMatch.add(Restrictions.eq("targetPharmacyLocation.pharmacyLocationId", pharmacyLocationId));
+            pharmacyMatch.add(Restrictions.eq("routedPharmacyLocation.pharmacyLocationId", pharmacyLocationId));
+            criteria.add(pharmacyMatch);
+            criteria.setResultTransformer(org.hibernate.Criteria.DISTINCT_ROOT_ENTITY);
+        }
+        criteria.addOrder(Order.asc("dateCreated"));
+        return criteria.list();
     }
 
     @Override

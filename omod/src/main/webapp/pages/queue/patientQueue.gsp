@@ -80,7 +80,7 @@
             <form method="get" class="queue-search">
                 <input type="hidden" name="pharmacyLocationId" value="${ activePharmacy.pharmacyLocationId }"/>
                 <input type="hidden" name="tab" value="${ activeTab }"/>
-                <input type="text" name="q" value="${ queueSearch ?: '' }" placeholder="Search patient identifier or patient name" style="max-width:360px;"/>
+                <input type="text" name="q" value="${ queueSearch ?: '' }" placeholder="Search patient ID, UPID, or patient name" style="max-width:360px;"/>
                 <button type="submit">Search</button>
                 <% if (queueSearch) { %><a class="queue-view" href="${ ui.pageLink('rwandapharmacymanagement', 'queue/patientQueue', [pharmacyLocationId: activePharmacy.pharmacyLocationId, tab: activeTab]) }">Clear</a><% } %>
             </form>
@@ -96,6 +96,7 @@
                 <th>Created</th>
                 <th>Patient name</th>
                 <th>Patient ID</th>
+                <th>UPID</th>
                 <th>Age</th>
                 <th>Gender</th>
                 <th>Type</th>
@@ -117,12 +118,14 @@
                 def consumableRequest = request.requestType?.toString() == 'CONSUMABLE'
                 def patientLabel = request.patient?.personName ? request.patient.personName.toString() : ''
                 def patientIdLabel = patientIdentifierByRequestId[request.patientDispensingRequestId] ?: ''
+                def upidLabel = patientUpidByRequestId[request.patientDispensingRequestId] ?: ''
             %>
-            <tr class="queue-row" data-search="${ (patientLabel + ' ' + patientIdLabel).toLowerCase() }">
+            <tr class="queue-row" data-search="${ (patientLabel + ' ' + patientIdLabel + ' ' + upidLabel).toLowerCase() }">
                 <td>${ (queueFirstResult ?: 1) + idx }</td>
                 <td>${ request.dateCreated ? request.dateCreated.format('dd/MM HH:mm') : '' }</td>
                 <td class="queue-name">${ patientLabel }</td>
                 <td class="queue-id">${ patientIdLabel }</td>
+                <td class="queue-id">${ upidLabel }</td>
                 <td>${ age == null ? '' : age }</td>
                 <td>${ gender ?: '' }</td>
                 <td>${ consumableRequest ? 'Consumable' : 'Prescription' }</td>

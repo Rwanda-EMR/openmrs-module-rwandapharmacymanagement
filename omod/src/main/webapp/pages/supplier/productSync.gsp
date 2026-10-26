@@ -88,6 +88,59 @@
     .sync-progress.active {
         display: flex;
     }
+    .restriction-form {
+        display: grid;
+        gap: 6px;
+        min-width: 260px;
+        position: relative;
+    }
+    .restriction-form input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        font-size: 12px;
+    }
+    .restriction-actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .privilege-suggestions {
+        display: none;
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 32px;
+        max-height: 210px;
+        overflow: auto;
+        border: 1px solid #b9c6d3;
+        background: #fff;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.12);
+        z-index: 3;
+    }
+    .privilege-suggestions.active {
+        display: block;
+    }
+    .privilege-suggestion {
+        padding: 7px 8px;
+        border-bottom: 1px solid #edf1f5;
+        cursor: pointer;
+    }
+    .privilege-suggestion:hover {
+        background: #f1f7fb;
+    }
+    .privilege-name {
+        font-weight: 600;
+        color: #2f5f7f;
+    }
+    .privilege-description {
+        color: #777;
+        font-size: 11px;
+        margin-top: 2px;
+    }
     .sync-spinner {
         width: 16px;
         height: 16px;
@@ -149,11 +202,14 @@
             <th>Price</th>
             <th>Drug</th>
             <th>Concept</th>
+            <th>Required privilege</th>
+            <th>Restriction reason</th>
+            <th>Restriction</th>
         </tr>
         </thead>
         <tbody id="product-sync-body">
         <% if (!productMasterItems) { %>
-        <tr><td colspan="7" style="color:#777;">No product master items found.</td></tr>
+        <tr><td colspan="10" style="color:#777;">No product master items found.</td></tr>
         <% } %>
         <% productMasterItems.each { productMasterItem -> %>
         <tr class="product-sync-row">
@@ -164,6 +220,23 @@
             <td>${ productMasterItem.itemPrice ?: 0 }</td>
             <td>${ productMasterItem.drug?.name ?: '' }</td>
             <td>${ conceptNameByNpcCode[productMasterItem.npcCode] ?: '' }</td>
+            <td>${ productMasterItem.requiredPrivilege ?: '' }</td>
+            <td>${ productMasterItem.restrictionReason ?: '' }</td>
+            <td>
+                <form method="post" class="restriction-form">
+                    <input type="hidden" name="action" value="saveRestriction"/>
+                    <input type="hidden" name="productMasterItemId" value="${ productMasterItem.productMasterItemId }"/>
+                    <input type="text" name="requiredPrivilege" class="privilege-input" value="${ productMasterItem.requiredPrivilege ?: '' }" placeholder="Type OpenMRS privilege" autocomplete="off"/>
+                    <div class="privilege-suggestions"></div>
+                    <input type="text" name="restrictionReason" value="${ productMasterItem.restrictionReason ?: '' }" placeholder="Reason shown if blocked"/>
+                    <div><button type="submit" class="stock-btn">Save</button></div>
+                </form>
+                <form method="post" style="margin:6px 0 0;">
+                    <input type="hidden" name="action" value="clearRestriction"/>
+                    <input type="hidden" name="productMasterItemId" value="${ productMasterItem.productMasterItemId }"/>
+                    <button type="submit" class="stock-btn">Clear</button>
+                </form>
+            </td>
         </tr>
         <% } %>
         </tbody>
@@ -198,6 +271,8 @@
 
 <script type="text/javascript">
     var syncFilterTimer = null;
+    var privilegeSearchTimers = {};
+    var privilegeSearchUrl = '/' + OPENMRS_CONTEXT_PATH + '/module/rwandapharmacymanagement/privileges/search';
 
     function queueSyncFilterSubmit() {
         if (syncFilterTimer) {
@@ -225,4 +300,129 @@
             progress.classList.add('active');
         }
     }
+
+    function setupPrivilegeSearch() {
+        var inputs = document.querySelectorAll ? document.querySelectorAll('.privilege-input') : [];
+        for (var i = 0; i < inputs.length; i++) {
+            attachPrivilegeSearch(inputs[i], i);
+        }
+        document.addEventListener('click', function(event) {
+            var target = event.target || event.srcElement;
+            if (!hasClass(target, 'privilege-input') && !closestWithClass(target, 'privilege-suggestions')) {
+                hidePrivilegeSuggestions();
+            }
+        });
+    }
+
+    function attachPrivilegeSearch(input, index) {
+        input.setAttribute('data-privilege-index', String(index));
+        input.oninput = function() {
+            var key = input.getAttribute('data-privilege-index');
+            if (privilegeSearchTimers[key]) {
+                window.clearTimeout(privilegeSearchTimers[key]);
+            }
+            privilegeSearchTimers[key] = window.setTimeout(function() {
+                searchPrivileges(input);
+            }, 250);
+        };
+        input.onfocus = function() {
+            if (input.value && input.value.length >= 2) {
+                searchPrivileges(input);
+            }
+        };
+    }
+
+    function searchPrivileges(input) {
+        var query = input.value || '';
+        var suggestions = privilegeSuggestionBox(input);
+        if (!suggestions || query.length < 2) {
+            clearPrivilegeSuggestions(suggestions);
+            return;
+        }
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', privilegeSearchUrl + '?q=' + encodeURIComponent(query) + '&limit=20', true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== 4) {
+                return;
+            }
+            if (xhr.status < 200 || xhr.status >= 300) {
+                clearPrivilegeSuggestions(suggestions);
+                return;
+            }
+            var rows = [];
+            try {
+                rows = JSON.parse(xhr.responseText || '[]');
+            }
+            catch (e) {
+                rows = [];
+            }
+            renderPrivilegeSuggestions(input, suggestions, rows);
+        };
+        xhr.send(null);
+    }
+
+    function renderPrivilegeSuggestions(input, suggestions, rows) {
+        clearPrivilegeSuggestions(suggestions);
+        if (!rows || rows.length === 0) {
+            return;
+        }
+        for (var i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            var option = document.createElement('div');
+            option.className = 'privilege-suggestion';
+            option.setAttribute('data-privilege-name', row.name || '');
+            option.innerHTML = '<div class="privilege-name"></div><div class="privilege-description"></div>';
+            option.children[0].textContent = row.name || '';
+            option.children[1].textContent = row.description || '';
+            option.onclick = function() {
+                input.value = this.getAttribute('data-privilege-name') || '';
+                clearPrivilegeSuggestions(suggestions);
+            };
+            suggestions.appendChild(option);
+        }
+        suggestions.classList.add('active');
+    }
+
+    function privilegeSuggestionBox(input) {
+        var node = input.nextSibling;
+        while (node) {
+            if (node.nodeType === 1 && hasClass(node, 'privilege-suggestions')) {
+                return node;
+            }
+            node = node.nextSibling;
+        }
+        return null;
+    }
+
+    function clearPrivilegeSuggestions(suggestions) {
+        if (!suggestions) {
+            return;
+        }
+        suggestions.innerHTML = '';
+        suggestions.classList.remove('active');
+    }
+
+    function hidePrivilegeSuggestions() {
+        var boxes = document.querySelectorAll ? document.querySelectorAll('.privilege-suggestions') : [];
+        for (var i = 0; i < boxes.length; i++) {
+            clearPrivilegeSuggestions(boxes[i]);
+        }
+    }
+
+    function hasClass(element, className) {
+        return element && element.className && (' ' + element.className + ' ').indexOf(' ' + className + ' ') >= 0;
+    }
+
+    function closestWithClass(element, className) {
+        var current = element;
+        while (current) {
+            if (hasClass(current, className)) {
+                return current;
+            }
+            current = current.parentNode;
+        }
+        return null;
+    }
+
+    setupPrivilegeSearch();
 </script>

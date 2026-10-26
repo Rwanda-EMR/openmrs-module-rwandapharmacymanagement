@@ -53,6 +53,8 @@
 <table>
     <tr><th>Privilege</th><th>Use</th></tr>
     <tr><td><code>App: rwandapharmacymanagement.dashboard</code></td><td>Access pharmacy app/dashboard.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.createPrescription</code></td><td>Create, edit, or cancel a patient prescription.</td></tr>
+    <tr><td><code>Task: rwandapharmacymanagement.orderConsumables</code></td><td>Create, edit, or cancel a patient consumable request.</td></tr>
     <tr><td><code>Task: rwandapharmacymanagement.viewStock</code></td><td>View stock and reports.</td></tr>
     <tr><td><code>Task: rwandapharmacymanagement.viewPatientQueue</code></td><td>Use patient queue.</td></tr>
     <tr><td><code>Task: rwandapharmacymanagement.dispenseWithOrder</code></td><td>Dispense queued requests.</td></tr>
@@ -74,6 +76,7 @@
     <tr><td><code>Task: rwandapharmacymanagement.viewIntegrationLogs</code></td><td>View integration logs.</td></tr>
     <tr><td><code>Task: rwandapharmacymanagement.manageSettings</code></td><td>Module settings.</td></tr>
 </table>
+<p>The <code>Rwanda Pharmacy Doctor</code> role is assigned both patient-ordering privileges. The <code>Rwanda Pharmacy Nurse</code> role is assigned <code>orderConsumables</code> but not <code>createPrescription</code>; both roles also have dashboard access. The administrator role receives both ordering privileges.</p>
 
 <h2>4. Global Properties</h2>
 <table>
@@ -137,6 +140,7 @@
     <li>Link each pharmacy to an OpenMRS location and/or one or more OpenMRS location tags.</li>
     <li>If one OpenMRS location tag maps to more than one dispensing pharmacy, users will be asked to choose active pharmacy once per session.</li>
     <li>If one dispensing pharmacy serves multiple OpenMRS location tags, add all relevant tags to that pharmacy.</li>
+    <li>Main-pharmacy-only navigation links are shown only when the logged-in OpenMRS location maps to the main pharmacy. Dispensing-only links are shown only when the location maps to at least one active dispensing pharmacy. Shared pharmacy pages require either mapping.</li>
 </ol>
 
 <h2>7. Billing Configuration</h2>
@@ -199,7 +203,7 @@
     <tr><td><code>rwandapharmacymanagement.hie.sourceSystem</code></td><td>Source system name sent to HIE.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.medicationRequestPath</code></td><td>MedicationRequest endpoint path.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.medicationDispensePath</code></td><td>MedicationDispense endpoint path.</td></tr>
-    <tr><td><code>rwandapharmacymanagement.hie.patientIdentifierTypeUuid</code></td><td>Patient identifier type sent to HIE.</td></tr>
+    <tr><td><code>rwandapharmacymanagement.hie.patientIdentifierTypeUuid</code></td><td>Patient identifier type sent to HIE and used as UPID search/display in the patient queue.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.medicationCodeSystem</code></td><td>Medication code system URI.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.groupIdentifierSystem</code></td><td>Group identifier system for prescription/order number.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.connectionTimeout</code></td><td>Connection timeout.</td></tr>
@@ -274,7 +278,25 @@
   "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
 }</pre>
 
-<h3>11.4 Lab Request App</h3>
+<h3>11.4 HTML Form Entry Pharmacy Order Tags</h3>
+<p>The module registers embedded HTML Form Entry tags when it starts. These tags let form builders add pharmacy ordering controls directly inside an HTML Form Entry form:</p>
+<pre>&lt;rpmPrescriptionOrder /&gt;
+&lt;rpmConsumableOrder /&gt;</pre>
+<p>Optional attributes:</p>
+<table>
+    <tr><th>Tag</th><th>Attribute</th><th>Use</th></tr>
+    <tr><td><code>rpmPrescriptionOrder</code></td><td><code>required="true"</code></td><td>Requires at least one prescription line before the HFE form can be saved.</td></tr>
+    <tr><td><code>rpmPrescriptionOrder</code></td><td><code>patientBillId="123"</code></td><td>Links the created prescription request to a known patient bill ID.</td></tr>
+    <tr><td><code>rpmPrescriptionOrder</code></td><td><code>title="..."</code></td><td>Changes the embedded section title.</td></tr>
+    <tr><td><code>rpmPrescriptionOrder</code></td><td><code>buttonLabel="..."</code></td><td>Changes the add-line button label.</td></tr>
+    <tr><td><code>rpmConsumableOrder</code></td><td><code>required="true"</code></td><td>Requires at least one consumable line before the HFE form can be saved.</td></tr>
+    <tr><td><code>rpmConsumableOrder</code></td><td><code>title="..."</code></td><td>Changes the embedded section title.</td></tr>
+    <tr><td><code>rpmConsumableOrder</code></td><td><code>buttonLabel="..."</code></td><td>Changes the add-line button label.</td></tr>
+</table>
+<p>On form save, the tags create Rwanda Pharmacy Management patient requests through the same prescription and consumable services used by the normal patient dashboard pages. Empty embedded order tables are ignored, so a form can include an optional order section without creating blank pharmacy requests.</p>
+<p>Prescription orders require a patient, active visit, provider, and location. Consumable orders require a patient, location, and consumable billing readiness. Edit/delete of created lines remains in the normal pharmacy request workflows.</p>
+
+<h3>11.5 Lab Request App</h3>
 <pre>{
   "id": "rwandapharmacymanagement.lab.request",
   "label": "Lab Supply Request",
@@ -294,7 +316,7 @@
   "requiredPrivilege": "App: rwandapharmacymanagement.dashboard"
 }</pre>
 
-<h3>11.5 General Pharmacy Item Request App</h3>
+<h3>11.6 General Pharmacy Item Request App</h3>
 <pre>{
   "id": "rwandapharmacymanagement.pharmacyorder.request",
   "label": "Pharmacy Item Request",
@@ -323,17 +345,29 @@
     <tr><td>Repeat prescriptions</td><td>When the same active drug is prescribed again for the same patient, the module replaces/discontinues the active same-drug order before saving the new one so OpenMRS does not block repeat prescribing within 24 hours.</td></tr>
     <tr><td>Hidden items</td><td>Items hidden from requesters are treated as out of stock on prescription entry and cannot be dispensed from patient queue.</td></tr>
     <tr><td>Billing</td><td>Prescription requests must have billable service mappings unless the item is intentionally unbillable. Administrative linking is available through Link prescription bills.</td></tr>
+    <tr><td>UPID search</td><td>Configure <code>rwandapharmacymanagement.hie.patientIdentifierTypeUuid</code> with the UPID patient identifier type UUID. Patient queue search can then match that identifier and the queue displays it in a UPID column.</td></tr>
+    <tr><td>Queue cleanup</td><td><strong>Control &gt; Patient queue cleanup</strong> requires <code>Task: rwandapharmacymanagement.manageSettings</code>. It previews pending payment/pending dispense requests by date range and optional pharmacy, then marks confirmed matches as <code>NOT_SERVED</code> with a reason so they leave the patient queue.</td></tr>
 </table>
 
-<h3>12.2 Item Visibility and Batch Expiry Control</h3>
+<h3>12.2 HTML Form Entry Embedded Orders</h3>
+<table>
+    <tr><th>Area</th><th>Configuration rule</th></tr>
+    <tr><td>Module dependency</td><td>HTML Form Entry must be installed and started because the pharmacy module registers <code>rpmPrescriptionOrder</code> and <code>rpmConsumableOrder</code> as custom HFE tags.</td></tr>
+    <tr><td>Prescription tag</td><td>Use <code>&lt;rpmPrescriptionOrder /&gt;</code> in an HFE form to add an embedded prescription section. On save, it creates OpenMRS drug orders and the pharmacy dispensing request through <code>PrescriptionService</code>.</td></tr>
+    <tr><td>Consumable tag</td><td>Use <code>&lt;rpmConsumableOrder /&gt;</code> in an HFE form to add an embedded consumable section. On save, it creates consumable requests through <code>ConsumableOrderService</code>.</td></tr>
+    <tr><td>Optional sections</td><td>Leave <code>required</code> unset or <code>false</code> to allow the HFE form to save with no pharmacy lines. Use <code>required="true"</code> when the form must contain at least one pharmacy line.</td></tr>
+    <tr><td>Follow-up changes</td><td>Edits, deletes, payment checks, dispensing, and billing cleanup continue to be managed in the existing pharmacy request and patient queue pages after the HFE form creates the request.</td></tr>
+</table>
+
+<h3>12.3 Item Visibility and Batch Expiry Control</h3>
 <table>
     <tr><th>Control page</th><th>Configuration and effect</th></tr>
     <tr><td>Item visibility control</td><td>Requires <code>Task: rwandapharmacymanagement.adjustStock</code>. Hidden items are listed first for review, can be searched by item name/code, and are hidden from requester-facing selection/availability.</td></tr>
-    <tr><td>Batch expiry control</td><td>Requires <code>Task: rwandapharmacymanagement.adjustStock</code>. Main pharmacy users can update the expiry date for an existing batch number without changing quantity.</td></tr>
-    <tr><td>Reconciliation</td><td>Requires <code>Task: rwandapharmacymanagement.adjustStock</code>. Use for controlled stock corrections with adjustment reason and audit trail.</td></tr>
+    <tr><td>Batch expiry control</td><td>Requires <code>Task: rwandapharmacymanagement.adjustStock</code> and a current main pharmacy mapping. Main pharmacy users can update the expiry date for an existing batch number without changing quantity.</td></tr>
+    <tr><td>Reconciliation</td><td>Requires <code>Task: rwandapharmacymanagement.adjustStock</code> and a current pharmacy mapping. Main and dispensing pharmacies can use it for controlled stock corrections with adjustment reason and audit trail.</td></tr>
 </table>
 
-<h3>12.3 Pharmacy Item Requests</h3>
+<h3>12.4 Pharmacy Item Requests</h3>
 <p>Pharmacy item requests are user requests to a selected pharmacy. The queue is placed under the <strong>Dispensing</strong> navigation block, and history is available with PDF download per request.</p>
 <table>
     <tr><th>Feature</th><th>Configuration rule</th></tr>
@@ -342,17 +376,18 @@
     <tr><td>History</td><td>Users with transfer or approval privilege can view request history and download a PDF copy of a request.</td></tr>
 </table>
 
-<h3>12.4 Main, Dispensing, and Department Transfers</h3>
+<h3>12.5 Main, Dispensing, and Department Transfers</h3>
 <table>
     <tr><th>Workflow</th><th>Configuration rule</th></tr>
     <tr><td>Main to dispensing</td><td>Requires a main store, dispensing pharmacies, Head of Finance approval privilege, and transfer privilege. Review shows requesting pharmacy current quantity, previous info, removable request lines with reason, and multi-batch allocations when serving.</td></tr>
+    <tr><td>Transfer approval scope</td><td>Pharmacy transfer approval is restricted to the request's supplying pharmacy. Users only see and can approve/reject requested transfers where their current main or dispensing pharmacy is the transfer source.</td></tr>
     <tr><td>Dispensing to dispensing</td><td>Source excludes main pharmacy and the current active pharmacy. The receiving pharmacy is the active pharmacy.</td></tr>
     <tr><td>Return to main</td><td>Main pharmacy initiates return request; selected dispensing pharmacy approves transfer back or rejects.</td></tr>
     <tr><td>Transfer PDFs</td><td>Transferred requests can be downloaded as PDF from transfer history/review pages.</td></tr>
     <tr><td>Multi-batch transfer</td><td>The transfer form can allocate one requested line across more than one source batch. Validation should compare the sum of allocations with requested/approved quantity, not each batch allocation against the full line quantity.</td></tr>
 </table>
 
-<h3>12.5 Department Store Workflows</h3>
+<h3>12.6 Department Store Workflows</h3>
 <p>Department workflows are controlled by <code>Task: rwandapharmacymanagement.departmentStore</code> for the department workspace. The current configuration avoids user-to-department assignment; access is role/privilege based.</p>
 <table>
     <tr><th>Page</th><th>Use</th></tr>
@@ -364,23 +399,25 @@
 </table>
 <p>The department workflow mode global property is initialized to periodic accountability. Review workflow expectations before go-live.</p>
 
-<h3>12.6 Supplier, Delivery, and Purchase Order Controls</h3>
+<h3>12.7 Supplier, Delivery, and Purchase Order Controls</h3>
 <table>
     <tr><th>Area</th><th>Configuration rule</th></tr>
     <tr><td>Purchase order cart</td><td>Main pharmacy users add items from stock/product view. Orders are grouped by program and supplier.</td></tr>
     <tr><td>Approval</td><td>Health Facility Leader privilege approves or rejects purchase orders. Approved orders can be dispatched by API or email depending on supplier setup.</td></tr>
-    <tr><td>Delivery receiving</td><td>Receive from RMS/API order details, uploaded supplier template, or direct entry. Receipt proof PDF is available after successful receipt.</td></tr>
+    <tr><td>Main-only supplier pages</td><td>Purchase orders, supplier configuration, product sync, price history, and delivery receiving are main-pharmacy workflows and should only be visible when the current OpenMRS location maps to the main pharmacy.</td></tr>
+    <tr><td>Delivery receiving</td><td>Main pharmacy receives from RMS/API order details, uploaded supplier template, or direct entry. Receipt proof PDF is available after successful receipt.</td></tr>
     <tr><td>Supplier templates</td><td>Templates contain example format rows and support blank/N/A expiry for items configured not to require expiry.</td></tr>
 </table>
 
-<h3>12.7 Reports and Exports</h3>
+<h3>12.8 Reports and Exports</h3>
 <table>
     <tr><th>Report</th><th>Configuration rule</th></tr>
     <tr><td>Pharmacy stock</td><td>Requires active pharmacy locations and current inventory balances.</td></tr>
-    <tr><td>Overall hospital stock</td><td>Sums stock across pharmacy locations.</td></tr>
+    <tr><td>Overall hospital stock</td><td>Sums stock across pharmacy locations. Main-pharmacy scoped in navigation.</td></tr>
     <tr><td>Inventory movement</td><td>Requires stock transactions. Used to audit received, issued, adjusted, and transferred quantities.</td></tr>
     <tr><td>Item movement</td><td>Shows one item across one or all pharmacies, including batch, expiry, received, issued, balance, and months of stock. Patient dispense movements are stock transactions; new patient dispense rows store the dispensing request id in <code>reference_number</code>.</td></tr>
     <tr><td>Dispensing report</td><td>Uses dispensing records for patient dispensing activity.</td></tr>
+    <tr><td>Patient request report</td><td>Uses patient prescription and consumable request records. It is listed under Reports, not the Dispensing navigation block.</td></tr>
     <tr><td>Payment exception report</td><td>Uses payment exception approvals and related requests.</td></tr>
 </table>
 
@@ -424,11 +461,12 @@ days of stock = current quantity / average daily consumption</pre>
     <tr><td>Lab request</td><td>Lab concept set configured; lab request app installed; lab location mapped to pharmacy tag/location; stock exists.</td></tr>
     <tr><td>General pharmacy request</td><td>Pharmacies created; stock exists in requested pharmacy; app installed; active user has dashboard privilege.</td></tr>
     <tr><td>Department store</td><td>Department store privilege assigned; department request workflow mode reviewed; department stock and active dispensing pharmacy mappings exist.</td></tr>
-    <tr><td>Patient queue</td><td>OpenMRS location linked to pharmacy or tag; pharmacy selected where multiple; billing property configured.</td></tr>
-    <tr><td>Main to dispensing</td><td>Main store exists; dispensing pharmacy exists; Head of Finance role assigned; main stock exists.</td></tr>
+    <tr><td>Patient queue</td><td>OpenMRS location linked to pharmacy or tag; pharmacy selected where multiple; billing property configured; UPID identifier type configured if UPID search is expected.</td></tr>
+    <tr><td>Patient queue cleanup</td><td>Manage settings privilege assigned; operational rules agreed for date ranges and reason text before marking old pending requests as not served.</td></tr>
+    <tr><td>Main to dispensing</td><td>Main store exists; dispensing pharmacy exists; Head of Finance role assigned; main stock exists; approval users log in at the supplying pharmacy location.</td></tr>
     <tr><td>Return to main</td><td>Main store active; dispensing pharmacies active; current main pharmacy can request; dispensing pharmacy can approve.</td></tr>
     <tr><td>Dispensing to dispensing</td><td>At least two active dispensing pharmacies; stock exists in source; user active pharmacy is selected.</td></tr>
-    <tr><td>Purchase order</td><td>Product master and prices pulled; supplier configured; facility ID and hospital name set; Health Facility Leader approval role assigned; SMTP/API configured.</td></tr>
+    <tr><td>Purchase order</td><td>Product master and prices pulled; supplier configured; facility ID and hospital name set; Health Facility Leader approval role assigned; SMTP/API configured; current location maps to main pharmacy.</td></tr>
     <tr><td>Delivery receive</td><td>Supplier/order exists; item mappings exist; expiry rules set; templates use accepted format.</td></tr>
     <tr><td>Payment exception</td><td>Exception approver role assigned; payment exception report access tested; dispensing staff understand when exceptions are allowed.</td></tr>
     <tr><td>Reports and alerts</td><td>Stock transactions or inventory balances exist; items and pharmacies are active; alert global properties are configured; user has stock/report access.</td></tr>

@@ -8,14 +8,19 @@
 	    def canTransferStock = context.hasPrivilege("Task: rwandapharmacymanagement.transferStock")
 	    def canApproveMainToDispensingTransfer = context.hasPrivilege("Task: rwandapharmacymanagement.approveMainToDispensingTransfer")
 	    def canAdjustStock = context.hasPrivilege("Task: rwandapharmacymanagement.adjustStock")
+	    def navVisibility = context.loadClass("org.openmrs.module.rwandapharmacymanagement.web.support.NavigationVisibilitySupport")
+	    def isMainPharmacy = navVisibility.isVisible("MAIN_ONLY")
+	    def isAnyPharmacy = navVisibility.isVisible("PHARMACY_ANY")
 %>
 <h2>${ ui.message("rwandapharmacymanagement.dashboard.title") }</h2>
 <div class="home-section-title">Quick Actions</div>
 <div class="tiles">
+    <% if (isMainPharmacy) { %>
     <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "inventory/mainStore") }">
         <span class="tile-icon">▣</span>
         <span class="tile-label">Main Pharmacy Stock</span>
     </a>
+    <% } %>
     <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "pharmacyorder/request") }">
         <span class="tile-icon">↘</span>
         <span class="tile-label">Pharmacy Item Request</span>
@@ -42,7 +47,7 @@
         <span class="tile-icon">☷</span>
         <span class="tile-label">Pharmacy Item Request Queue <% if ((queueCounts['pharmacyorder/queue'] ?: 0) > 0) { %><span class="tile-count-badge">${ queueCounts['pharmacyorder/queue'] }</span><% } %></span>
     </a>
-    <% if (canTransferStock || canApproveMainToDispensingTransfer) { %>
+    <% if ((canTransferStock || canApproveMainToDispensingTransfer) && isAnyPharmacy) { %>
     <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "pharmacyorder/approve") }">
         <span class="tile-icon">✓</span>
         <span class="tile-label">Pharmacy Transfer Approval <% if ((queueCounts['pharmacyorder/approve'] ?: 0) > 0) { %><span class="tile-count-badge">${ queueCounts['pharmacyorder/approve'] }</span><% } %></span>
@@ -64,11 +69,13 @@
 	        <span class="tile-icon">☰</span>
 	        <span class="tile-label">Patient Request Report</span>
 	    </a>
+	    <% if (isMainPharmacy) { %>
 	    <a class="tile tile-supplier" href="${ ui.pageLink("rwandapharmacymanagement", "supplier/deliveryReceive") }">
         <span class="tile-icon">⇣</span>
         <span class="tile-label">Receive Delivery</span>
     </a>
-    <% if (canSubmitPurchaseOrders || canApprovePurchaseOrders) { %>
+	    <% } %>
+    <% if ((canSubmitPurchaseOrders || canApprovePurchaseOrders) && isMainPharmacy) { %>
     <a class="tile tile-supplier" href="${ ui.pageLink("rwandapharmacymanagement", "purchaseorder/management") }">
         <span class="tile-icon">≡</span>
         <span class="tile-label">Purchase Orders <% if ((queueCounts['purchaseorder/management'] ?: 0) > 0) { %><span class="tile-count-badge">${ queueCounts['purchaseorder/management'] }</span><% } %></span>
@@ -78,7 +85,7 @@
         <span class="tile-icon">!</span>
         <span class="tile-label">Alerts Dashboard <% if ((queueCounts['alerts/dashboard'] ?: 0) > 0) { %><span class="tile-count-badge">${ queueCounts['alerts/dashboard'] }</span><% } %></span>
     </a>
-    <% if (canAdjustStock) { %>
+    <% if (canAdjustStock && isMainPharmacy) { %>
     <a class="tile tile-admin" href="${ ui.pageLink("rwandapharmacymanagement", "admin/expiryControl") }">
         <span class="tile-icon">⌁</span>
         <span class="tile-label">Batch Expiry Control</span>
@@ -102,12 +109,22 @@
         <span class="tile-icon">○</span>
         <span class="tile-label">Not Billable Items Report</span>
     </a>
+    <% if (isMainPharmacy) { %>
     <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "report/writeOffDisposalReport") }">
         <span class="tile-icon">⌧</span>
         <span class="tile-label">Write-off and Disposal Report</span>
     </a>
-    <a class="tile tile-supplier" href="${ ui.pageLink("rwandapharmacymanagement", "report/purchaseOrderReconciliationReport") }">
-        <span class="tile-icon">≣</span>
-        <span class="tile-label">PO Reconciliation Report</span>
-    </a>
+    <% } %>
+	    <% if (isMainPharmacy) { %>
+	    <a class="tile tile-supplier" href="${ ui.pageLink("rwandapharmacymanagement", "report/purchaseOrderReconciliationReport") }">
+	        <span class="tile-icon">≣</span>
+	        <span class="tile-label">PO Reconciliation Report</span>
+	    </a>
+	    <% } %>
+	    <% if (canAdjustStock && isAnyPharmacy) { %>
+	    <a class="tile tile-admin" href="${ ui.pageLink("rwandapharmacymanagement", "admin/reconciliation") }">
+	        <span class="tile-icon">≋</span>
+	        <span class="tile-label">Reconciliation</span>
+	    </a>
+	    <% } %>
 </div>

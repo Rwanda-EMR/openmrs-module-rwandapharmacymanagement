@@ -65,7 +65,8 @@ public class EditPageController {
         model.addAttribute("canManagePurchaseOrders",
                 Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_SUBMIT_SUPPLIER_ORDERS)
                         || Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_PURCHASE_ORDERS));
-        model.addAttribute("productMasterItems", pharmacyService.getAllProductMasterItems());
+        model.addAttribute("productMasterItems", filterProductMasterItemsForPurchaseOrder(
+                pharmacyService.getAllProductMasterItems(), purchaseOrder));
     }
 
     public String post(@SpringBean("pharmacyService") PharmacyService pharmacyService,
@@ -94,6 +95,7 @@ public class EditPageController {
                 if (!"PENDING".equalsIgnoreCase(purchaseOrder.getApprovalStatus())) {
                     throw new IllegalArgumentException("Only pending purchase orders can be approved.");
                 }
+                validatePurchaseOrderItemsForSupplier(purchaseOrder);
                 if (isRmsPurchaseOrder(purchaseOrder)) {
                     PurchaseOrderPriceRefreshResult priceRefreshResult = supplierIntegrationService.refreshPurchaseOrderPrices(purchaseOrder);
                     if (priceRefreshResult.hasBlockingIssue()) {
@@ -197,7 +199,7 @@ public class EditPageController {
                 continue;
             }
             ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(productMasterItemId);
-            if (productMasterItem == null) {
+            if (!isProductMasterItemAllowedForPurchaseOrder(productMasterItem, purchaseOrder)) {
                 continue;
             }
             PurchaseOrderItem item = new PurchaseOrderItem();
@@ -294,9 +296,47 @@ public class EditPageController {
         if (purchaseOrder == null || purchaseOrder.getSupplier() == null) {
             return false;
         }
-        String code = purchaseOrder.getSupplier().getCode();
-        String name = purchaseOrder.getSupplier().getName();
-        return "RMS".equalsIgnoreCase(code == null ? "" : code.trim())
-                || (name != null && name.toUpperCase().contains("RMS"));
+        return Boolean.TRUE.equals(purchaseOrder.getSupplier().getApiEnabled());
+    }
+
+    private List<ProductMasterItem> filterProductMasterItemsForPurchaseOrder(List<ProductMasterItem> productMasterItems,
+                                                                             PurchaseOrder purchaseOrder) {
+        List<ProductMasterItem> filtered = new ArrayList<ProductMasterItem>();
+        if (productMasterItems == null) {
+            return filtered;
+        }
+        for (ProductMasterItem item : productMasterItems) {
+            if (isProductMasterItemAllowedForPurchaseOrder(item, purchaseOrder)) {
+                filtered.add(item);
+            }
+        }
+        return filtered;
+    }
+
+    private boolean isProductMasterItemAllowedForPurchaseOrder(ProductMasterItem item, PurchaseOrder purchaseOrder) {
+        if (item == null || Boolean.FALSE.equals(item.getActive())) {
+            return false;
+        }
+        if (isRmsPurchaseOrder(purchaseOrder)) {
+            return ProductMasterItem.SOURCE_API_SYNCED.equalsIgnoreCase(requiredText(item.getSource(), ""));
+        }
+        return true;
+    }
+
+    private void validatePurchaseOrderItemsForSupplier(PurchaseOrder purchaseOrder) {
+        if (purchaseOrder == null || purchaseOrder.getItems() == null || purchaseOrder.getItems().isEmpty()) {
+            throw new IllegalArgumentException("Purchase order must include at least one Product Master item.");
+        }
+        List<String> invalidItems = new ArrayList<String>();
+        for (PurchaseOrderItem item : purchaseOrder.getItems()) {
+            ProductMasterItem productMasterItem = item == null ? null : item.getProductMasterItem();
+            if (!isProductMasterItemAllowedForPurchaseOrder(productMasterItem, purchaseOrder)) {
+                invalidItems.add(item == null ? "Unknown item" : requiredText(item.getItemName(), "Unknown item"));
+            }
+        }
+        if (!invalidItems.isEmpty()) {
+            throw new IllegalArgumentException("Purchase order contains items that are not orderable for this supplier: "
+                    + invalidItems);
+        }
     }
 }

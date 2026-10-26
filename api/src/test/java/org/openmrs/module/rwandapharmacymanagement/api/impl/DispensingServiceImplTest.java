@@ -249,6 +249,13 @@ public class DispensingServiceImplTest {
         }
 
         @Override
+        public List<PatientDispensingRequest> getPendingRequestsForCleanup(Date fromInclusive,
+                                                                           Date toExclusive,
+                                                                           Integer pharmacyLocationId) {
+            return Collections.emptyList();
+        }
+
+        @Override
         public List<PatientDispensingRequest> getPendingPaidRequests() {
             return Collections.emptyList();
         }

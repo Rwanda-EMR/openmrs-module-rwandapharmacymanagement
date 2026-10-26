@@ -24,6 +24,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingReques
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
+import org.openmrs.module.rwandapharmacymanagement.util.ProductMasterPrivilegeSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
@@ -56,6 +57,7 @@ public class EnterPageController {
                     @RequestParam(value = "patient_bill_id", required = false) Integer patientBillIdSnakeCase,
                     @RequestParam(value = "requestId", required = false) Integer requestId,
                     @RequestParam(value = "historyPage", required = false) Integer historyPage) {
+        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_CREATE_PRESCRIPTION);
         Integer resolvedPatientBillId = firstNonNull(patientBillId, billId, patientBillIdSnakeCase);
         Patient patient = resolvePatient(patientIdOrUuid);
         Visit activeVisit = resolveActiveVisit(patient);
@@ -126,6 +128,7 @@ public class EnterPageController {
                        @RequestParam(value = "billable", required = false) Boolean[] billables,
                        @RequestParam(value = "billingExclusionReason", required = false) String[] billingExclusionReasons,
                        UiUtils ui) {
+        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_CREATE_PRESCRIPTION);
         Integer resolvedPatientBillId = firstNonNull(patientBillId, billId, patientBillIdSnakeCase);
         Patient patient = resolvePatient(patientIdOrUuid);
         if (patient == null) {
@@ -284,6 +287,9 @@ public class EnterPageController {
                 continue;
             }
             if (item.getDrug() == null) {
+                continue;
+            }
+            if (!ProductMasterPrivilegeSupport.isAllowed(item)) {
                 continue;
             }
             filtered.add(item);

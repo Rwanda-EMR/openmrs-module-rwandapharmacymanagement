@@ -1,7 +1,10 @@
 package org.openmrs.module.rwandapharmacymanagement.page.controller.queue;
 
 import org.openmrs.Patient;
+import org.openmrs.PatientIdentifier;
+import org.openmrs.PatientIdentifierType;
 import org.openmrs.api.context.Context;
+import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.DispensingService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
@@ -77,6 +80,7 @@ public class PatientQueuePageController {
         model.addAttribute("requests", requests);
         model.addAttribute("requestTargetDescriptionById", describeTargets(requests));
         model.addAttribute("patientIdentifierByRequestId", buildPatientIdentifierMap(requests));
+        model.addAttribute("patientUpidByRequestId", buildPatientUpidMap(requests));
         model.addAttribute("waitTimeByRequestId", buildWaitTimeMap(requests));
         model.addAttribute("drugCountByRequestId", buildDrugCountMap(requests));
         model.addAttribute("paymentStatusByRequestId", buildPaymentStatusMap(requests));
@@ -210,6 +214,38 @@ public class PatientQueuePageController {
             }
         }
         return identifiers;
+    }
+
+    private Map<Integer, String> buildPatientUpidMap(List<PatientDispensingRequest> requests) {
+        Map<Integer, String> identifiers = new LinkedHashMap<Integer, String>();
+        PatientIdentifierType upidIdentifierType = upidIdentifierType();
+        if (requests == null || upidIdentifierType == null) {
+            return identifiers;
+        }
+        for (PatientDispensingRequest request : requests) {
+            if (request != null && request.getPatientDispensingRequestId() != null) {
+                identifiers.put(request.getPatientDispensingRequestId(), upidIdentifier(request.getPatient(),
+                        upidIdentifierType));
+            }
+        }
+        return identifiers;
+    }
+
+    private PatientIdentifierType upidIdentifierType() {
+        String uuid = Context.getAdministrationService().getGlobalProperty(
+                RwandaPharmacyManagementConfig.GP_HIE_PATIENT_IDENTIFIER_TYPE_UUID, "");
+        if (uuid == null || uuid.trim().length() == 0) {
+            return null;
+        }
+        return Context.getPatientService().getPatientIdentifierTypeByUuid(uuid.trim());
+    }
+
+    private String upidIdentifier(Patient patient, PatientIdentifierType upidIdentifierType) {
+        if (patient == null || upidIdentifierType == null) {
+            return "";
+        }
+        PatientIdentifier identifier = patient.getPatientIdentifier(upidIdentifierType);
+        return identifier == null || identifier.getIdentifier() == null ? "" : identifier.getIdentifier();
     }
 
     private Map<Integer, String> buildWaitTimeMap(List<PatientDispensingRequest> requests) {
