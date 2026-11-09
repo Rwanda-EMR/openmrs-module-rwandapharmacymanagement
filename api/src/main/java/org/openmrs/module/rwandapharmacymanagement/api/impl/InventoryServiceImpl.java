@@ -8,6 +8,7 @@ import org.openmrs.User;
 import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
+import org.openmrs.module.rwandapharmacymanagement.api.BillingPriceService;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.TransferBatchAllocationCommand;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.TransferPreviousInfo;
 import org.openmrs.module.rwandapharmacymanagement.db.InventoryDao;
@@ -42,6 +43,7 @@ public class InventoryServiceImpl extends BaseOpenmrsService implements Inventor
 
     private InventoryDao inventoryDao;
     private PharmacyService pharmacyService;
+    private BillingPriceService billingPriceService;
 
     public void setInventoryDao(InventoryDao inventoryDao) {
         this.inventoryDao = inventoryDao;
@@ -49,6 +51,10 @@ public class InventoryServiceImpl extends BaseOpenmrsService implements Inventor
 
     public void setPharmacyService(PharmacyService pharmacyService) {
         this.pharmacyService = pharmacyService;
+    }
+
+    public void setBillingPriceService(BillingPriceService billingPriceService) {
+        this.billingPriceService = billingPriceService;
     }
 
     @Override
@@ -330,6 +336,8 @@ public class InventoryServiceImpl extends BaseOpenmrsService implements Inventor
         }
         inventoryDao.saveDeliveryReceipt(deliveryReceipt);
         if (deliveryReceipt.getLines() != null) {
+            List<org.openmrs.module.rwandapharmacymanagement.model.Item> receivedItems =
+                    new ArrayList<org.openmrs.module.rwandapharmacymanagement.model.Item>();
             for (DeliveryReceiptLine line : deliveryReceipt.getLines()) {
                 incrementBalance(line.getItem().getItemId(),
                         deliveryReceipt.getReceivedIntoLocation().getPharmacyLocationId(),
@@ -339,7 +347,9 @@ public class InventoryServiceImpl extends BaseOpenmrsService implements Inventor
                         line.getBatchNumber(), line.getExpiryDate(), line.getAcceptedQuantity(),
                         StockTransactionType.DELIVERY_RECEIPT, deliveryReceipt.getReceiptNumber(), "Delivery received",
                         line.getUnitPrice());
+                receivedItems.add(line.getItem());
             }
+            billingPriceService.updatePricesForReceivedItems(receivedItems);
         }
         closeLinkedOrders(deliveryReceipt);
         return deliveryReceipt;

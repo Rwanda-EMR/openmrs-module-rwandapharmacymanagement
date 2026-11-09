@@ -4,6 +4,11 @@
 <h2>${ ui.message("rwandapharmacymanagement.admin.settings.title") }</h2>
 <form method="post">
     <p><label>${ ui.message("rwandapharmacymanagement.admin.settings.markup") }</label><br/><input type="number" step="0.01" name="dispensingMarkupPercentage" value="${ dispensingMarkupPercentage ?: 0 }"/></p>
+    <h3>Pharmacy Billing Price Settings</h3>
+    <p><label><input type="checkbox" name="billingCreateMissingMappings" value="true" ${ billingCreateMissingMappings == 'true' ? 'checked="checked"' : '' }/> Allow creating missing billing facility services and insurance billable services</label></p>
+    <p><label><input type="checkbox" name="billingUpdatePricesOnReceipt" value="true" ${ billingUpdatePricesOnReceipt == 'true' ? 'checked="checked"' : '' }/> Update matching billing prices after receiving stock</label></p>
+    <p><label><input type="checkbox" name="billingUpdateZeroPrices" value="true" ${ billingUpdateZeroPrices == 'true' ? 'checked="checked"' : '' }/> Allow receipt updates to change facility service or insurance billable prices that are currently zero</label></p>
+    <p style="color:#666;font-size:12px;">Receipt pricing uses the highest unit cost among current stock batches plus the dispensing markup. Existing patient bill line amounts are retained.</p>
     <p><label>Expiry Alert Days</label><br/><input type="number" name="expiryAlertDays" value="${ expiryAlertDays ?: 90 }"/></p>
     <p>
         <label>Prescription Payment Bill Check</label><br/>

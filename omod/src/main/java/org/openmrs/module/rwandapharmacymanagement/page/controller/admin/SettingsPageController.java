@@ -22,6 +22,12 @@ public class SettingsPageController {
         model.addAttribute("expiryAlertDays",
                 Context.getAdministrationService().getGlobalProperty(RwandaPharmacyManagementConfig.GP_EXPIRY_ALERT_DAYS));
         model.addAttribute("dispensingMarkupPercentage", pricingService.getDispensingMarkupPercentage());
+        model.addAttribute("billingCreateMissingMappings", Context.getAdministrationService().getGlobalProperty(
+                RwandaPharmacyManagementConfig.GP_BILLING_CREATE_MISSING_MAPPINGS, "false"));
+        model.addAttribute("billingUpdatePricesOnReceipt", Context.getAdministrationService().getGlobalProperty(
+                RwandaPharmacyManagementConfig.GP_BILLING_UPDATE_PRICES_ON_RECEIPT, "false"));
+        model.addAttribute("billingUpdateZeroPrices", Context.getAdministrationService().getGlobalProperty(
+                RwandaPharmacyManagementConfig.GP_BILLING_UPDATE_ZERO_PRICES, "false"));
         model.addAttribute("prescriptionPaymentBillMode", Context.getAdministrationService()
                 .getGlobalProperty(RwandaPharmacyManagementConfig.GP_PRESCRIPTION_PAYMENT_BILL_MODE, "latest"));
         model.addAttribute("departmentBulkRequestWorkflowMode", Context.getAdministrationService()
@@ -89,8 +95,20 @@ public class SettingsPageController {
                        @RequestParam(value = "smsRetryBatchSize", required = false) String smsRetryBatchSize,
                        @RequestParam(value = "prescriptionFrequencyConceptSet", required = false) String prescriptionFrequencyConceptSet,
                        @RequestParam(value = "labServiceConceptSet", required = false) String labServiceConceptSet,
+                       @RequestParam(value = "billingCreateMissingMappings", required = false) String billingCreateMissingMappings,
+                       @RequestParam(value = "billingUpdatePricesOnReceipt", required = false) String billingUpdatePricesOnReceipt,
+                       @RequestParam(value = "billingUpdateZeroPrices", required = false) String billingUpdateZeroPrices,
                        UiUtils ui) {
         pricingService.saveDispensingMarkupPercentage(dispensingMarkupPercentage);
+        Context.getAdministrationService().setGlobalProperty(
+                RwandaPharmacyManagementConfig.GP_BILLING_CREATE_MISSING_MAPPINGS,
+                "true".equalsIgnoreCase(billingCreateMissingMappings) ? "true" : "false");
+        Context.getAdministrationService().setGlobalProperty(
+                RwandaPharmacyManagementConfig.GP_BILLING_UPDATE_PRICES_ON_RECEIPT,
+                "true".equalsIgnoreCase(billingUpdatePricesOnReceipt) ? "true" : "false");
+        Context.getAdministrationService().setGlobalProperty(
+                RwandaPharmacyManagementConfig.GP_BILLING_UPDATE_ZERO_PRICES,
+                "true".equalsIgnoreCase(billingUpdateZeroPrices) ? "true" : "false");
         if (expiryAlertDays != null) {
             Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_EXPIRY_ALERT_DAYS, expiryAlertDays);
         }

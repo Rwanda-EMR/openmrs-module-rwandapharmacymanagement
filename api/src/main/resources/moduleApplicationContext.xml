@@ -69,6 +69,7 @@
     <bean id="inventoryServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.InventoryServiceImpl">
         <property name="inventoryDao" ref="inventoryDao"/>
         <property name="pharmacyService" ref="pharmacyService"/>
+        <property name="billingPriceService" ref="billingPriceService"/>
     </bean>
 
     <bean id="dispensingServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.DispensingServiceImpl">
@@ -99,11 +100,17 @@
         <property name="administrationService" ref="adminService"/>
     </bean>
 
+    <bean id="billingPriceServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.BillingPriceServiceImpl">
+        <property name="inventoryDao" ref="inventoryDao"/>
+        <property name="pricingService" ref="pricingService"/>
+    </bean>
+
     <bean id="paymentStatusServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.PaymentStatusServiceImpl"/>
 
     <bean id="prescriptionServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.PrescriptionServiceImpl">
         <property name="pharmacyService" ref="pharmacyService"/>
         <property name="dispensingService" ref="dispensingService"/>
+        <property name="consumableOrderService" ref="consumableOrderService"/>
         <property name="inventoryService" ref="inventoryService"/>
         <property name="prescriptionCommunicationService" ref="prescriptionCommunicationService"/>
         <property name="transactionManager" ref="transactionManager"/>
@@ -217,6 +224,15 @@
         </property>
     </bean>
 
+    <bean id="billingPriceService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="billingPriceServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
     <bean id="paymentStatusService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
         <property name="transactionManager" ref="transactionManager"/>
         <property name="target" ref="paymentStatusServiceTarget"/>
@@ -299,6 +315,8 @@
                 <ref bean="integrationLogService"/>
                 <value>org.openmrs.module.rwandapharmacymanagement.api.PricingService</value>
                 <ref bean="pricingService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.BillingPriceService</value>
+                <ref bean="billingPriceService"/>
                 <value>org.openmrs.module.rwandapharmacymanagement.api.PaymentStatusService</value>
                 <ref bean="paymentStatusService"/>
                 <value>org.openmrs.module.rwandapharmacymanagement.api.PrescriptionService</value>

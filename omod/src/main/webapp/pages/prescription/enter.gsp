@@ -143,6 +143,9 @@
     <% if (prescriptionSavedFlag) { %>
     <div class="rx-banner">Prescription saved and queued for the dispensing pharmacies linked to this location.</div>
     <% } %>
+    <% if (patient && !billingReady) { %>
+    <div class="rx-banner rx-warn">${ ui.encodeHtmlContent(billingReadinessMessage ?: 'Patient is not ready for prescription billing.') }</div>
+    <% } %>
     <% if (patient && !patientSmsPhoneValid) { %>
     <div class="rx-banner rx-warn rx-sms-warning" id="rx-sms-warning">
         Patient phone number is ${ patientPhoneNumber ? 'not valid for SMS' : 'not available' }. SMS will not be sent unless the number is available in format 250XXXXXXXXX or 0XXXXXXXXX.
@@ -309,7 +312,7 @@
                 <div class="rx-inline-note">Reason is required when the item should not be billed.</div>
             </div>
             <% if (patient && activeVisit && candidatePharmacies) { %>
-            <button type="button" class="rx-btn rx-btn-add" onclick="addToPrescription()">Add drug to list</button>
+            <button type="button" class="rx-btn rx-btn-add" onclick="addToPrescription()"<% if (!billingReady) { %> disabled="disabled" style="opacity:.55; cursor:not-allowed;"<% } %>>Add drug to list</button>
             <% } %>
         </div>
     </div>
@@ -324,7 +327,7 @@
                     <div class="rx-muted">Build the prescription here, then submit once for the whole list.</div>
                     <div class="rx-summary-actions-right">
                         <button type="button" class="rx-btn rx-btn-danger" onclick="clearPrescription()">Clear prescription</button>
-                        <button type="submit" class="rx-btn rx-btn-primary">Submit prescription</button>
+                        <button type="submit" class="rx-btn rx-btn-primary"<% if (!billingReady) { %> disabled="disabled" style="opacity:.55; cursor:not-allowed;"<% } %>>Submit prescription</button>
                     </div>
                 </div>
                 <div id="rx-summary-empty" class="rx-muted" style="margin-top:12px;">No prescribed items yet.</div>
@@ -1152,6 +1155,10 @@
     byId('rx-duration-unit').onchange = autoCalculateQuantity;
     byId('rx-duration-unit').oninput = autoCalculateQuantity;
     byId('rx-submit-form').onsubmit = function () {
+        <% if (!billingReady) { %>
+        alert('${ ui.encodeJavaScript(billingReadinessMessage ?: 'Patient is not ready for prescription billing.') }');
+        return false;
+        <% } %>
         if (!prescriptionDraft.length) {
             alert('Add at least one drug to the prescribed items list before submitting.');
             return false;

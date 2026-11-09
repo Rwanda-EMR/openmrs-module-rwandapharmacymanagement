@@ -26,6 +26,9 @@ public final class RwandaPharmacyManagementConfig {
     public static final String GP_SMTP_STARTTLS = MODULE_ID + ".smtp.starttls";
     public static final String GP_EXPIRY_ALERT_DAYS = MODULE_ID + ".alerts.expiryDays";
     public static final String GP_DISPENSING_MARKUP_PERCENTAGE = MODULE_ID + ".pricing.dispensingMarkupPercentage";
+    public static final String GP_BILLING_CREATE_MISSING_MAPPINGS = MODULE_ID + ".billing.createMissingMappings";
+    public static final String GP_BILLING_UPDATE_PRICES_ON_RECEIPT = MODULE_ID + ".billing.updatePricesOnReceipt";
+    public static final String GP_BILLING_UPDATE_ZERO_PRICES = MODULE_ID + ".billing.updateZeroPrices";
     public static final String GP_PRESCRIPTION_PAYMENT_BILL_MODE = MODULE_ID + ".prescription.paymentBillMode";
     public static final String GP_PRESCRIPTION_FREQUENCY_CONCEPT_SET = MODULE_ID + ".prescription.frequencyConceptSet";
     public static final String GP_LAB_SERVICE_CONCEPT_SET = MODULE_ID + ".lab.serviceConceptSet";

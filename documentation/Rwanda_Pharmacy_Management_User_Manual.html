@@ -242,10 +242,11 @@
     <tr><th>Page</th><th>Use</th></tr>
     <tr><td>Items</td><td>Create and maintain local item metadata, product mapping readiness, concept/drug mapping, expiry requirement, batch requirement, and stock flags.</td></tr>
     <tr><td>Locations</td><td>Create and maintain pharmacy locations, main/dispensing type, and OpenMRS location/tag mapping.</td></tr>
-    <tr><td>Settings</td><td>Manage module global settings from the administration page when the user has settings privilege.</td></tr>
+    <tr><td>Settings</td><td>Manage module global settings, dispensing markup, and pharmacy billing service creation and receipt price update controls.</td></tr>
     <tr><td>Safety rules</td><td>Create or maintain clinical safety rules used by prescription checks.</td></tr>
-    <tr><td>Missing billing mappings</td><td>Identify configured products that do not have expected MOH Billing mappings.</td></tr>
+    <tr><td>Missing billing mappings</td><td>Review stocked products without an active MOH Billing mapping, preview the highest current unexpired batch cost plus dispensing markup, and create the facility service price and insurer billable services when enabled.</td></tr>
 </table>
+<p>Receipt driven billing price updates are controlled in Settings. When enabled, matching services are updated from the highest current stock batch cost plus markup after stock receipt. Zero facility service or insurance billable prices remain unchanged unless the separate zero price update setting is enabled. New billing services use Item Type <strong>ORDINARY ITEM</strong>, with service category <strong>CONSOMMABLES</strong> or <strong>MEDICAMENTS</strong>. Existing patient bill line prices remain recorded as billed.</p>
 
 <h2>16. Billing Link Administration</h2>
 <ol>

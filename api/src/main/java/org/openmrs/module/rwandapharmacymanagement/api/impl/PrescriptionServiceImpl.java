@@ -25,10 +25,12 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.DispensingService;
+import org.openmrs.module.rwandapharmacymanagement.api.ConsumableOrderService;
 import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.api.PrescriptionService;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.PrescriptionLineCommand;
+import org.openmrs.module.rwandapharmacymanagement.api.dto.ConsumableBillingReadiness;
 import org.openmrs.module.rwandapharmacymanagement.integration.PrescriptionCommunicationService;
 import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
@@ -77,6 +79,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
     });
     private PharmacyService pharmacyService;
     private DispensingService dispensingService;
+    private ConsumableOrderService consumableOrderService;
     private InventoryService inventoryService;
     private PrescriptionCommunicationService prescriptionCommunicationService;
     private PlatformTransactionManager transactionManager;
@@ -87,6 +90,10 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
 
     public void setDispensingService(DispensingService dispensingService) {
         this.dispensingService = dispensingService;
+    }
+
+    public void setConsumableOrderService(ConsumableOrderService consumableOrderService) {
+        this.consumableOrderService = consumableOrderService;
     }
 
     public void setInventoryService(InventoryService inventoryService) {
@@ -120,6 +127,13 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         }
         if (lines == null || lines.isEmpty()) {
             throw new IllegalArgumentException("At least one prescription line is required");
+        }
+        if (consumableOrderService == null) {
+            throw new IllegalStateException("Prescription billing readiness service is not configured.");
+        }
+        ConsumableBillingReadiness billingReadiness = consumableOrderService.getBillingReadiness(patient);
+        if (!billingReadiness.isReady()) {
+            throw new IllegalArgumentException(billingReadiness.getMessage());
         }
 
         Date encounterDatetime = resolveEncounterDatetime(visit);
@@ -269,7 +283,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             } else {
                 Date replacementDate = resolveOrderStartDate(request.getEncounter(), line.getStartDate());
                 String replacementReason = "Replaced by edited pharmacy prescription";
-                Context.getOrderService().discontinueOrder(matchingOrder, replacementReason, replacementDate,
+                discontinueIfActive(matchingOrder, replacementReason, replacementDate,
                         orderingProvider, request.getEncounter());
                 discontinueActiveSameOrderableOrders(request.getPatient(), productMasterItem.getDrug(), replacementDate,
                         orderingProvider, request.getEncounter(), matchingOrder.getOrderId(), "Replaced by newer pharmacy prescription");
@@ -638,7 +652,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             if (identity == null) {
                 identity = findOpenRequestLineHieIdentity(activeOrder);
             }
-            Context.getOrderService().discontinueOrder(activeOrder, reason, discontinuedDate, provider, encounter);
+            discontinueIfActive(activeOrder, reason, discontinuedDate, provider, encounter);
             cancelOpenRequestLinesForReplacedOrder(activeOrder, reason);
         }
         return identity;
@@ -657,7 +671,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         }
         Date discontinuedDate = activeDate == null ? new Date() : activeDate;
         for (DrugOrder activeOrder : activeOrders) {
-            Context.getOrderService().discontinueOrder(activeOrder, reason, discontinuedDate, provider, encounter);
+            discontinueIfActive(activeOrder, reason, discontinuedDate, provider, encounter);
             cancelOpenRequestLinesForReplacedOrder(activeOrder, reason);
         }
     }
@@ -689,13 +703,34 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         return matches;
     }
 
+    private void discontinueIfActive(DrugOrder order, String reason, Date discontinuedDate,
+                                    Provider provider, Encounter encounter) {
+        if (order == null || Boolean.TRUE.equals(order.getVoided()) || !order.isActive(discontinuedDate)) {
+            return;
+        }
+        try {
+            Context.getOrderService().discontinueOrder(order, reason, discontinuedDate, provider, encounter);
+        }
+        catch (RuntimeException e) {
+            if (!Boolean.TRUE.equals(order.getVoided()) && order.isActive(discontinuedDate)) {
+                throw e;
+            }
+            log.info("Skipping discontinuation because drug order is no longer active. orderId="
+                    + order.getOrderId());
+        }
+    }
+
     private boolean sameOrderable(DrugOrder order, Drug drug) {
         if (order == null || drug == null || drug.getConcept() == null || drug.getConcept().getConceptId() == null) {
             return false;
         }
+        Drug orderDrug = order.getDrug();
+        if (orderDrug != null && orderDrug.getDrugId() != null && drug.getDrugId() != null) {
+            return drug.getDrugId().equals(orderDrug.getDrugId());
+        }
         Concept orderConcept = order.getConcept();
-        if (orderConcept == null && order.getDrug() != null) {
-            orderConcept = order.getDrug().getConcept();
+        if (orderConcept == null && orderDrug != null) {
+            orderConcept = orderDrug.getConcept();
         }
         return orderConcept != null && orderConcept.getConceptId() != null
                 && drug.getConcept().getConceptId().equals(orderConcept.getConceptId());
@@ -880,7 +915,8 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         Integer relatedPatientBillId = request.getPatientBillId();
         PatientDispensingRequestLine requestLine = findEditableRequestLine(request, requestLineId);
         DrugOrder matchingOrder = findMatchingOrder(request, requestLine);
-        if (matchingOrder != null && !Boolean.TRUE.equals(matchingOrder.getVoided())) {
+        if (matchingOrder != null && !Boolean.TRUE.equals(matchingOrder.getVoided())
+                && canReviseOrder(matchingOrder)) {
             Context.getOrderService().voidOrder(matchingOrder, reason);
         }
         if (requestLine.getOrder() == null && matchingOrder != null) {
@@ -2530,24 +2566,24 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             return linkedOrder;
         }
         List<DrugOrder> activeDrugOrders = getActiveDrugOrders(request);
-        if (activeDrugOrders.size() == 1) {
-            return activeDrugOrders.get(0);
-        }
         Drug lineDrug = resolveLineDrug(requestLine);
         Concept lineConcept = resolveLineConcept(requestLine, lineDrug);
+        List<DrugOrder> matches = new ArrayList<DrugOrder>();
         for (DrugOrder drugOrder : activeDrugOrders) {
             if (lineDrug != null && drugOrder.getDrug() != null
                     && lineDrug.getDrugId() != null
                     && lineDrug.getDrugId().equals(drugOrder.getDrug().getDrugId())) {
-                return drugOrder;
+                matches.add(drugOrder);
+                continue;
             }
-            if (lineConcept != null && drugOrder.getConcept() != null
+            if ((lineDrug == null || drugOrder.getDrug() == null || drugOrder.getDrug().getDrugId() == null)
+                    && lineConcept != null && drugOrder.getConcept() != null
                     && lineConcept.getConceptId() != null
                     && lineConcept.getConceptId().equals(drugOrder.getConcept().getConceptId())) {
-                return drugOrder;
+                matches.add(drugOrder);
             }
         }
-        return null;
+        return matches.size() == 1 ? matches.get(0) : null;
     }
 
     private DrugOrder resolveLinkedDrugOrder(PatientDispensingRequestLine requestLine) {
@@ -2579,8 +2615,9 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         if (orders == null) {
             return drugOrders;
         }
+        Date now = new Date();
         for (Order order : orders) {
-            if (order instanceof DrugOrder && !Boolean.TRUE.equals(order.getVoided())) {
+            if (order instanceof DrugOrder && !Boolean.TRUE.equals(order.getVoided()) && order.isActive(now)) {
                 drugOrders.add((DrugOrder) order);
             }
         }
