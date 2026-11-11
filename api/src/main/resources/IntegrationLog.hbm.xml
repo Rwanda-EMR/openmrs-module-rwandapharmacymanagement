@@ -26,6 +26,7 @@
         <property name="durationMs" column="duration_ms" type="long"/>
         <property name="retryCount" column="retry_count" type="integer"/>
         <property name="lastAttemptDate" column="last_attempt_date"/>
+        <property name="referenceId" column="reference_id" type="integer"/>
         <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
         <property name="dateCreated" column="date_created"/>
         <property name="voided" column="voided" type="boolean"/>

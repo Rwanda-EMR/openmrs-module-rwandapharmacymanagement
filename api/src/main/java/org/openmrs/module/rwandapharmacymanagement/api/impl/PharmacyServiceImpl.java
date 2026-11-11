@@ -63,6 +63,17 @@ public class PharmacyServiceImpl extends BaseOpenmrsService implements PharmacyS
     }
 
     @Override
+    public List<Item> getDispensableDrugItems() {
+        return pharmacyDao.getDispensableDrugItems();
+    }
+
+    @Override
+    public java.util.Map<Integer, org.openmrs.module.rwandapharmacymanagement.api.dto.PrescribableItemInfo> getPrescribableItemInfo(
+            java.util.Collection<Integer> itemIds) {
+        return pharmacyDao.getPrescribableItemInfo(itemIds);
+    }
+
+    @Override
     public List<Item> getItemsByCodes(List<String> codes) {
         return pharmacyDao.getItemsByCodes(codes);
     }

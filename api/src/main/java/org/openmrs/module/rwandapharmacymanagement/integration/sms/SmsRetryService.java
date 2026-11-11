@@ -3,6 +3,7 @@ package org.openmrs.module.rwandapharmacymanagement.integration.sms;
 import org.openmrs.api.AdministrationService;
 import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.IntegrationLogService;
+import org.openmrs.module.rwandapharmacymanagement.integration.RetryOutcome;
 import org.openmrs.module.rwandapharmacymanagement.model.IntegrationLog;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.IntegrationStatus;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.IntegrationType;
@@ -43,8 +44,11 @@ public class SmsRetryService {
         List<IntegrationLog> pendingLogs = integrationLogService.getPendingSmsLogs(maxResults);
         int successful = 0;
         for (IntegrationLog pendingLog : pendingLogs) {
-            if (retry(pendingLog)) {
+            RetryOutcome outcome = retry(pendingLog);
+            if (outcome == RetryOutcome.SENT) {
                 successful++;
+            } else if (outcome == RetryOutcome.UNREACHABLE) {
+                break;
             }
         }
         return successful;
@@ -59,10 +63,10 @@ public class SmsRetryService {
                 || pendingLog.getIntegrationType() != IntegrationType.SMS_NOTIFICATION) {
             return false;
         }
-        return retry(pendingLog);
+        return retry(pendingLog) == RetryOutcome.SENT;
     }
 
-    private boolean retry(IntegrationLog pendingLog) {
+    private RetryOutcome retry(IntegrationLog pendingLog) {
         long start = System.currentTimeMillis();
         pendingLog.setRetryCount(Integer.valueOf((pendingLog.getRetryCount() == null ? 0 : pendingLog.getRetryCount().intValue()) + 1));
         pendingLog.setLastAttemptDate(new Date());
@@ -77,17 +81,25 @@ public class SmsRetryService {
             pendingLog.setSummary("Queued prescription SMS sent successfully");
             pendingLog.setDurationMs(Long.valueOf(Math.max(0L, System.currentTimeMillis() - start)));
             integrationLogService.saveLog(pendingLog);
-            return true;
+            return RetryOutcome.SENT;
         }
         catch (Exception e) {
             log.error("Queued prescription SMS retry failed. logId=" + pendingLog.getIntegrationLogId(), e);
-            pendingLog.setStatus(IntegrationStatus.RETRY_PENDING);
+            boolean unreachable = RetryOutcome.isUnreachable(e);
+            boolean giveUp = !unreachable && pendingLog.getRetryCount().intValue() >= maxRetryAttempts();
+            pendingLog.setStatus(giveUp ? IntegrationStatus.FAILED : IntegrationStatus.RETRY_PENDING);
             pendingLog.setResponsePayload(truncate(e.getMessage()));
-            pendingLog.setSummary("Queued prescription SMS retry failed");
+            pendingLog.setSummary(giveUp
+                    ? "SMS gateway rejected the message; stopped after " + pendingLog.getRetryCount() + " attempts"
+                    : unreachable ? "SMS gateway unreachable; will retry" : "Queued prescription SMS retry failed");
             pendingLog.setDurationMs(Long.valueOf(Math.max(0L, System.currentTimeMillis() - start)));
             integrationLogService.saveLog(pendingLog);
-            return false;
+            return unreachable ? RetryOutcome.UNREACHABLE : RetryOutcome.FAILED;
         }
+    }
+
+    private int maxRetryAttempts() {
+        return Math.max(1, integerProperty(RwandaPharmacyManagementConfig.GP_INTEGRATION_MAX_RETRY_ATTEMPTS, 12).intValue());
     }
 
     private boolean isSmsEnabled() {

@@ -644,12 +644,18 @@ public class HibernateDispensingDao implements DispensingDao {
     }
 
     private boolean tableExists(String tableName) {
+        String cacheKey = "table:" + tableName;
+        String cached = cachedSchemaLookup(cacheKey);
+        if (cached != null) {
+            return !cached.isEmpty();
+        }
         try {
             Object result = sessionFactory.getCurrentSession()
                     .createSQLQuery("select table_name from information_schema.tables where table_schema = database() and table_name = :tableName")
                     .setParameter("tableName", tableName)
                     .setMaxResults(1)
                     .uniqueResult();
+            cacheSchemaLookup(cacheKey, result == null ? "" : tableName);
             return result != null;
         }
         catch (RuntimeException ignored) {
@@ -658,6 +664,11 @@ public class HibernateDispensingDao implements DispensingDao {
     }
 
     private String resolveExistingColumn(String tableName, String... candidates) {
+        String cacheKey = "column:" + tableName + ":" + java.util.Arrays.toString(candidates);
+        String cached = cachedSchemaLookup(cacheKey);
+        if (cached != null) {
+            return cached.isEmpty() ? null : cached;
+        }
         for (String candidate : candidates) {
             try {
                 Object result = sessionFactory.getCurrentSession()
@@ -667,6 +678,7 @@ public class HibernateDispensingDao implements DispensingDao {
                         .setMaxResults(1)
                         .uniqueResult();
                 if (result != null) {
+                    cacheSchemaLookup(cacheKey, candidate);
                     return candidate;
                 }
             }
@@ -674,7 +686,33 @@ public class HibernateDispensingDao implements DispensingDao {
                 return null;
             }
         }
+        cacheSchemaLookup(cacheKey, "");
         return null;
+    }
+
+    /**
+     * Billing schema lookups hit information_schema, which is slow on MySQL. Found tables and columns are cached
+     * for the life of the server; "not found" results expire so a billing module installed later is picked up.
+     */
+    private static final long SCHEMA_MISS_CACHE_MILLIS = 5L * 60L * 1000L;
+    private static final java.util.concurrent.ConcurrentMap<String, Object[]> SCHEMA_LOOKUP_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<String, Object[]>();
+
+    private String cachedSchemaLookup(String cacheKey) {
+        Object[] entry = SCHEMA_LOOKUP_CACHE.get(cacheKey);
+        if (entry == null) {
+            return null;
+        }
+        String value = (String) entry[0];
+        if (value.isEmpty() && System.currentTimeMillis() - (Long) entry[1] > SCHEMA_MISS_CACHE_MILLIS) {
+            SCHEMA_LOOKUP_CACHE.remove(cacheKey);
+            return null;
+        }
+        return value;
+    }
+
+    private void cacheSchemaLookup(String cacheKey, String value) {
+        SCHEMA_LOOKUP_CACHE.put(cacheKey, new Object[] { value, Long.valueOf(System.currentTimeMillis()) });
     }
 
     private String resolveExistingBillingColumn(String... candidates) {

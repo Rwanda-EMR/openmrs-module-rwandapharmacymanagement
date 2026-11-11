@@ -5,6 +5,7 @@ import java.util.Date;
 
 public class PrescriptionLineCommand {
 
+    private Integer itemId;
     private Integer productMasterItemId;
     private BigDecimal dose;
     private String route;
@@ -17,6 +18,17 @@ public class PrescriptionLineCommand {
     private Boolean billable = Boolean.TRUE;
     private String billingExclusionReason;
 
+    public Integer getItemId() {
+        return itemId;
+    }
+
+    public void setItemId(Integer itemId) {
+        this.itemId = itemId;
+    }
+
+    /**
+     * Legacy selector from forms opened before the item-based list was deployed; resolved to the mapped local item.
+     */
     public Integer getProductMasterItemId() {
         return productMasterItemId;
     }

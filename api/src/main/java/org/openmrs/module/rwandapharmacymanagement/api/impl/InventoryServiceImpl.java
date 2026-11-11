@@ -68,6 +68,16 @@ public class InventoryServiceImpl extends BaseOpenmrsService implements Inventor
     }
 
     @Override
+    public java.util.Map<Integer, BigDecimal> getAvailableQuantitiesByItem(java.util.Collection<Integer> itemIds) {
+        return inventoryDao.getAvailableQuantitiesByItem(itemIds);
+    }
+
+    @Override
+    public boolean hasStockInActivePharmacy(Integer itemId) {
+        return inventoryDao.hasStockInActivePharmacy(itemId);
+    }
+
+    @Override
     public InventoryBalance getInventoryBalance(Integer itemId, Integer pharmacyLocationId, String batchNumber) {
         return inventoryDao.getInventoryBalance(itemId, pharmacyLocationId, batchNumber);
     }

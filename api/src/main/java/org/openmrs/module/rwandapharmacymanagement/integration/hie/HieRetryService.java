@@ -4,6 +4,7 @@ import org.openmrs.api.AdministrationService;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.IntegrationLogService;
+import org.openmrs.module.rwandapharmacymanagement.integration.RetryOutcome;
 import org.openmrs.module.rwandapharmacymanagement.model.IntegrationLog;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.IntegrationStatus;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.IntegrationType;
@@ -11,7 +12,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class HieRetryService {
 
@@ -37,15 +40,33 @@ public class HieRetryService {
         return retryPending(batchSize());
     }
 
+    /**
+     * Sends queued HIE payloads oldest first. A prescription's medication requests wait while its encounter is
+     * still unsent, and the run stops at the first connection failure so an HIE outage does not stall the task.
+     */
     public int retryPending(int maxResults) {
         if (!isHieEnabled()) {
             return 0;
         }
         List<IntegrationLog> pendingLogs = integrationLogService.getPendingHieLogs(maxResults);
         int successful = 0;
+        Set<Integer> unsentEncounterReferences = new HashSet<Integer>();
         for (IntegrationLog pendingLog : pendingLogs) {
-            if (retry(pendingLog)) {
+            Integer referenceId = pendingLog.getReferenceId();
+            if (pendingLog.getIntegrationType() == IntegrationType.HIE_MEDICATION_REQUEST && referenceId != null
+                    && unsentEncounterReferences.contains(referenceId)) {
+                continue;
+            }
+            RetryOutcome outcome = retry(pendingLog);
+            if (outcome == RetryOutcome.SENT) {
                 successful++;
+                continue;
+            }
+            if (pendingLog.getIntegrationType() == IntegrationType.HIE_ENCOUNTER && referenceId != null) {
+                unsentEncounterReferences.add(referenceId);
+            }
+            if (outcome == RetryOutcome.UNREACHABLE) {
+                break;
             }
         }
         return successful;
@@ -59,10 +80,10 @@ public class HieRetryService {
         if (pendingLog == null || pendingLog.getStatus() != IntegrationStatus.RETRY_PENDING || !isHieType(pendingLog.getIntegrationType())) {
             return false;
         }
-        return retry(pendingLog);
+        return retry(pendingLog) == RetryOutcome.SENT;
     }
 
-    private boolean retry(IntegrationLog pendingLog) {
+    private RetryOutcome retry(IntegrationLog pendingLog) {
         long start = System.currentTimeMillis();
         pendingLog.setRetryCount(Integer.valueOf((pendingLog.getRetryCount() == null ? 0 : pendingLog.getRetryCount().intValue()) + 1));
         pendingLog.setLastAttemptDate(new Date());
@@ -80,18 +101,26 @@ public class HieRetryService {
             pendingLog.setSummary("Queued HIE payload sent successfully");
             pendingLog.setDurationMs(Long.valueOf(Math.max(0L, System.currentTimeMillis() - start)));
             integrationLogService.saveLog(pendingLog);
-            return true;
+            return RetryOutcome.SENT;
         }
         catch (Exception e) {
             log.error("Queued HIE payload retry failed. logId=" + pendingLog.getIntegrationLogId()
                     + ", type=" + pendingLog.getIntegrationType(), e);
-            pendingLog.setStatus(IntegrationStatus.RETRY_PENDING);
+            boolean unreachable = RetryOutcome.isUnreachable(e);
+            boolean giveUp = !unreachable && pendingLog.getRetryCount().intValue() >= maxRetryAttempts();
+            pendingLog.setStatus(giveUp ? IntegrationStatus.FAILED : IntegrationStatus.RETRY_PENDING);
             pendingLog.setResponsePayload(truncate(e.getMessage()));
-            pendingLog.setSummary("Queued HIE payload retry failed");
+            pendingLog.setSummary(giveUp
+                    ? "HIE rejected the payload; stopped after " + pendingLog.getRetryCount() + " attempts"
+                    : unreachable ? "HIE unreachable; will retry" : "Queued HIE payload retry failed");
             pendingLog.setDurationMs(Long.valueOf(Math.max(0L, System.currentTimeMillis() - start)));
             integrationLogService.saveLog(pendingLog);
-            return false;
+            return unreachable ? RetryOutcome.UNREACHABLE : RetryOutcome.FAILED;
         }
+    }
+
+    private int maxRetryAttempts() {
+        return Math.max(1, integerProperty(RwandaPharmacyManagementConfig.GP_INTEGRATION_MAX_RETRY_ATTEMPTS, 12).intValue());
     }
 
     private String endpointPath(IntegrationType integrationType) {

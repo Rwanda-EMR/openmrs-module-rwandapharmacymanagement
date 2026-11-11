@@ -66,6 +66,15 @@ The `Rwanda Pharmacy Doctor` role is assigned both patient-ordering privileges. 
 | `rwandapharmacymanagement.pricing.dispensingMarkupPercentage` | `0` | Markup for dispensing price calculations. |
 | `rwandapharmacymanagement.lab.serviceConceptSet` | Concept UUID or ID | Concept set/answers used for lab request services. |
 | `rwandapharmacymanagement.prescription.frequencyConceptSet` | Concept UUID or ID | Concept set/answers used for prescription frequency options. |
+
+Scheduled tasks are configured by the module on every server start and are not set through global properties:
+
+| Task | Schedule |
+| --- | --- |
+| Rwanda Pharmacy HIE Retry | Every 5 minutes |
+| Rwanda Pharmacy SMS Retry | Every 5 minutes |
+| Rwanda Pharmacy RMS Delivery Fetch | Every day at 03:00 server time, always started |
+
 ## 5. Supplier, RMS, and Product Master Setup
 ### 5.1 Legacy RMS Defaults
 | Property | Example | Use |
@@ -76,8 +85,6 @@ The `Rwanda Pharmacy Doctor` role is assigned both patient-ordering privileges. 
 | `rwandapharmacymanagement.supplier.connectionTimeout` | `10000` | API connection timeout in milliseconds. |
 | `rwandapharmacymanagement.supplier.readTimeout` | `30000` | API read timeout in milliseconds. |
 | `rwandapharmacymanagement.supplier.enabled` | `true` | Enable RMS integration. |
-| `rwandapharmacymanagement.supplier.deliveryFetchSchedulerEnabled` | `false` | Enable scheduled RMS delivery fetching. |
-| `rwandapharmacymanagement.supplier.deliveryFetchSchedulerIntervalSeconds` | `3600` | Scheduler interval for RMS delivery fetching. |
 ### 5.2 Supplier Records
 Create suppliers in **Supplier Configuration**. For RMS set API enabled. For non-RMS suppliers, set email address and leave API disabled if orders are sent by email.
 ### 5.3 First Product Master Pull
@@ -131,7 +138,6 @@ Use **Missing billing mappings** to identify products that cannot be billed, and
 | `rwandapharmacymanagement.sms.authPayloadTemplate` | JSON template | Optional authentication payload template using `{{username}}` and `{{password}}`. |
 | `rwandapharmacymanagement.sms.postPayloadTemplate` | JSON template | Optional SMS send payload template using `{{sender}}`, `{{phoneNumber}}`, and `{{message}}`. |
 | `rwandapharmacymanagement.sms.retrySchedulerEnabled` | `true` | Retry failed/pending SMS messages through the scheduler. |
-| `rwandapharmacymanagement.sms.retrySchedulerIntervalSeconds` | `1800` | SMS retry scheduler interval. |
 | `rwandapharmacymanagement.sms.retryBatchSize` | `50` | Maximum SMS log rows retried per scheduler run. |
 > If Intouch requires IP whitelisting, provide the public outbound IP address of the OpenMRS server. A connection timeout can occur when the IP is not whitelisted or when the endpoint/port is blocked.
 ## 9. SMTP Configuration for Purchase Orders
@@ -163,7 +169,6 @@ Use **Missing billing mappings** to identify products that cannot be billed, and
 | `rwandapharmacymanagement.hie.connectionTimeout` | Connection timeout. |
 | `rwandapharmacymanagement.hie.readTimeout` | Read timeout. |
 | `rwandapharmacymanagement.hie.retrySchedulerEnabled` | Enable retry of failed/pending HIE messages. |
-| `rwandapharmacymanagement.hie.retrySchedulerIntervalSeconds` | HIE retry scheduler interval. |
 | `rwandapharmacymanagement.hie.retryBatchSize` | Maximum HIE log rows retried per scheduler run. |
 HIE prescription messages keep the same group identifier across all drugs in one prescription. Dose unit is currently sent as a blank value to avoid showing incorrect tablet/capsule units.
 ## 11. App Framework Configuration

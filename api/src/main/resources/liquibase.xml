@@ -160,4 +160,8 @@
         <sqlFile path="sql/migrations/rpm-product-master-restriction.sql" relativeToChangelogFile="true" stripComments="true"/>
     </changeSet>
 
+    <changeSet id="rpm-integration-log-queue-reference" author="MoH Rwanda, PIH/IMB">
+        <sqlFile path="sql/migrations/rpm-integration-log-queue-reference.sql" relativeToChangelogFile="true" stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>

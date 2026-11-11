@@ -28,6 +28,11 @@ public interface PharmacyDao {
 
     Item getItemByExactName(String name);
 
+    List<Item> getDispensableDrugItems();
+
+    java.util.Map<Integer, org.openmrs.module.rwandapharmacymanagement.api.dto.PrescribableItemInfo> getPrescribableItemInfo(
+            java.util.Collection<Integer> itemIds);
+
     List<Item> getItemsByCodes(List<String> codes);
 
     List<Item> searchItems(String searchTerm, Integer limit);

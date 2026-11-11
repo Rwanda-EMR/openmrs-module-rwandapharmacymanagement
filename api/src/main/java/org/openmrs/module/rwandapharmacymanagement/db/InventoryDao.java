@@ -18,6 +18,10 @@ public interface InventoryDao {
 
     List<InventoryBalance> getAvailableInventoryForPharmacy(Integer pharmacyLocationId);
 
+    java.util.Map<Integer, java.math.BigDecimal> getAvailableQuantitiesByItem(java.util.Collection<Integer> itemIds);
+
+    boolean hasStockInActivePharmacy(Integer itemId);
+
     InventoryBalance getInventoryBalance(Integer itemId, Integer pharmacyLocationId, String batchNumber);
 
     InventoryBalance getInventoryBalance(Integer inventoryBalanceId);

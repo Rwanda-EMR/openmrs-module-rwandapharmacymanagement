@@ -17,6 +17,7 @@ public class IntegrationLog extends BaseTrackedEntity {
     private Long durationMs;
     private Integer retryCount;
     private Date lastAttemptDate;
+    private Integer referenceId;
 
     public Integer getIntegrationLogId() {
         return integrationLogId;
@@ -92,6 +93,17 @@ public class IntegrationLog extends BaseTrackedEntity {
 
     public Date getLastAttemptDate() {
         return lastAttemptDate;
+    }
+
+    /**
+     * The patient dispensing request a queued payload belongs to, so its encounter is sent before its medication requests.
+     */
+    public Integer getReferenceId() {
+        return referenceId;
+    }
+
+    public void setReferenceId(Integer referenceId) {
+        this.referenceId = referenceId;
     }
 
     public void setLastAttemptDate(Date lastAttemptDate) {

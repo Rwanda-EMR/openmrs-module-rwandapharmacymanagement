@@ -53,14 +53,10 @@ public class SettingsPageController {
                 .getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_PHONE_PERSON_ATTRIBUTE_TYPE_UUID, ""));
         model.addAttribute("hieRetrySchedulerEnabled", Context.getAdministrationService()
                 .getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_RETRY_SCHEDULER_ENABLED, "true"));
-        model.addAttribute("hieRetrySchedulerIntervalSeconds", Context.getAdministrationService()
-                .getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_RETRY_SCHEDULER_INTERVAL_SECONDS, "1800"));
         model.addAttribute("hieRetryBatchSize", Context.getAdministrationService()
                 .getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_RETRY_BATCH_SIZE, "50"));
         model.addAttribute("smsRetrySchedulerEnabled", Context.getAdministrationService()
                 .getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_RETRY_SCHEDULER_ENABLED, "true"));
-        model.addAttribute("smsRetrySchedulerIntervalSeconds", Context.getAdministrationService()
-                .getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_RETRY_SCHEDULER_INTERVAL_SECONDS, "1800"));
         model.addAttribute("smsRetryBatchSize", Context.getAdministrationService()
                 .getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_RETRY_BATCH_SIZE, "50"));
         String frequencyConceptSet = Context.getAdministrationService()
@@ -88,10 +84,8 @@ public class SettingsPageController {
                        @RequestParam(value = "smsDlrLevel", required = false) String smsDlrLevel,
                        @RequestParam(value = "smsPhonePersonAttributeTypeUuid", required = false) String smsPhonePersonAttributeTypeUuid,
                        @RequestParam(value = "hieRetrySchedulerEnabled", required = false) String hieRetrySchedulerEnabled,
-                       @RequestParam(value = "hieRetrySchedulerIntervalSeconds", required = false) String hieRetrySchedulerIntervalSeconds,
                        @RequestParam(value = "hieRetryBatchSize", required = false) String hieRetryBatchSize,
                        @RequestParam(value = "smsRetrySchedulerEnabled", required = false) String smsRetrySchedulerEnabled,
-                       @RequestParam(value = "smsRetrySchedulerIntervalSeconds", required = false) String smsRetrySchedulerIntervalSeconds,
                        @RequestParam(value = "smsRetryBatchSize", required = false) String smsRetryBatchSize,
                        @RequestParam(value = "prescriptionFrequencyConceptSet", required = false) String prescriptionFrequencyConceptSet,
                        @RequestParam(value = "labServiceConceptSet", required = false) String labServiceConceptSet,
@@ -140,14 +134,10 @@ public class SettingsPageController {
                 trimToEmpty(smsPhonePersonAttributeTypeUuid));
         Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_RETRY_SCHEDULER_ENABLED,
                 "true".equalsIgnoreCase(hieRetrySchedulerEnabled) ? "true" : "false");
-        Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_RETRY_SCHEDULER_INTERVAL_SECONDS,
-                blankToDefault(hieRetrySchedulerIntervalSeconds, "1800"));
         Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_RETRY_BATCH_SIZE,
                 blankToDefault(hieRetryBatchSize, "50"));
         Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_RETRY_SCHEDULER_ENABLED,
                 "true".equalsIgnoreCase(smsRetrySchedulerEnabled) ? "true" : "false");
-        Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_RETRY_SCHEDULER_INTERVAL_SECONDS,
-                blankToDefault(smsRetrySchedulerIntervalSeconds, "1800"));
         Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_RETRY_BATCH_SIZE,
                 blankToDefault(smsRetryBatchSize, "50"));
         Context.getAdministrationService().setGlobalProperty(

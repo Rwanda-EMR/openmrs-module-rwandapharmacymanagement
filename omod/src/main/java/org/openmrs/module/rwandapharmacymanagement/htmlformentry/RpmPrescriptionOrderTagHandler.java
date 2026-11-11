@@ -14,7 +14,7 @@ import org.openmrs.module.htmlformentry.FormSubmissionError;
 import org.openmrs.module.htmlformentry.action.FormSubmissionControllerAction;
 import org.openmrs.module.rwandapharmacymanagement.api.PrescriptionService;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.PrescriptionLineCommand;
-import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
+import org.openmrs.module.rwandapharmacymanagement.model.Item;
 
 import javax.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
@@ -28,7 +28,8 @@ import java.util.Map;
 public class RpmPrescriptionOrderTagHandler extends AbstractRpmOrderTagHandler {
 
     private static final String ERROR_ID = "rpmPrescriptionOrder";
-    private static final String PRODUCT_PARAM = "rpmPrescriptionProductMasterItemId";
+    private static final String ITEM_PARAM = "rpmPrescriptionItemId";
+    private static final String LEGACY_PRODUCT_PARAM = "rpmPrescriptionProductMasterItemId";
     private static final String DOSE_PARAM = "rpmPrescriptionDose";
     private static final String ROUTE_PARAM = "rpmPrescriptionRoute";
     private static final String FREQUENCY_PARAM = "rpmPrescriptionFrequency";
@@ -59,11 +60,9 @@ public class RpmPrescriptionOrderTagHandler extends AbstractRpmOrderTagHandler {
         }
         html.append("<div class=\"rpm-hfe-grid\">");
         html.append("<div class=\"rpm-hfe-field\"><label>Drug</label><select id=\"rpm-rx-product\"><option value=\"\">Select drug</option>");
-        for (ProductMasterItem item : getProductMasterItems()) {
-            if (isDrug(item)) {
-                html.append("<option value=\"").append(item.getProductMasterItemId()).append("\">")
-                        .append(h(item.getItemName())).append("</option>");
-            }
+        for (Item item : getPrescribableItems()) {
+            html.append("<option value=\"").append(item.getItemId()).append("\">")
+                    .append(h(item.getName())).append("</option>");
         }
         html.append("</select></div>");
         html.append("<div class=\"rpm-hfe-field\"><label>Dose</label><input type=\"number\" step=\"0.01\" id=\"rpm-rx-dose\"/></div>");
@@ -105,7 +104,7 @@ public class RpmPrescriptionOrderTagHandler extends AbstractRpmOrderTagHandler {
                 .append("var tbody=document.getElementById('rpm-rx-lines'),empty=document.getElementById('rpm-rx-empty');if(empty){empty.parentNode.removeChild(empty);}")
                 .append("var tr=document.createElement('tr');tr.appendChild(rpmRxCell(ptext));tr.appendChild(rpmRxCell(rpmRxVal('rpm-rx-dose')));tr.appendChild(rpmRxCell(rpmRxVal('rpm-rx-route')));tr.appendChild(rpmRxCell(rpmRxVal('rpm-rx-frequency')));tr.appendChild(rpmRxCell(rpmRxVal('rpm-rx-duration')+' '+rpmRxVal('rpm-rx-duration-unit')));tr.appendChild(rpmRxCell(qty));")
                 .append("var td=document.createElement('td'),btn=document.createElement('button');btn.type='button';btn.className='rpm-hfe-remove';btn.appendChild(document.createTextNode('Remove'));btn.onclick=function(){tbody.removeChild(tr);};td.appendChild(btn);")
-                .append("tr.appendChild(rpmRxHidden('").append(PRODUCT_PARAM).append("',pid));tr.appendChild(rpmRxHidden('").append(DOSE_PARAM).append("',rpmRxVal('rpm-rx-dose')));tr.appendChild(rpmRxHidden('").append(ROUTE_PARAM).append("',rpmRxVal('rpm-rx-route')));tr.appendChild(rpmRxHidden('").append(FREQUENCY_PARAM).append("',rpmRxVal('rpm-rx-frequency')));tr.appendChild(rpmRxHidden('").append(DURATION_PARAM).append("',rpmRxVal('rpm-rx-duration')));tr.appendChild(rpmRxHidden('").append(DURATION_UNIT_PARAM).append("',rpmRxVal('rpm-rx-duration-unit')));tr.appendChild(rpmRxHidden('").append(QUANTITY_PARAM).append("',qty));tr.appendChild(rpmRxHidden('").append(INSTRUCTIONS_PARAM).append("',rpmRxVal('rpm-rx-instructions')));tr.appendChild(rpmRxHidden('").append(BILLABLE_PARAM).append("',document.getElementById('rpm-rx-not-billable').checked?'false':'true'));tr.appendChild(rpmRxHidden('").append(BILLING_REASON_PARAM).append("',rpmRxVal('rpm-rx-billing-reason')));tr.appendChild(td);tbody.appendChild(tr);")
+                .append("tr.appendChild(rpmRxHidden('").append(ITEM_PARAM).append("',pid));tr.appendChild(rpmRxHidden('").append(DOSE_PARAM).append("',rpmRxVal('rpm-rx-dose')));tr.appendChild(rpmRxHidden('").append(ROUTE_PARAM).append("',rpmRxVal('rpm-rx-route')));tr.appendChild(rpmRxHidden('").append(FREQUENCY_PARAM).append("',rpmRxVal('rpm-rx-frequency')));tr.appendChild(rpmRxHidden('").append(DURATION_PARAM).append("',rpmRxVal('rpm-rx-duration')));tr.appendChild(rpmRxHidden('").append(DURATION_UNIT_PARAM).append("',rpmRxVal('rpm-rx-duration-unit')));tr.appendChild(rpmRxHidden('").append(QUANTITY_PARAM).append("',qty));tr.appendChild(rpmRxHidden('").append(INSTRUCTIONS_PARAM).append("',rpmRxVal('rpm-rx-instructions')));tr.appendChild(rpmRxHidden('").append(BILLABLE_PARAM).append("',document.getElementById('rpm-rx-not-billable').checked?'false':'true'));tr.appendChild(rpmRxHidden('").append(BILLING_REASON_PARAM).append("',rpmRxVal('rpm-rx-billing-reason')));tr.appendChild(td);tbody.appendChild(tr);")
                 .append("document.getElementById('rpm-rx-product').value='';document.getElementById('rpm-rx-dose').value='';document.getElementById('rpm-rx-quantity').value='';document.getElementById('rpm-rx-instructions').value='';document.getElementById('rpm-rx-billing-reason').value='';document.getElementById('rpm-rx-not-billable').checked=false;}")
                 .append("</script>");
         return html.toString();
@@ -166,7 +165,12 @@ public class RpmPrescriptionOrderTagHandler extends AbstractRpmOrderTagHandler {
 
         private static List<PrescriptionLineCommand> buildCommands(HttpServletRequest request, List<FormSubmissionError> errors) {
             List<PrescriptionLineCommand> commands = new ArrayList<PrescriptionLineCommand>();
-            String[] productIds = request.getParameterValues(PRODUCT_PARAM);
+            String[] productIds = request.getParameterValues(ITEM_PARAM);
+            // Forms rendered before the item-based list was deployed still post product master ids.
+            boolean byItem = productIds != null;
+            if (!byItem) {
+                productIds = request.getParameterValues(LEGACY_PRODUCT_PARAM);
+            }
             if (productIds == null) {
                 return commands;
             }
@@ -181,7 +185,11 @@ public class RpmPrescriptionOrderTagHandler extends AbstractRpmOrderTagHandler {
                     continue;
                 }
                 PrescriptionLineCommand command = new PrescriptionLineCommand();
-                command.setProductMasterItemId(productId);
+                if (byItem) {
+                    command.setItemId(productId);
+                } else {
+                    command.setProductMasterItemId(productId);
+                }
                 command.setDose(decimalAt(request.getParameterValues(DOSE_PARAM), i));
                 command.setRoute(valueAt(request.getParameterValues(ROUTE_PARAM), i));
                 command.setFrequency(valueAt(request.getParameterValues(FREQUENCY_PARAM), i));

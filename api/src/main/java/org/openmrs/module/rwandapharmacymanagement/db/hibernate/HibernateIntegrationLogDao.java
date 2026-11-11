@@ -37,6 +37,7 @@ public class HibernateIntegrationLogDao implements IntegrationLogDao {
                 .add(Restrictions.eq("status", IntegrationStatus.RETRY_PENDING))
                 .add(hieTypes)
                 .addOrder(Order.asc("dateCreated"))
+                .addOrder(Order.asc("integrationLogId"))
                 .setMaxResults(Math.max(maxResults, 1))
                 .list();
     }
@@ -47,6 +48,7 @@ public class HibernateIntegrationLogDao implements IntegrationLogDao {
                 .add(Restrictions.eq("status", IntegrationStatus.RETRY_PENDING))
                 .add(Restrictions.eq("integrationType", IntegrationType.SMS_NOTIFICATION))
                 .addOrder(Order.asc("dateCreated"))
+                .addOrder(Order.asc("integrationLogId"))
                 .setMaxResults(Math.max(maxResults, 1))
                 .list();
     }

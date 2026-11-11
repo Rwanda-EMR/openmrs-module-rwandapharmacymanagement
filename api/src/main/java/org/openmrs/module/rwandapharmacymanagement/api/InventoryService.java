@@ -19,6 +19,17 @@ public interface InventoryService extends OpenmrsService {
 
     List<InventoryBalance> getAvailableInventoryForPharmacy(Integer pharmacyLocationId);
 
+    /**
+     * Unexpired quantity on hand per item across all active pharmacies, including the main store.
+     * Null item ids means all items.
+     */
+    java.util.Map<Integer, java.math.BigDecimal> getAvailableQuantitiesByItem(java.util.Collection<Integer> itemIds);
+
+    /**
+     * True when any active pharmacy holds a positive quantity of the item.
+     */
+    boolean hasStockInActivePharmacy(Integer itemId);
+
     InventoryBalance getInventoryBalance(Integer itemId, Integer pharmacyLocationId, String batchNumber);
 
     InventoryBalance updateBatchExpiryDate(Integer inventoryBalanceId, Integer pharmacyLocationId, Date expiryDate);

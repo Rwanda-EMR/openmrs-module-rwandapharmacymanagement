@@ -55,6 +55,51 @@ public class HibernateInventoryDao implements InventoryDao {
     }
 
     @Override
+    public java.util.Map<Integer, BigDecimal> getAvailableQuantitiesByItem(java.util.Collection<Integer> itemIds) {
+        java.util.Map<Integer, BigDecimal> quantities = new java.util.HashMap<Integer, BigDecimal>();
+        if (itemIds != null && itemIds.isEmpty()) {
+            return quantities;
+        }
+        StringBuilder sql = new StringBuilder()
+                .append("select ib.item_id, sum(ib.quantity_on_hand) from rpm_inventory_balance ib ")
+                .append("join rpm_pharmacy_location pl on pl.pharmacy_location_id = ib.pharmacy_location_id ")
+                .append("where ib.voided = 0 and pl.voided = 0 and coalesce(pl.active, 1) = 1 ")
+                .append("and ib.quantity_on_hand > 0 and (ib.expiry_date is null or ib.expiry_date >= :today) ");
+        if (itemIds != null) {
+            sql.append("and ib.item_id in (:itemIds) ");
+        }
+        sql.append("group by ib.item_id");
+        org.hibernate.SQLQuery query = sessionFactory.getCurrentSession().createSQLQuery(sql.toString());
+        query.setParameter("today", startOfToday());
+        if (itemIds != null) {
+            query.setParameterList("itemIds", itemIds);
+        }
+        for (Object row : query.list()) {
+            Object[] values = (Object[]) row;
+            if (values[0] != null && values[1] != null) {
+                quantities.put(((Number) values[0]).intValue(), new BigDecimal(values[1].toString()));
+            }
+        }
+        return quantities;
+    }
+
+    @Override
+    public boolean hasStockInActivePharmacy(Integer itemId) {
+        if (itemId == null) {
+            return false;
+        }
+        Object match = sessionFactory.getCurrentSession()
+                .createSQLQuery("select ib.inventory_balance_id from rpm_inventory_balance ib "
+                        + "join rpm_pharmacy_location pl on pl.pharmacy_location_id = ib.pharmacy_location_id "
+                        + "where ib.item_id = :itemId and ib.voided = 0 and ib.quantity_on_hand > 0 "
+                        + "and coalesce(pl.active, 1) = 1")
+                .setParameter("itemId", itemId)
+                .setMaxResults(1)
+                .uniqueResult();
+        return match != null;
+    }
+
+    @Override
     public InventoryBalance getInventoryBalance(Integer itemId, Integer pharmacyLocationId, String batchNumber) {
         org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(InventoryBalance.class)
                 .createAlias("item", "item")

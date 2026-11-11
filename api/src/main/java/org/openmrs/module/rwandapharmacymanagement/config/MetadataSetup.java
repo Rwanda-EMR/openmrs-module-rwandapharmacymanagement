@@ -185,8 +185,6 @@ public class MetadataSetup implements Setup {
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SUPPLIER_CONNECT_TIMEOUT, "10000");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SUPPLIER_READ_TIMEOUT, "30000");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SUPPLIER_ENABLED, "false");
-        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_RMS_DELIVERY_FETCH_SCHEDULER_ENABLED, "false");
-        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_RMS_DELIVERY_FETCH_SCHEDULER_INTERVAL_SECONDS, "3600");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMTP_HOST, "");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMTP_PORT, "587");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMTP_USERNAME, "");
@@ -214,7 +212,6 @@ public class MetadataSetup implements Setup {
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_CONNECT_TIMEOUT, "10000");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_READ_TIMEOUT, "30000");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_RETRY_SCHEDULER_ENABLED, "true");
-        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_RETRY_SCHEDULER_INTERVAL_SECONDS, "1800");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_RETRY_BATCH_SIZE, "50");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_ENABLED, "false");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_AUTH_URL, "");
@@ -231,7 +228,6 @@ public class MetadataSetup implements Setup {
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_AUTH_PAYLOAD_TEMPLATE, "{\"username\":\"{{username}}\",\"password\":\"{{password}}\"}");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_POST_PAYLOAD_TEMPLATE, "{\"sender\":\"{{sender}}\",\"recipient\":\"{{phoneNumber}}\",\"message\":\"{{message}}\"}");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_RETRY_SCHEDULER_ENABLED, "true");
-        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_RETRY_SCHEDULER_INTERVAL_SECONDS, "1800");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_RETRY_BATCH_SIZE, "50");
         saveGlobalProperty(administrationService, DepartmentBulkRequestService.GP_WORKFLOW_MODE,
                 DepartmentBulkRequestService.MODE_PERIODIC_ACCOUNTABILITY);

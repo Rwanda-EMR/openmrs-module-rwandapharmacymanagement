@@ -14,19 +14,19 @@ import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfi
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
 import org.openmrs.module.rwandapharmacymanagement.api.PrescriptionService;
 import org.openmrs.module.rwandapharmacymanagement.api.PricingService;
+import org.openmrs.module.rwandapharmacymanagement.api.dto.PrescribableItemInfo;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.PrescriptionLineCommand;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.ConsumableBillingReadiness;
 import org.openmrs.module.rwandapharmacymanagement.integration.hie.HieMedicationPayloadBuilder;
 import org.openmrs.module.rwandapharmacymanagement.integration.sms.SmsPhoneNumberUtil;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecord;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecordLine;
-import org.openmrs.module.rwandapharmacymanagement.model.InventoryBalance;
 import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
-import org.openmrs.module.rwandapharmacymanagement.util.ProductMasterPrivilegeSupport;
+import org.openmrs.module.rwandapharmacymanagement.util.PrescribableItemSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
@@ -68,10 +68,7 @@ public class EnterPageController {
         int pageSize = 8;
         int currentHistoryPage = historyPage == null || historyPage.intValue() < 1 ? 1 : historyPage.intValue();
         List<PharmacyLocation> candidatePharmacies = org.openmrs.module.rwandapharmacymanagement.web.support.CurrentPharmacySupport.getCandidatePharmacies(pharmacyService);
-        List<ProductMasterItem> prescribableItems = getPrescribableItems(pharmacyService);
-        Map<Integer, BigDecimal> stockQuantityByProductMasterItemId = stockQuantityByProductMasterItemId(pharmacyService,
-                inventoryService, prescribableItems);
-        List<Integer> stockedProductMasterItemIds = stockedProductMasterItemIds(stockQuantityByProductMasterItemId);
+        List<Map<String, Object>> prescribableItems = getPrescribableItems(pharmacyService, inventoryService);
         List<PatientDispensingRequest> historyRequests = patient == null
                 ? Collections.<PatientDispensingRequest>emptyList()
                 : dispensingService.getPatientPrescriptionHistory(patient.getPatientId(), (currentHistoryPage - 1) * pageSize, pageSize);
@@ -83,9 +80,6 @@ public class EnterPageController {
         model.addAttribute("currentLocation", Context.getUserContext() == null ? null : Context.getUserContext().getLocation());
         model.addAttribute("candidatePharmacies", candidatePharmacies);
         model.addAttribute("prescribableItems", prescribableItems);
-        model.addAttribute("stockedProductMasterItemIds", stockedProductMasterItemIds);
-        model.addAttribute("stockQuantityByProductMasterItemId", stockQuantityByProductMasterItemId);
-        model.addAttribute("billingMappedByProductMasterItemId", Collections.<Integer, Boolean>emptyMap());
         model.addAttribute("patientReferenceForSubmit",
                 patient != null && patient.getPatientId() != null ? String.valueOf(patient.getPatientId()) : null);
         model.addAttribute("patientUuidForSubmit", patient == null ? null : patient.getUuid());
@@ -110,7 +104,6 @@ public class EnterPageController {
     }
 
     public String post(@SpringBean("prescriptionService") PrescriptionService prescriptionService,
-                       @SpringBean("consumableOrderService") ConsumableOrderService consumableOrderService,
                        @SpringBean("pharmacyService") PharmacyService pharmacyService,
                        @SpringBean("hieMedicationPayloadBuilder") HieMedicationPayloadBuilder hieMedicationPayloadBuilder,
                        @RequestParam(value = "patientId", required = false) String patientIdOrUuid,
@@ -123,6 +116,7 @@ public class EnterPageController {
                        @RequestParam(value = "requestLineId", required = false) Integer requestLineId,
                        @RequestParam(value = "historyPage", required = false) Integer historyPage,
                        @RequestParam(value = "voidReason", required = false) String voidReason,
+                       @RequestParam(value = "itemId", required = false) Integer[] itemIds,
                        @RequestParam(value = "productMasterItemId", required = false) Integer[] productMasterItemIds,
                        @RequestParam(value = "dose", required = false) BigDecimal[] doses,
                        @RequestParam(value = "route", required = false) String[] routes,
@@ -156,8 +150,8 @@ public class EnterPageController {
         Provider orderingProvider = resolveOrderingProvider();
         String normalizedAction = action == null ? "" : action.trim();
         if ("updateLine".equalsIgnoreCase(normalizedAction)) {
-            List<PrescriptionLineCommand> lines = buildCommands(productMasterItemIds, doses, routes, frequencies, durations,
-                    durationUnits, startDates, quantities, instructions, billables, billingExclusionReasons);
+            List<PrescriptionLineCommand> lines = buildCommands(itemIds, productMasterItemIds, doses, routes, frequencies,
+                    durations, durationUnits, startDates, quantities, instructions, billables, billingExclusionReasons);
             prescriptionService.updatePrescriptionLine(requestId, requestLineId, orderingProvider, lines);
             return redirectToPrescriptionPage(ui, patient, historyPage);
         }
@@ -165,13 +159,9 @@ public class EnterPageController {
             prescriptionService.voidPrescriptionLine(requestId, requestLineId, voidReason);
             return redirectToPrescriptionPage(ui, patient, historyPage);
         }
-        ConsumableBillingReadiness billingReadiness = consumableOrderService.getBillingReadiness(patient);
-        if (!billingReadiness.isReady()) {
-            throw new IllegalArgumentException(billingReadiness.getMessage());
-        }
         validatePatientPhoneForBilling(patient, hieMedicationPayloadBuilder);
-        List<PrescriptionLineCommand> lines = buildCommands(productMasterItemIds, doses, routes, frequencies, durations,
-                durationUnits, startDates, quantities, instructions, billables, billingExclusionReasons);
+        List<PrescriptionLineCommand> lines = buildCommands(itemIds, productMasterItemIds, doses, routes, frequencies,
+                durations, durationUnits, startDates, quantities, instructions, billables, billingExclusionReasons);
         PatientDispensingRequest request = prescriptionService.createPrescription(patient, activeVisit, orderingProvider,
                 encounterLocation, lines, resolvedPatientBillId);
         Map<String, Object> redirectParams = new LinkedHashMap<String, Object>();
@@ -251,7 +241,8 @@ public class EnterPageController {
         return Context.getProviderService().getUnknownProvider();
     }
 
-    private List<PrescriptionLineCommand> buildCommands(Integer[] productMasterItemIds,
+    private List<PrescriptionLineCommand> buildCommands(Integer[] itemIds,
+                                                        Integer[] productMasterItemIds,
                                                         BigDecimal[] doses,
                                                         String[] routes,
                                                         String[] frequencies,
@@ -263,16 +254,23 @@ public class EnterPageController {
                                                         Boolean[] billables,
                                                         String[] billingExclusionReasons) {
         List<PrescriptionLineCommand> commands = new ArrayList<PrescriptionLineCommand>();
-        if (productMasterItemIds == null) {
+        // Pages opened before the item-based list was deployed still post productMasterItemId.
+        boolean byItem = itemIds != null;
+        Integer[] selectedIds = byItem ? itemIds : productMasterItemIds;
+        if (selectedIds == null) {
             return commands;
         }
-        for (int i = 0; i < productMasterItemIds.length; i++) {
-            Integer productMasterItemId = productMasterItemIds[i];
-            if (productMasterItemId == null) {
+        for (int i = 0; i < selectedIds.length; i++) {
+            Integer selectedId = selectedIds[i];
+            if (selectedId == null) {
                 continue;
             }
             PrescriptionLineCommand command = new PrescriptionLineCommand();
-            command.setProductMasterItemId(productMasterItemId);
+            if (byItem) {
+                command.setItemId(selectedId);
+            } else {
+                command.setProductMasterItemId(selectedId);
+            }
             command.setDose(valueAt(doses, i));
             command.setRoute(valueAt(routes, i));
             command.setFrequency(valueAt(frequencies, i));
@@ -288,84 +286,27 @@ public class EnterPageController {
         return commands;
     }
 
-    private List<ProductMasterItem> getPrescribableItems(PharmacyService pharmacyService) {
-        List<ProductMasterItem> filtered = new ArrayList<ProductMasterItem>();
-        for (ProductMasterItem item : pharmacyService.getAllProductMasterItems()) {
-            if (item == null || Boolean.FALSE.equals(item.getActive())) continue;
-            if (!"ZMED".equalsIgnoreCase(item.getMaterialType())) continue;
-            if (item.getDrug() == null || !ProductMasterPrivilegeSupport.isAllowed(item)) continue;
-            filtered.add(item);
-        }
-        Collections.sort(filtered, new Comparator<ProductMasterItem>() {
-            @Override
-            public int compare(ProductMasterItem left, ProductMasterItem right) {
-                String leftName = left == null || left.getItemName() == null ? "" : left.getItemName();
-                String rightName = right == null || right.getItemName() == null ? "" : right.getItemName();
-                return leftName.compareToIgnoreCase(rightName);
-            }
-        });
-        return filtered;
-    }
-
-    private Map<Integer, BigDecimal> stockQuantityByProductMasterItemId(PharmacyService pharmacyService,
-                                                                        InventoryService inventoryService,
-                                                                        List<ProductMasterItem> prescribableItems) {
-        Map<String, ProductMasterItem> byCode = new HashMap<String, ProductMasterItem>();
-        Map<Integer, ProductMasterItem> byDrugId = new HashMap<Integer, ProductMasterItem>();
-        for (ProductMasterItem item : prescribableItems) {
-            String codeKey = normalizeKey(item == null ? null : item.getNpcCode());
-            if (!codeKey.isEmpty() && !byCode.containsKey(codeKey)) byCode.put(codeKey, item);
-            if (item != null && item.getDrug() != null && item.getDrug().getDrugId() != null
-                    && !byDrugId.containsKey(item.getDrug().getDrugId())) byDrugId.put(item.getDrug().getDrugId(), item);
-        }
-        Map<Integer, BigDecimal> quantitiesByProductMasterItemId = new HashMap<Integer, BigDecimal>();
-        for (PharmacyLocation pharmacyLocation : pharmacyService.getAllPharmacyLocations()) {
-            if (pharmacyLocation == null || Boolean.FALSE.equals(pharmacyLocation.getActive())
-                    || pharmacyLocation.getPharmacyLocationId() == null) {
+    private List<Map<String, Object>> getPrescribableItems(PharmacyService pharmacyService,
+                                                           InventoryService inventoryService) {
+        Map<Integer, PrescribableItemInfo> infoByItemId = pharmacyService.getPrescribableItemInfo(null);
+        Map<Integer, BigDecimal> stockByItemId = inventoryService.getAvailableQuantitiesByItem(null);
+        List<Map<String, Object>> prescribableItems = new ArrayList<Map<String, Object>>();
+        for (Item item : pharmacyService.getDispensableDrugItems()) {
+            PrescribableItemInfo info = infoByItemId.get(item.getItemId());
+            BigDecimal stock = stockByItemId.get(item.getItemId());
+            if (!PrescribableItemSupport.isPrescribable(item, info, stock) || !PrescribableItemSupport.isAllowed(info)) {
                 continue;
             }
-            for (InventoryBalance balance : inventoryService.getAvailableInventoryForPharmacy(pharmacyLocation.getPharmacyLocationId())) {
-                if (balance == null || balance.getItem() == null || balance.getQuantityOnHand() == null
-                        || !Boolean.TRUE.equals(balance.getItem().getVisibleToRequesters())) {
-                    continue;
-                }
-                ProductMasterItem matched = matchStockedProductMasterItem(balance.getItem(), byCode, byDrugId);
-                if (matched != null && matched.getProductMasterItemId() != null && balance.getQuantityOnHand() != null) {
-                    BigDecimal currentQuantity = quantitiesByProductMasterItemId.get(matched.getProductMasterItemId());
-                    quantitiesByProductMasterItemId.put(matched.getProductMasterItemId(),
-                            (currentQuantity == null ? BigDecimal.ZERO : currentQuantity).add(balance.getQuantityOnHand()));
-                }
-            }
+            BigDecimal visibleStock = Boolean.TRUE.equals(item.getVisibleToRequesters()) && stock != null
+                    ? stock : BigDecimal.ZERO;
+            Map<String, Object> entry = new HashMap<String, Object>();
+            entry.put("itemId", item.getItemId());
+            entry.put("itemName", item.getName());
+            entry.put("stockQuantity", visibleStock);
+            entry.put("stocked", visibleStock.compareTo(BigDecimal.ZERO) > 0);
+            prescribableItems.add(entry);
         }
-        return quantitiesByProductMasterItemId;
-    }
-
-    private List<Integer> stockedProductMasterItemIds(Map<Integer, BigDecimal> stockQuantityByProductMasterItemId) {
-        List<Integer> stockedIds = new ArrayList<Integer>();
-        if (stockQuantityByProductMasterItemId == null || stockQuantityByProductMasterItemId.isEmpty()) {
-            return stockedIds;
-        }
-        for (Map.Entry<Integer, BigDecimal> entry : stockQuantityByProductMasterItemId.entrySet()) {
-            if (entry.getKey() != null && entry.getValue() != null && entry.getValue().compareTo(BigDecimal.ZERO) > 0) {
-                stockedIds.add(entry.getKey());
-            }
-        }
-        return stockedIds;
-    }
-
-    private ProductMasterItem matchStockedProductMasterItem(Item item, Map<String, ProductMasterItem> byCode,
-                                                            Map<Integer, ProductMasterItem> byDrugId) {
-        if (item == null) return null;
-        String codeKey = normalizeKey(item.getCode());
-        if (!codeKey.isEmpty() && byCode.containsKey(codeKey)) return byCode.get(codeKey);
-        if (item.getDrug() != null && item.getDrug().getDrugId() != null && byDrugId.containsKey(item.getDrug().getDrugId())) {
-            return byDrugId.get(item.getDrug().getDrugId());
-        }
-        return null;
-    }
-
-    private String normalizeKey(String value) {
-        return value == null ? "" : value.trim().toLowerCase();
+        return prescribableItems;
     }
 
     private List<Concept> sortConcepts(List<Concept> concepts) {
@@ -547,7 +488,7 @@ public class EnterPageController {
                     lineEntry.put("provider", entry.get("orderingProvider"));
                     lineEntry.put("editable", editable);
                     lineEntry.put("voidReason", line.getVoidReason());
-                    lineEntry.put("productMasterItemId", orderInfo.productMasterItemId);
+                    lineEntry.put("itemId", line.getItem() == null ? null : line.getItem().getItemId());
                     lineEntry.put("startDate", orderInfo.startDate);
                     lineEntry.put("dose", orderInfo.dose);
                     lineEntry.put("doseUnits", orderInfo.doseUnits);
@@ -730,7 +671,6 @@ public class EnterPageController {
 
     private void populateOrderInfo(DrugOrderHistoryInfo info, org.openmrs.DrugOrder drugOrder) {
         info.orderId = drugOrder.getOrderId();
-        info.productMasterItemId = findProductMasterItemId(drugOrder.getDrug());
         info.startDate = drugOrder.getDateActivated();
         info.dose = drugOrder.getDose() == null ? "" : drugOrder.getDose().toString();
         info.doseUnits = drugOrder.getDoseUnits() == null ? "" : drugOrder.getDoseUnits().getDisplayString();
@@ -798,47 +738,14 @@ public class EnterPageController {
         }
         PharmacyService pharmacyService = Context.getService(PharmacyService.class);
         String code = requestLine.getItem().getCode();
-        if (pharmacyService != null && code != null && !code.trim().isEmpty()) {
-            ProductMasterItem byCode = pharmacyService.getProductMasterItemByNpcCode(code.trim());
-            if (byCode != null) {
-                return byCode;
-            }
-        }
-        if (pharmacyService == null) {
+        if (pharmacyService == null || code == null || code.trim().isEmpty()) {
             return null;
         }
-        List<ProductMasterItem> productMasterItems = pharmacyService.getAllProductMasterItems();
-        if (productMasterItems == null) {
-            return null;
-        }
-        for (ProductMasterItem item : productMasterItems) {
-            if (item != null && item.getItemName() != null && requestLine.getItem().getName() != null
-                    && item.getItemName().equalsIgnoreCase(requestLine.getItem().getName())) {
-                return item;
-            }
-        }
-        return null;
-    }
-
-    private Integer findProductMasterItemId(org.openmrs.Drug drug) {
-        if (drug == null || drug.getDrugId() == null) {
-            return null;
-        }
-        List<ProductMasterItem> productMasterItems = Context.getService(PharmacyService.class).getAllProductMasterItems();
-        if (productMasterItems == null) {
-            return null;
-        }
-        for (ProductMasterItem item : productMasterItems) {
-            if (item != null && item.getDrug() != null && drug.getDrugId().equals(item.getDrug().getDrugId())) {
-                return item.getProductMasterItemId();
-            }
-        }
-        return null;
+        return pharmacyService.getProductMasterItemByNpcCode(code.trim());
     }
 
     private static class DrugOrderHistoryInfo {
         private Integer orderId;
-        private Integer productMasterItemId;
         private Date startDate;
         private String dose = "";
         private String doseUnits = "";

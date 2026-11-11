@@ -21,6 +21,7 @@ import org.openmrs.Visit;
 import org.openmrs.api.OrderContext;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.impl.BaseOpenmrsService;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
@@ -38,6 +39,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingReques
 import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestType;
+import org.openmrs.module.rwandapharmacymanagement.util.PrescribableItemSupport;
 import org.openmrs.module.rwandapharmacymanagement.util.ProductMasterPrivilegeSupport;
 import org.springframework.transaction.support.TransactionSynchronizationAdapter;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -52,6 +54,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -156,22 +159,21 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         int sortWeight = 1;
         String inheritedHiePrescriptionGroupId = null;
         for (PrescriptionLineCommand line : lines) {
-            if (line == null || line.getProductMasterItemId() == null) {
+            if (line == null || (line.getItemId() == null && line.getProductMasterItemId() == null)) {
                 continue;
             }
-            ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(line.getProductMasterItemId());
-            validateProductMasterDrug(productMasterItem);
+            org.openmrs.module.rwandapharmacymanagement.model.Item localItem = resolvePrescribedItem(line, true);
+            Drug drug = localItem.getDrug();
             requireDoseInstructions(line);
-            org.openmrs.module.rwandapharmacymanagement.model.Item localItem = ensureLocalItem(productMasterItem);
             BigDecimal requestedQuantity = calculateRequestedQuantity(line);
             Date orderStartDate = resolveOrderStartDate(savedEncounter, line.getStartDate());
-            HiePrescriptionIdentity inheritedIdentity = replaceActiveSameDrugOrder(patient, productMasterItem.getDrug(),
+            HiePrescriptionIdentity inheritedIdentity = replaceActiveSameDrugOrder(patient, drug,
                     savedEncounter, orderingProvider, orderStartDate);
             if (inheritedHiePrescriptionGroupId == null && inheritedIdentity != null
                     && hasText(inheritedIdentity.getHiePrescriptionGroupId())) {
                 inheritedHiePrescriptionGroupId = inheritedIdentity.getHiePrescriptionGroupId();
             }
-            DrugOrder order = buildDrugOrder(patient, savedEncounter, orderingProvider, productMasterItem.getDrug(), line,
+            DrugOrder order = buildDrugOrder(patient, savedEncounter, orderingProvider, drug, line,
                     requestedQuantity, sortWeight++);
             Order savedOrder = Context.getOrderService().saveOrder(order, (OrderContext) null);
             savedEncounter.addOrder(savedOrder);
@@ -202,6 +204,9 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
 
         Integer resolvedPatientBillId = hasBillableLine
                 ? resolvePatientBillId(patient, patientBillId, requestLines, encounterDatetime) : null;
+        if (hasBillableLine) {
+            requireMohBillingCanBill(patient, requestLines);
+        }
         Boolean paymentConfirmed = hasBillableLine && resolvedPatientBillId != null
                 ? dispensingService.isPatientBillPaid(resolvedPatientBillId) : Boolean.valueOf(!hasBillableLine);
         request.setBillable(Boolean.valueOf(hasBillableLine));
@@ -220,7 +225,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         PatientDispensingRequest savedRequest = dispensingService.saveRequest(request);
         initializeHiePrescriptionIdentity(savedRequest, inheritedHiePrescriptionGroupId);
         savedRequest = dispensingService.saveRequest(savedRequest);
-        notifyPrescriptionSavedAfterCommit(savedRequest, true);
+        queuePrescriptionSavedCommunications(savedRequest, true);
         return savedRequest;
     }
 
@@ -245,10 +250,10 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         }
         PatientDispensingRequestLine requestLine = findEditableRequestLine(request, requestLineId);
         PrescriptionLineCommand line = lines.get(0);
-        ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(line.getProductMasterItemId());
-        validateProductMasterDrug(productMasterItem);
+        boolean billingOnlyEdit = Boolean.FALSE.equals(line.getBillable());
+        org.openmrs.module.rwandapharmacymanagement.model.Item localItem = resolvePrescribedItem(line, !billingOnlyEdit);
+        Drug drug = localItem.getDrug();
         requireDoseInstructions(line);
-        org.openmrs.module.rwandapharmacymanagement.model.Item localItem = ensureLocalItem(productMasterItem);
         BigDecimal requestedQuantity = calculateRequestedQuantity(line);
         DrugOrder matchingOrder = findMatchingOrder(request, requestLine);
         if (matchingOrder == null) {
@@ -260,16 +265,15 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         initializeHiePrescriptionIdentity(request, null);
         PatientDispensingRequestLine previousBillableLine = billingMatchSnapshot(requestLine, matchingOrder);
         boolean wasBillableLine = Boolean.TRUE.equals(requestLine.getBillable());
-        boolean billingOnlyEdit = Boolean.FALSE.equals(line.getBillable());
         Integer relatedPatientBillId = request.getPatientBillId();
 
         if (!billingOnlyEdit) {
-            if (sameOrderable(matchingOrder, productMasterItem.getDrug())) {
+            if (sameOrderable(matchingOrder, drug)) {
                 if (!canReviseOrder(matchingOrder)) {
                     throw new IllegalArgumentException("This OpenMRS drug order is already stopped or expired. Only billing exclusion can be changed for this line.");
                 }
                 DrugOrder revisedOrder = matchingOrder.cloneForRevision();
-                applyLineChanges(revisedOrder, request.getEncounter(), orderingProvider, productMasterItem.getDrug(), line, requestedQuantity);
+                applyLineChanges(revisedOrder, request.getEncounter(), orderingProvider, drug, line, requestedQuantity);
                 Order savedOrder = Context.getOrderService().saveOrder(revisedOrder, (OrderContext) null);
                 DrugOrder savedDrugOrder = savedOrder instanceof DrugOrder ? (DrugOrder) savedOrder : revisedOrder;
                 requestLine.setOrder(savedDrugOrder);
@@ -285,10 +289,10 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
                 String replacementReason = "Replaced by edited pharmacy prescription";
                 discontinueIfActive(matchingOrder, replacementReason, replacementDate,
                         orderingProvider, request.getEncounter());
-                discontinueActiveSameOrderableOrders(request.getPatient(), productMasterItem.getDrug(), replacementDate,
+                discontinueActiveSameOrderableOrders(request.getPatient(), drug, replacementDate,
                         orderingProvider, request.getEncounter(), matchingOrder.getOrderId(), "Replaced by newer pharmacy prescription");
                 DrugOrder newOrder = buildDrugOrder(request.getPatient(), request.getEncounter(), orderingProvider,
-                        productMasterItem.getDrug(), line, requestedQuantity, orderSortWeight(matchingOrder));
+                        drug, line, requestedQuantity, orderSortWeight(matchingOrder));
                 Order savedOrder = Context.getOrderService().saveOrder(newOrder, (OrderContext) null);
                 DrugOrder savedDrugOrder = savedOrder instanceof DrugOrder ? (DrugOrder) savedOrder : newOrder;
                 requestLine.setOrder(savedDrugOrder);
@@ -322,7 +326,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         PatientDispensingRequest savedRequest = dispensingService.saveRequest(request);
         scheduleDuplicatePrescriptionBillCleanupAfterCommit(savedRequest, relatedPatientBillId);
         schedulePrescriptionBillRelinkAfterCommit(savedRequest);
-        notifyPrescriptionLineUpdatedAfterCommit(request, requestLine);
+        queuePrescriptionLineUpdatedCommunications(request, requestLine);
         return savedRequest;
     }
 
@@ -453,14 +457,19 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         }
     }
 
-    private void notifyPrescriptionSavedAfterCommit(final PatientDispensingRequest request, final boolean sendSms) {
+    /**
+     * Queues the HIE and SMS messages inside this transaction; the HIE and SMS scheduler tasks send them, so the
+     * user does not wait on the network. After commit only the patient bill link runs, which does nothing when the
+     * bill was already found before commit.
+     */
+    private void queuePrescriptionSavedCommunications(final PatientDispensingRequest request, final boolean sendSms) {
         if (prescriptionCommunicationService == null || request == null) {
             return;
         }
+        prescriptionCommunicationService.queuePrescriptionSaved(request, sendSms);
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             PatientDispensingRequest linkedRequest = linkCommittedPrescriptionBill(request);
             schedulePrescriptionBillLinkRetries(linkedRequest == null ? request : linkedRequest, 2);
-            notifyPrescriptionSavedInSingleTransaction(linkedRequest == null ? request : linkedRequest, sendSms);
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronizationAdapter() {
@@ -468,27 +477,6 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             public void afterCommit() {
                 PatientDispensingRequest linkedRequest = linkCommittedPrescriptionBillInSingleTransaction(request, 1);
                 schedulePrescriptionBillLinkRetries(linkedRequest == null ? request : linkedRequest, 2);
-                notifyPrescriptionSavedInSingleTransaction(linkedRequest == null ? request : linkedRequest, sendSms);
-            }
-        });
-    }
-
-    private void notifyPrescriptionSavedInSingleTransaction(final PatientDispensingRequest request, final boolean sendSms) {
-        if (prescriptionCommunicationService == null || request == null) {
-            return;
-        }
-        if (transactionManager == null || request.getPatientDispensingRequestId() == null) {
-            prescriptionCommunicationService.handlePrescriptionSaved(request, sendSms);
-            return;
-        }
-        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-        transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        transactionTemplate.execute(new TransactionCallback<Void>() {
-            @Override
-            public Void doInTransaction(TransactionStatus status) {
-                PatientDispensingRequest managedRequest = dispensingService.getRequest(request.getPatientDispensingRequestId());
-                prescriptionCommunicationService.handlePrescriptionSaved(managedRequest == null ? request : managedRequest, sendSms);
-                return null;
             }
         });
     }
@@ -858,7 +846,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
                 line.setDateVoided(new Date());
                 line.setVoidReason(reason);
                 voidRelatedBillingItems(request, line, replacedOrder, reason);
-                notifyPrescriptionLineUpdatedAfterCommit(request, line);
+                queuePrescriptionLineUpdatedCommunications(request, line);
                 changed = true;
             }
             if (changed) {
@@ -876,21 +864,15 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         return order.getOrderId().equals(line.getOrder().getOrderId());
     }
 
-    private void notifyPrescriptionLineUpdatedAfterCommit(final PatientDispensingRequest request,
-                                                          final PatientDispensingRequestLine requestLine) {
+    /**
+     * Queues the updated line's HIE messages inside this transaction; the HIE scheduler task sends them.
+     */
+    private void queuePrescriptionLineUpdatedCommunications(final PatientDispensingRequest request,
+                                                            final PatientDispensingRequestLine requestLine) {
         if (prescriptionCommunicationService == null || request == null || requestLine == null) {
             return;
         }
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            prescriptionCommunicationService.handlePrescriptionLineUpdated(request, requestLine);
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronizationAdapter() {
-            @Override
-            public void afterCommit() {
-                prescriptionCommunicationService.handlePrescriptionLineUpdated(request, requestLine);
-            }
-        });
+        prescriptionCommunicationService.queuePrescriptionLineUpdated(request, requestLine);
     }
 
     @Override
@@ -934,7 +916,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         PatientDispensingRequest savedRequest = dispensingService.saveRequest(request);
         scheduleDuplicatePrescriptionBillCleanupAfterCommit(savedRequest, relatedPatientBillId);
         schedulePrescriptionBillRelinkAfterCommit(savedRequest);
-        notifyPrescriptionLineUpdatedAfterCommit(request, requestLine);
+        queuePrescriptionLineUpdatedCommunications(request, requestLine);
         return savedRequest;
     }
 
@@ -2085,6 +2067,123 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         return billItemMatchesAnyName(billItem, requestLineNames(requestLine, matchingOrder));
     }
 
+    /**
+     * MOH Billing bills new drug orders itself, just before this transaction commits (MohBillingOrderHandler), and
+     * silently skips orders it cannot match. This repeats its lookups for every billable line so that a prescription
+     * MOH Billing would not bill is rolled back with an error instead of being saved unbilled.
+     */
+    private void requireMohBillingCanBill(Patient patient, List<PatientDispensingRequestLine> requestLines) {
+        Class<?> billingServiceClass;
+        Object billingService;
+        try {
+            billingServiceClass = Context.loadClass("org.openmrs.module.mohbilling.service.BillingService");
+            billingService = Context.getService(billingServiceClass);
+        }
+        catch (Exception e) {
+            throw new IllegalArgumentException("MOH Billing service is not available. The prescription was not saved.");
+        }
+        List<String> problems = new ArrayList<String>();
+        try {
+            String cardNumber = latestInsuranceCardNumber(patient);
+            Object insurancePolicy = cardNumber == null ? null
+                    : billingServiceClass.getMethod("getInsurancePolicyByCardNo", String.class).invoke(billingService, cardNumber);
+            if (insurancePolicy == null) {
+                problems.add("no MOH Billing insurance policy matches the patient's latest insurance number"
+                        + (cardNumber == null ? "" : " (" + cardNumber + ")"));
+            } else if (billingServiceClass.getMethod("getOpenGlobalBillByInsuranceCardNo", String.class)
+                    .invoke(billingService, cardNumber) == null) {
+                problems.add("the patient has no open global bill for insurance card " + cardNumber);
+            } else {
+                Object insurance = invokeNoArg(insurancePolicy, "getInsurance");
+                Method billableServiceLookup = billingServiceClass.getMethod("getBillableServiceByConcept",
+                        Context.loadClass("org.openmrs.module.mohbilling.model.FacilityServicePrice"),
+                        Context.loadClass("org.openmrs.module.mohbilling.model.Insurance"));
+                for (PatientDispensingRequestLine requestLine : requestLines) {
+                    if (requestLine.getLineStatus() != RequestStatus.PENDING_PAYMENT || requestLine.getItem() == null) {
+                        continue;
+                    }
+                    String problem = mohBillingProblemForLine(billingServiceClass, billingService, billableServiceLookup,
+                            insurance, requestLine);
+                    if (problem != null) {
+                        problems.add(problem);
+                    }
+                }
+            }
+        }
+        catch (NoSuchMethodException e) {
+            log.error("MOH Billing pre-commit check skipped: installed MOH Billing does not have the expected API", e);
+            return;
+        }
+        catch (Exception e) {
+            Throwable cause = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null ? e.getCause() : e;
+            log.error("MOH Billing pre-commit check failed", cause);
+            throw new IllegalArgumentException("Unable to verify MOH Billing for this prescription: " + cause.getMessage()
+                    + ". The prescription was not saved.");
+        }
+        if (!problems.isEmpty()) {
+            throw new IllegalArgumentException("MOH Billing cannot bill this prescription, so it was not saved: "
+                    + StringUtils.join(problems, "; ") + ".");
+        }
+    }
+
+    private String mohBillingProblemForLine(Class<?> billingServiceClass, Object billingService, Method billableServiceLookup,
+                                            Object insurance, PatientDispensingRequestLine requestLine) throws Exception {
+        String itemName = requestLine.getItem().getName();
+        Drug drug = requestLine.getOrder() != null ? requestLine.getOrder().getDrug() : requestLine.getItem().getDrug();
+        Object facilityServicePrice = null;
+        if (drug != null && drug.getName() != null) {
+            facilityServicePrice = billingServiceClass.getMethod("getFacilityServiceByName", String.class)
+                    .invoke(billingService, drug.getName());
+        }
+        Concept orderable = requestLine.getOrder() != null ? requestLine.getOrder().getConcept()
+                : drug != null ? drug.getConcept() : null;
+        if (facilityServicePrice == null && orderable != null) {
+            facilityServicePrice = billingServiceClass.getMethod("getFacilityServiceByConcept", Concept.class)
+                    .invoke(billingService, orderable);
+        }
+        if (facilityServicePrice == null) {
+            return "'" + itemName + "' has no MOH Billing service named '" + (drug == null ? itemName : drug.getName())
+                    + "' or linked to its concept";
+        }
+        if (extractBoolean(facilityServicePrice, "isHidden")) {
+            return "the MOH Billing service for '" + itemName + "' is hidden";
+        }
+        if (billableServiceLookup.invoke(billingService, facilityServicePrice, insurance) == null) {
+            return "the MOH Billing service for '" + itemName + "' has no price for the patient's insurance "
+                    + safe(String.valueOf(invokeNoArg(insurance, "getName")));
+        }
+        return null;
+    }
+
+    /**
+     * Same source as MOH Billing: the value of the patient's most recent registration.insuranceNumberConcept obs.
+     */
+    private String latestInsuranceCardNumber(Patient patient) {
+        String conceptRef = safe(Context.getAdministrationService().getGlobalProperty("registration.insuranceNumberConcept")).trim();
+        if (conceptRef.isEmpty()) {
+            return null;
+        }
+        Concept concept = Context.getConceptService().getConceptByUuid(conceptRef);
+        if (concept == null) {
+            concept = Context.getConceptService().getConcept(conceptRef);
+        }
+        if (concept == null) {
+            return null;
+        }
+        org.openmrs.Obs latest = null;
+        for (org.openmrs.Obs obs : Context.getObsService().getObservationsByPersonAndConcept(patient, concept)) {
+            if (obs == null || Boolean.TRUE.equals(obs.getVoided()) || obs.getObsDatetime() == null) {
+                continue;
+            }
+            if (latest == null || obs.getObsDatetime().after(latest.getObsDatetime())
+                    || (obs.getObsDatetime().equals(latest.getObsDatetime()) && obs.getObsId() > latest.getObsId())) {
+                latest = obs;
+            }
+        }
+        String cardNumber = latest == null ? null : latest.getValueText();
+        return cardNumber == null || cardNumber.trim().isEmpty() ? null : cardNumber;
+    }
+
     private Integer resolvePatientBillId(Patient patient,
                                          Integer explicitPatientBillId,
                                          List<PatientDispensingRequestLine> requestLines,
@@ -2861,39 +2960,41 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         if (!Boolean.TRUE.equals(item.getVisibleToRequesters())) {
             return false;
         }
-        List<InventoryBalance> balances = inventoryService.getInventoryForPharmacy(null);
-        if (balances == null) {
-            return false;
-        }
-        for (InventoryBalance balance : balances) {
-            if (balance == null || balance.getItem() == null || balance.getItem().getItemId() == null
-                    || balance.getPharmacyLocation() == null
-                    || Boolean.FALSE.equals(balance.getPharmacyLocation().getActive())
-                    || balance.getQuantityOnHand() == null
-                    || balance.getQuantityOnHand().compareTo(BigDecimal.ZERO) <= 0) {
-                continue;
-            }
-            if (item.getItemId().equals(balance.getItem().getItemId())) {
-                return true;
-            }
-        }
-        return false;
+        return inventoryService.hasStockInActivePharmacy(item.getItemId());
     }
 
-    private void validateProductMasterDrug(ProductMasterItem productMasterItem) {
-        if (productMasterItem == null) {
-            throw new IllegalArgumentException("Selected product master drug was not found");
+    /**
+     * Resolves the local pharmacy item a prescription line is for. Lines select the item directly; a legacy
+     * product master id is resolved through its item mapping. The item's drug is what gets ordered.
+     */
+    private org.openmrs.module.rwandapharmacymanagement.model.Item resolvePrescribedItem(PrescriptionLineCommand line,
+                                                                                       boolean validate) {
+        org.openmrs.module.rwandapharmacymanagement.model.Item item = null;
+        if (line.getItemId() != null) {
+            item = pharmacyService.getItem(line.getItemId());
+        } else if (line.getProductMasterItemId() != null) {
+            ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(line.getProductMasterItemId());
+            if (productMasterItem == null) {
+                throw new IllegalArgumentException("Selected product master drug was not found");
+            }
+            ProductMasterPrivilegeSupport.requireAllowed(productMasterItem);
+            item = pharmacyService.getMappedItemForProductMasterItem(productMasterItem);
+            if (item == null && productMasterItem.getDrug() != null) {
+                item = ensureLocalItem(productMasterItem);
+            }
         }
-        if (Boolean.FALSE.equals(productMasterItem.getActive())) {
-            throw new IllegalArgumentException("Selected product master drug is inactive");
+        if (item == null) {
+            throw new IllegalArgumentException("Selected pharmacy item was not found");
         }
-        if (!"ZMED".equalsIgnoreCase(safe(productMasterItem.getMaterialType()))) {
-            throw new IllegalArgumentException("Only CMED drug products can be prescribed on this page");
+        if (validate) {
+            Set<Integer> itemIds = Collections.singleton(item.getItemId());
+            PrescribableItemSupport.requirePrescribable(item,
+                    pharmacyService.getPrescribableItemInfo(itemIds).get(item.getItemId()),
+                    inventoryService.getAvailableQuantitiesByItem(itemIds).get(item.getItemId()));
+        } else if (item.getDrug() == null) {
+            throw new IllegalArgumentException("Pharmacy item '" + item.getName() + "' is not linked to an OpenMRS drug");
         }
-        if (productMasterItem.getDrug() == null) {
-            throw new IllegalArgumentException("Selected product master drug is not linked to an OpenMRS drug");
-        }
-        ProductMasterPrivilegeSupport.requireAllowed(productMasterItem);
+        return item;
     }
 
     private org.openmrs.module.rwandapharmacymanagement.model.Item ensureLocalItem(ProductMasterItem productMasterItem) {

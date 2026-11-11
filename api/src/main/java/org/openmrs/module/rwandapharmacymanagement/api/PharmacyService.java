@@ -29,6 +29,18 @@ public interface PharmacyService extends OpenmrsService {
 
     Item getItemByExactName(String name);
 
+    /**
+     * Non-voided, dispensable local items that have an OpenMRS drug: the candidates for prescribing.
+     */
+    List<Item> getDispensableDrugItems();
+
+    /**
+     * Linked supplier product master facts per item. Items without a linked product master row are absent.
+     * Null item ids means all items.
+     */
+    java.util.Map<Integer, org.openmrs.module.rwandapharmacymanagement.api.dto.PrescribableItemInfo> getPrescribableItemInfo(
+            java.util.Collection<Integer> itemIds);
+
     List<Item> getItemsByCodes(List<String> codes);
 
     List<Item> searchItems(String searchTerm, Integer limit);

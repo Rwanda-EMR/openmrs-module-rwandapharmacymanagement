@@ -82,6 +82,65 @@ public class HibernatePharmacyDao implements PharmacyDao {
     }
 
     @Override
+    public List<Item> getDispensableDrugItems() {
+        return sessionFactory.getCurrentSession().createCriteria(Item.class)
+                .add(notVoided())
+                .add(Restrictions.eq("dispensable", Boolean.TRUE))
+                .add(Restrictions.isNotNull("drug"))
+                .addOrder(Order.asc("name"))
+                .list();
+    }
+
+    @Override
+    public java.util.Map<Integer, org.openmrs.module.rwandapharmacymanagement.api.dto.PrescribableItemInfo> getPrescribableItemInfo(
+            java.util.Collection<Integer> itemIds) {
+        java.util.Map<Integer, org.openmrs.module.rwandapharmacymanagement.api.dto.PrescribableItemInfo> infoByItemId =
+                new java.util.HashMap<Integer, org.openmrs.module.rwandapharmacymanagement.api.dto.PrescribableItemInfo>();
+        if (itemIds != null && itemIds.isEmpty()) {
+            return infoByItemId;
+        }
+        StringBuilder sql = new StringBuilder()
+                .append("select m.item_id, p.active, p.material_type, p.required_privilege, p.restriction_reason ")
+                .append("from rpm_item_product_master_map m ")
+                .append("join rpm_product_master_item p on p.product_master_item_id = m.product_master_item_id and p.voided = 0 ")
+                .append("where m.voided = 0 and coalesce(m.active, 1) = 1 ");
+        if (itemIds != null) {
+            sql.append("and m.item_id in (:itemIds) ");
+        }
+        SQLQuery query = sessionFactory.getCurrentSession().createSQLQuery(sql.toString());
+        if (itemIds != null) {
+            query.setParameterList("itemIds", itemIds);
+        }
+        for (Object row : query.list()) {
+            Object[] values = (Object[]) row;
+            if (values[0] == null) {
+                continue;
+            }
+            Integer itemId = ((Number) values[0]).intValue();
+            org.openmrs.module.rwandapharmacymanagement.api.dto.PrescribableItemInfo info = infoByItemId.get(itemId);
+            if (info == null) {
+                info = new org.openmrs.module.rwandapharmacymanagement.api.dto.PrescribableItemInfo(itemId);
+                infoByItemId.put(itemId, info);
+            }
+            info.addLinkedRow(values[1] == null || isTrue(values[1]),
+                    "ZMED".equalsIgnoreCase(values[2] == null ? "" : values[2].toString().trim()),
+                    values[3] == null ? null : values[3].toString(),
+                    values[4] == null ? null : values[4].toString());
+        }
+        return infoByItemId;
+    }
+
+    private boolean isTrue(Object value) {
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue() != 0;
+        }
+        return value != null && ("true".equalsIgnoreCase(value.toString()) || "1".equals(value.toString()));
+    }
+
+    @Override
     public List<Item> getItemsByCodes(List<String> codes) {
         if (codes == null || codes.isEmpty()) {
             return Collections.emptyList();

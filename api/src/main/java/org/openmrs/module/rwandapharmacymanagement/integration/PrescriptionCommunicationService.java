@@ -74,6 +74,28 @@ public class PrescriptionCommunicationService {
         sendMedicationRequests(request, Collections.singletonList(requestLine));
     }
 
+    /**
+     * Writes the prescription's HIE and SMS messages to the integration log as a waiting list, inside the caller's
+     * transaction, so they are rolled back with a failed save. The HIE and SMS scheduler tasks send them; nothing
+     * goes over the network here.
+     */
+    public void queuePrescriptionSaved(PatientDispensingRequest request, boolean sendSms) {
+        if (request == null || request.getRequestType() != RequestType.PRESCRIPTION) {
+            return;
+        }
+        queueMedicationRequests(request, request.getLines());
+        if (sendSms) {
+            queuePrescriptionSavedSms(request);
+        }
+    }
+
+    public void queuePrescriptionLineUpdated(PatientDispensingRequest request, PatientDispensingRequestLine requestLine) {
+        if (request == null || requestLine == null || request.getRequestType() != RequestType.PRESCRIPTION) {
+            return;
+        }
+        queueMedicationRequests(request, Collections.singletonList(requestLine));
+    }
+
     public void handlePrescriptionDispensed(DispenseRecord dispenseRecord) {
         if (dispenseRecord == null || Boolean.TRUE.equals(dispenseRecord.getDispensedWithoutOrder())
                 || dispenseRecord.getPatientDispensingRequest() == null
@@ -276,6 +298,98 @@ public class PrescriptionCommunicationService {
                     smsRetryPayload, truncate(e.getMessage()),
                     "Queued prescription SMS for retry", start);
         }
+    }
+
+    private void queueMedicationRequests(PatientDispensingRequest request, List<PatientDispensingRequestLine> lines) {
+        if (lines == null || lines.isEmpty()) {
+            return;
+        }
+        String requestEndpoint = buildEndpoint(administrationService.getGlobalProperty(
+                RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_REQUEST_PATH, "/MedicationRequest"));
+        if (!isHieEnabled()) {
+            log(IntegrationType.HIE_MEDICATION_REQUEST, IntegrationStatus.SKIPPED, requestEndpoint, "",
+                    "HIE medication request integration is disabled");
+            return;
+        }
+        Integer referenceId = request.getPatientDispensingRequestId();
+        String encounterEndpoint = buildEndpoint(administrationService.getGlobalProperty(
+                RwandaPharmacyManagementConfig.GP_HIE_ENCOUNTER_PATH, "/Encounter"));
+        if (request.getEncounter() == null) {
+            log(IntegrationType.HIE_ENCOUNTER, IntegrationStatus.SKIPPED, encounterEndpoint, "",
+                    "No encounter available to send to HIE");
+        } else {
+            try {
+                String payload = hieMedicationPayloadBuilder.buildEncounter(request,
+                        administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_PATIENT_IDENTIFIER_TYPE_UUID, ""),
+                        administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_ENCOUNTER_SERVICE_TYPE_CODE, "57"),
+                        administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_ENCOUNTER_SERVICE_TYPE_DISPLAY, "Pharmacy"));
+                queue(IntegrationType.HIE_ENCOUNTER, encounterEndpoint, payload, "Queued encounter for HIE", referenceId);
+            }
+            catch (Exception e) {
+                log.error("Unable to queue HIE Encounter. requestId=" + safeRequestId(request), e);
+                log(IntegrationType.HIE_ENCOUNTER, IntegrationStatus.FAILED, encounterEndpoint, "",
+                        truncate(e.getMessage()), "Unable to build HIE encounter payload", System.currentTimeMillis());
+            }
+        }
+        for (PatientDispensingRequestLine line : lines) {
+            if (line == null) {
+                continue;
+            }
+            try {
+                queue(IntegrationType.HIE_MEDICATION_REQUEST, requestEndpoint, buildMedicationRequestPayload(request, line),
+                        "Queued medication request for HIE", referenceId);
+            }
+            catch (Exception e) {
+                log.error("Unable to queue HIE MedicationRequest. requestId=" + safeRequestId(request)
+                        + ", lineId=" + line.getPatientDispensingRequestLineId(), e);
+                log(IntegrationType.HIE_MEDICATION_REQUEST, IntegrationStatus.FAILED, requestEndpoint, "",
+                        truncate(e.getMessage()), "Unable to build HIE medication request payload", System.currentTimeMillis());
+            }
+        }
+    }
+
+    private void queuePrescriptionSavedSms(PatientDispensingRequest request) {
+        if (!Boolean.valueOf(administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_ENABLED, "false"))) {
+            log(IntegrationType.SMS_NOTIFICATION, IntegrationStatus.SKIPPED, smsPostUrl(), "", "SMS integration is disabled");
+            return;
+        }
+        String sourcePhoneNumber = hieMedicationPayloadBuilder.resolvePatientPhoneNumber(request.getPatient(),
+                administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_PHONE_PERSON_ATTRIBUTE_TYPE_UUID, ""));
+        if (isBlank(sourcePhoneNumber)) {
+            log(IntegrationType.SMS_NOTIFICATION, IntegrationStatus.SKIPPED, smsPostUrl(), "", "Patient phone number is missing");
+            return;
+        }
+        String phoneNumber = SmsPhoneNumberUtil.normalizeForSending(sourcePhoneNumber);
+        if (isBlank(phoneNumber)) {
+            log(IntegrationType.SMS_NOTIFICATION, IntegrationStatus.SKIPPED, smsPostUrl(), "",
+                    "Patient phone number is invalid for SMS: " + sourcePhoneNumber);
+            return;
+        }
+        String message = hieMedicationPayloadBuilder.buildPrescriptionSmsMessage(request, facilityId("unknown"),
+                resolveHospitalName());
+        String payload = buildSmsRetryPayload(
+                administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_SENDER, ""), phoneNumber, message);
+        queue(IntegrationType.SMS_NOTIFICATION, smsPostUrl(), payload, "Queued prescription SMS",
+                request.getPatientDispensingRequestId());
+    }
+
+    /**
+     * Stores the full payload: the retry tasks send exactly what is stored, so it must not be truncated.
+     */
+    private void queue(IntegrationType type, String endpoint, String payload, String summary, Integer referenceId) {
+        IntegrationLog entry = new IntegrationLog();
+        entry.setIntegrationType(type);
+        entry.setStatus(IntegrationStatus.RETRY_PENDING);
+        entry.setEndpoint(endpoint);
+        entry.setRequestPayload(payload);
+        entry.setResponsePayload("");
+        entry.setSummary(summary);
+        entry.setDurationMs(Long.valueOf(0L));
+        entry.setRetryCount(Integer.valueOf(0));
+        entry.setReferenceId(referenceId);
+        entry.setDateCreated(new Date());
+        entry.setCreator(Context.getAuthenticatedUser());
+        integrationLogService.saveLog(entry);
     }
 
     private String buildSmsRetryPayload(String sender, String phoneNumber, String message) {

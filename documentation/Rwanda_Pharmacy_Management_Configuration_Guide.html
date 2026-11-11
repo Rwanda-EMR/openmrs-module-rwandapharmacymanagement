@@ -93,6 +93,13 @@
     <tr><td><code>rwandapharmacymanagement.lab.serviceConceptSet</code></td><td>Concept UUID or ID</td><td>Concept set/answers used for lab request services.</td></tr>
     <tr><td><code>rwandapharmacymanagement.prescription.frequencyConceptSet</code></td><td>Concept UUID or ID</td><td>Concept set/answers used for prescription frequency options.</td></tr>
 </table>
+<p>Scheduled tasks are configured by the module on every server start and are not set through global properties:</p>
+<table>
+    <tr><th>Task</th><th>Schedule</th></tr>
+    <tr><td>Rwanda Pharmacy HIE Retry</td><td>Every 5 minutes</td></tr>
+    <tr><td>Rwanda Pharmacy SMS Retry</td><td>Every 5 minutes</td></tr>
+    <tr><td>Rwanda Pharmacy RMS Delivery Fetch</td><td>Every day at 03:00 server time, always started</td></tr>
+</table>
 
 <h2>5. Supplier, RMS, and Product Master Setup</h2>
 <h3>5.1 Legacy RMS Defaults</h3>
@@ -104,8 +111,6 @@
     <tr><td><code>rwandapharmacymanagement.supplier.connectionTimeout</code></td><td><code>10000</code></td><td>API connection timeout in milliseconds.</td></tr>
     <tr><td><code>rwandapharmacymanagement.supplier.readTimeout</code></td><td><code>30000</code></td><td>API read timeout in milliseconds.</td></tr>
     <tr><td><code>rwandapharmacymanagement.supplier.enabled</code></td><td><code>true</code></td><td>Enable RMS integration.</td></tr>
-    <tr><td><code>rwandapharmacymanagement.supplier.deliveryFetchSchedulerEnabled</code></td><td><code>false</code></td><td>Enable scheduled RMS delivery fetching.</td></tr>
-    <tr><td><code>rwandapharmacymanagement.supplier.deliveryFetchSchedulerIntervalSeconds</code></td><td><code>3600</code></td><td>Scheduler interval for RMS delivery fetching.</td></tr>
 </table>
 
 <h3>5.2 Supplier Records</h3>
@@ -173,7 +178,6 @@
     <tr><td><code>rwandapharmacymanagement.sms.authPayloadTemplate</code></td><td>JSON template</td><td>Optional authentication payload template using <code>{{username}}</code> and <code>{{password}}</code>.</td></tr>
     <tr><td><code>rwandapharmacymanagement.sms.postPayloadTemplate</code></td><td>JSON template</td><td>Optional SMS send payload template using <code>{{sender}}</code>, <code>{{phoneNumber}}</code>, and <code>{{message}}</code>.</td></tr>
     <tr><td><code>rwandapharmacymanagement.sms.retrySchedulerEnabled</code></td><td><code>true</code></td><td>Retry failed/pending SMS messages through the scheduler.</td></tr>
-    <tr><td><code>rwandapharmacymanagement.sms.retrySchedulerIntervalSeconds</code></td><td><code>1800</code></td><td>SMS retry scheduler interval.</td></tr>
     <tr><td><code>rwandapharmacymanagement.sms.retryBatchSize</code></td><td><code>50</code></td><td>Maximum SMS log rows retried per scheduler run.</td></tr>
 </table>
 <div class="note">If Intouch requires IP whitelisting, provide the public outbound IP address of the OpenMRS server. A connection timeout can occur when the IP is not whitelisted or when the endpoint/port is blocked.</div>
@@ -209,7 +213,6 @@
     <tr><td><code>rwandapharmacymanagement.hie.connectionTimeout</code></td><td>Connection timeout.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.readTimeout</code></td><td>Read timeout.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.retrySchedulerEnabled</code></td><td>Enable retry of failed/pending HIE messages.</td></tr>
-    <tr><td><code>rwandapharmacymanagement.hie.retrySchedulerIntervalSeconds</code></td><td>HIE retry scheduler interval.</td></tr>
     <tr><td><code>rwandapharmacymanagement.hie.retryBatchSize</code></td><td>Maximum HIE log rows retried per scheduler run.</td></tr>
 </table>
 <p>HIE prescription messages keep the same group identifier across all drugs in one prescription. Dose unit is currently sent as a blank value to avoid showing incorrect tablet/capsule units.</p>

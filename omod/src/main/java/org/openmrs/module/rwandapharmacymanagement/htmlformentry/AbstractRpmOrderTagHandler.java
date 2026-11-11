@@ -7,10 +7,16 @@ import org.openmrs.module.htmlformentry.BadFormDesignException;
 import org.openmrs.module.htmlformentry.FormEntrySession;
 import org.openmrs.module.htmlformentry.FormSubmissionController;
 import org.openmrs.module.htmlformentry.handler.SubstitutionTagHandler;
+import org.openmrs.module.rwandapharmacymanagement.api.InventoryService;
 import org.openmrs.module.rwandapharmacymanagement.api.PharmacyService;
+import org.openmrs.module.rwandapharmacymanagement.api.dto.PrescribableItemInfo;
+import org.openmrs.module.rwandapharmacymanagement.model.Item;
 import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
+import org.openmrs.module.rwandapharmacymanagement.util.PrescribableItemSupport;
 import org.openmrs.module.rwandapharmacymanagement.util.ProductMasterPrivilegeSupport;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -48,6 +54,25 @@ public abstract class AbstractRpmOrderTagHandler extends SubstitutionTagHandler 
                         .compareToIgnoreCase(safe(right == null ? null : right.getItemName()));
             }
         });
+        return items;
+    }
+
+    /**
+     * Local pharmacy items the current user can prescribe, using the same rules as the prescription page.
+     */
+    protected List<Item> getPrescribableItems() {
+        PharmacyService pharmacyService = Context.getRegisteredComponent("pharmacyService", PharmacyService.class);
+        InventoryService inventoryService = Context.getRegisteredComponent("inventoryService", InventoryService.class);
+        Map<Integer, PrescribableItemInfo> infoByItemId = pharmacyService.getPrescribableItemInfo(null);
+        Map<Integer, BigDecimal> stockByItemId = inventoryService.getAvailableQuantitiesByItem(null);
+        List<Item> items = new ArrayList<Item>();
+        for (Item item : pharmacyService.getDispensableDrugItems()) {
+            PrescribableItemInfo info = infoByItemId.get(item.getItemId());
+            if (PrescribableItemSupport.isPrescribable(item, info, stockByItemId.get(item.getItemId()))
+                    && PrescribableItemSupport.isAllowed(info)) {
+                items.add(item);
+            }
+        }
         return items;
     }
 

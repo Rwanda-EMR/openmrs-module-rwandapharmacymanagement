@@ -15,8 +15,6 @@ public final class RwandaPharmacyManagementConfig {
     public static final String GP_SUPPLIER_CONNECT_TIMEOUT = MODULE_ID + ".supplier.connectionTimeout";
     public static final String GP_SUPPLIER_READ_TIMEOUT = MODULE_ID + ".supplier.readTimeout";
     public static final String GP_SUPPLIER_ENABLED = MODULE_ID + ".supplier.enabled";
-    public static final String GP_RMS_DELIVERY_FETCH_SCHEDULER_ENABLED = MODULE_ID + ".supplier.deliveryFetchSchedulerEnabled";
-    public static final String GP_RMS_DELIVERY_FETCH_SCHEDULER_INTERVAL_SECONDS = MODULE_ID + ".supplier.deliveryFetchSchedulerIntervalSeconds";
     public static final String GP_SMTP_HOST = MODULE_ID + ".smtp.host";
     public static final String GP_SMTP_PORT = MODULE_ID + ".smtp.port";
     public static final String GP_SMTP_USERNAME = MODULE_ID + ".smtp.username";
@@ -48,8 +46,8 @@ public final class RwandaPharmacyManagementConfig {
     public static final String GP_HIE_CONNECT_TIMEOUT = MODULE_ID + ".hie.connectionTimeout";
     public static final String GP_HIE_READ_TIMEOUT = MODULE_ID + ".hie.readTimeout";
     public static final String GP_HIE_RETRY_SCHEDULER_ENABLED = MODULE_ID + ".hie.retrySchedulerEnabled";
-    public static final String GP_HIE_RETRY_SCHEDULER_INTERVAL_SECONDS = MODULE_ID + ".hie.retrySchedulerIntervalSeconds";
     public static final String GP_HIE_RETRY_BATCH_SIZE = MODULE_ID + ".hie.retryBatchSize";
+    public static final String GP_INTEGRATION_MAX_RETRY_ATTEMPTS = MODULE_ID + ".integration.maxRetryAttempts";
     public static final String GP_SMS_ENABLED = MODULE_ID + ".sms.enabled";
     public static final String GP_SMS_AUTH_URL = MODULE_ID + ".sms.authorizationUrl";
     public static final String GP_SMS_USERNAME = MODULE_ID + ".sms.username";
@@ -65,7 +63,6 @@ public final class RwandaPharmacyManagementConfig {
     public static final String GP_SMS_AUTH_PAYLOAD_TEMPLATE = MODULE_ID + ".sms.authPayloadTemplate";
     public static final String GP_SMS_POST_PAYLOAD_TEMPLATE = MODULE_ID + ".sms.postPayloadTemplate";
     public static final String GP_SMS_RETRY_SCHEDULER_ENABLED = MODULE_ID + ".sms.retrySchedulerEnabled";
-    public static final String GP_SMS_RETRY_SCHEDULER_INTERVAL_SECONDS = MODULE_ID + ".sms.retrySchedulerIntervalSeconds";
     public static final String GP_SMS_RETRY_BATCH_SIZE = MODULE_ID + ".sms.retryBatchSize";
 
     public static final String PRIVILEGE_DASHBOARD = "App: rwandapharmacymanagement.dashboard";
