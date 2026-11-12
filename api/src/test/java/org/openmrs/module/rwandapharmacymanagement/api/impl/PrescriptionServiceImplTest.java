@@ -4,6 +4,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.PrescriptionLineCommand;
+import org.openmrs.module.rwandapharmacymanagement.model.Item;
+import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequest;
+import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
+import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus;
 
 import java.io.File;
 import java.math.BigDecimal;
@@ -112,6 +116,70 @@ public class PrescriptionServiceImplTest {
                         + "Dose: 3; Route: ORAL; Frequency: ONCE A DAY; Duration: 4 DAYS; none");
 
         Assert.assertEquals("none", instructions);
+    }
+
+    @Test
+    public void openPrescriptionProblemShouldAskToEditAnUnpaidPrescription() {
+        String problem = openProblem(RequestStatus.PENDING_PAYMENT, Boolean.FALSE, Boolean.TRUE, false, Boolean.FALSE);
+
+        Assert.assertEquals("Amoxicillin 500mg is already prescribed and not yet paid (prescription #42). "
+                + "Edit that prescription instead of prescribing it again.", problem);
+    }
+
+    @Test
+    public void openPrescriptionProblemShouldSayAPaidPrescriptionIsWaitingAtThePharmacy() {
+        String problem = openProblem(RequestStatus.PENDING_DISPENSE, Boolean.TRUE, Boolean.TRUE, true, Boolean.FALSE);
+
+        Assert.assertEquals("Amoxicillin 500mg is already paid and waiting at the pharmacy (prescription #42).", problem);
+    }
+
+    @Test
+    public void openPrescriptionProblemShouldSayAPrescriptionIsBeingDispensed() {
+        String problem = openProblem(RequestStatus.IN_PROGRESS, Boolean.TRUE, Boolean.TRUE, true, Boolean.FALSE);
+
+        Assert.assertEquals("Amoxicillin 500mg is being dispensed at the pharmacy (prescription #42).", problem);
+    }
+
+    @Test
+    public void openPrescriptionProblemShouldAskToEditAZeroPricePrescription() {
+        String problem = openProblem(RequestStatus.PENDING_DISPENSE, Boolean.TRUE, Boolean.TRUE, false, Boolean.FALSE);
+
+        Assert.assertEquals("Amoxicillin 500mg is already prescribed and waiting at the pharmacy (prescription #42). "
+                + "Edit that prescription instead of prescribing it again.", problem);
+    }
+
+    @Test
+    public void openPrescriptionProblemShouldAskToEditAnUnbilledPrescription() {
+        String problem = openProblem(RequestStatus.PENDING_DISPENSE, Boolean.TRUE, Boolean.FALSE, false, Boolean.FALSE);
+
+        Assert.assertEquals("Amoxicillin 500mg is already prescribed and waiting at the pharmacy (prescription #42). "
+                + "Edit that prescription instead of prescribing it again.", problem);
+    }
+
+    @Test
+    public void openPrescriptionProblemShouldNameAnApprovedPaymentException() {
+        String problem = openProblem(RequestStatus.PENDING_DISPENSE, Boolean.TRUE, Boolean.TRUE, false, Boolean.TRUE);
+
+        Assert.assertEquals("Amoxicillin 500mg is approved for dispensing without payment and waiting at the pharmacy "
+                + "(prescription #42).", problem);
+    }
+
+    private String openProblem(RequestStatus status, Boolean paymentConfirmed, Boolean billable,
+                               boolean paymentReceived, Boolean paymentExceptionApproved) {
+        PatientDispensingRequest request = new PatientDispensingRequest();
+        request.setPatientDispensingRequestId(Integer.valueOf(42));
+        request.setRequestStatus(status);
+        request.setPaymentConfirmed(paymentConfirmed);
+        request.setBillable(billable);
+        request.setPaymentExceptionApproved(paymentExceptionApproved);
+        Item item = new Item();
+        item.setName("Amoxicillin 500mg");
+        PatientDispensingRequestLine line = new PatientDispensingRequestLine();
+        line.setPatientDispensingRequest(request);
+        line.setItem(item);
+        line.setLineStatus(status);
+        line.setBillable(billable);
+        return new PrescriptionServiceImpl().openPrescriptionProblem(line, request, paymentReceived);
     }
 
     private void assertCalculatedQuantity(String frequency, int duration, String durationUnit, String expectedQuantity) {

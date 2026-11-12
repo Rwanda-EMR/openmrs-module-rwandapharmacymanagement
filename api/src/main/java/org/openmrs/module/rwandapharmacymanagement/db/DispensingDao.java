@@ -7,6 +7,7 @@ import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingReques
 import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingRequestLine;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.RequestType;
 
+import java.math.BigDecimal;
 import java.util.Date;
 import java.util.Collection;
 import java.util.List;
@@ -47,6 +48,8 @@ public interface DispensingDao {
 
     long countPatientPrescriptionHistory(Integer patientId);
 
+    List<PatientDispensingRequestLine> getOpenRequestLinesForOrders(Collection<Integer> orderIds);
+
     List<PatientDispensingRequest> getPatientConsumableHistory(Integer patientId, int firstResult, int maxResults);
 
     long countPatientConsumableHistory(Integer patientId);
@@ -58,6 +61,11 @@ public interface DispensingDao {
     Integer findLatestPatientBillId(Integer patientId, Date referenceDate, Collection<String> itemNames);
 
     Boolean isPatientBillPaid(Integer patientBillId);
+
+    /**
+     * Total of the payments recorded on the MOH bill, voided payments excluded, or null when it cannot be read.
+     */
+    BigDecimal getPatientBillAmountPaid(Integer patientBillId);
 
     List<DispenseRecord> getRecentDispenses();
 

@@ -269,13 +269,13 @@ public class EnterPageController {
             if (request == null) {
                 continue;
             }
-            boolean paid = request.getPatientBillId() != null
-                    && Boolean.TRUE.equals(dispensingService.isPatientBillPaid(request.getPatientBillId()));
+            boolean paid = dispensingService.isPaymentReceived(request);
+            boolean paymentException = Boolean.TRUE.equals(request.getPaymentExceptionApproved());
             boolean hasDispensedLine = hasLineWithStatus(request, RequestStatus.DISPENSED)
                     || hasLineWithStatus(request, RequestStatus.PARTIALLY_DISPENSED)
                     || request.getRequestStatus() == RequestStatus.DISPENSED
                     || request.getRequestStatus() == RequestStatus.PARTIALLY_DISPENSED;
-            boolean editable = !paid && !hasDispensedLine && isPending(request.getRequestStatus());
+            boolean editable = !paid && !paymentException && !hasDispensedLine && isPending(request.getRequestStatus());
             Map<String, Object> row = new LinkedHashMap<String, Object>();
             row.put("request", request);
             row.put("paid", Boolean.valueOf(paid));

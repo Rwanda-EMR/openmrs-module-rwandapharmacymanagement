@@ -19,6 +19,12 @@ public interface PrescriptionService extends OpenmrsService {
                                                List<PrescriptionLineCommand> lines,
                                                Integer patientBillId);
 
+    /**
+     * Why these lines cannot be prescribed because the same drug is still open at the pharmacy for this patient
+     * (not yet paid, paid and waiting, or being dispensed), or null when nothing blocks them.
+     */
+    String getOpenPrescriptionConflict(Patient patient, List<PrescriptionLineCommand> lines);
+
     PatientDispensingRequest updatePrescriptionLine(Integer requestId,
                                                    Integer requestLineId,
                                                    Provider orderingProvider,

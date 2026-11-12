@@ -358,6 +358,33 @@ public class HibernateDispensingDao implements DispensingDao {
     }
 
     @Override
+    public List<PatientDispensingRequestLine> getOpenRequestLinesForOrders(Collection<Integer> orderIds) {
+        if (orderIds == null || orderIds.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        return sessionFactory.getCurrentSession().createCriteria(PatientDispensingRequestLine.class, "line")
+                .createAlias("line.patientDispensingRequest", "request")
+                .createAlias("line.order", "drugOrder")
+                .add(Restrictions.in("drugOrder.orderId", orderIds))
+                .add(Restrictions.or(Restrictions.isNull("line.voided"), Restrictions.eq("line.voided", false)))
+                .add(Restrictions.eq("request.voided", false))
+                .add(Restrictions.in("request.requestStatus", new Object[] {
+                        org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.PENDING_PAYMENT,
+                        org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.PENDING_DISPENSE,
+                        org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.IN_PROGRESS
+                }))
+                .add(Restrictions.or(Restrictions.isNull("line.lineStatus"), Restrictions.not(Restrictions.in("line.lineStatus", new Object[] {
+                        org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.DISPENSED,
+                        org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.PARTIALLY_DISPENSED,
+                        org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.UNAVAILABLE,
+                        org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.NOT_SERVED,
+                        org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.CANCELLED
+                }))))
+                .addOrder(Order.asc("request.patientDispensingRequestId"))
+                .list();
+    }
+
+    @Override
     public long countPatientPrescriptionHistory(Integer patientId) {
         if (patientId == null) {
             return 0L;
@@ -742,6 +769,35 @@ public class HibernateDispensingDao implements DispensingDao {
                 return paidByStatus;
             }
             return isPatientBillPaidByFlag(patientBillId, billIdColumn);
+        }
+        catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    @Override
+    public BigDecimal getPatientBillAmountPaid(Integer patientBillId) {
+        if (patientBillId == null || !tableExists("moh_bill_patient_bill")) {
+            return null;
+        }
+        try {
+            String paymentTable = resolveExistingTable("moh_bill_payment", "moh_bill_bill_payment", "moh_bill_billpayment");
+            if (paymentTable == null) {
+                return null;
+            }
+            String paymentBillColumn = resolveExistingColumn(paymentTable, "patient_bill_id", "patient_bill", "bill_id");
+            String paymentAmountColumn = resolveExistingColumn(paymentTable, "amount_paid", "amountPaid", "amount");
+            if (paymentBillColumn == null || paymentAmountColumn == null) {
+                return null;
+            }
+            String voidedColumn = resolveExistingColumn(paymentTable, "voided", "is_voided");
+            String voidedClause = voidedColumn == null ? "" : " and (" + voidedColumn + " = 0 or " + voidedColumn + " is null)";
+            Object result = sessionFactory.getCurrentSession()
+                    .createSQLQuery("select coalesce(sum(" + paymentAmountColumn + "), 0) from " + paymentTable
+                            + " where " + paymentBillColumn + " = :patientBillId" + voidedClause)
+                    .setParameter("patientBillId", patientBillId)
+                    .uniqueResult();
+            return bigDecimalValue(result);
         }
         catch (RuntimeException ignored) {
             return null;

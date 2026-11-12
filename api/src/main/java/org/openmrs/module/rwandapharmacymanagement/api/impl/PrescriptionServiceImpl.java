@@ -56,8 +56,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import java.lang.reflect.Method;
@@ -137,6 +140,10 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         ConsumableBillingReadiness billingReadiness = consumableOrderService.getBillingReadiness(patient);
         if (!billingReadiness.isReady()) {
             throw new IllegalArgumentException(billingReadiness.getMessage());
+        }
+        String openPrescriptionConflict = getOpenPrescriptionConflict(patient, lines);
+        if (openPrescriptionConflict != null) {
+            throw new IllegalArgumentException(openPrescriptionConflict);
         }
 
         Date encounterDatetime = resolveEncounterDatetime(visit);
@@ -230,6 +237,93 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public String getOpenPrescriptionConflict(Patient patient, List<PrescriptionLineCommand> lines) {
+        Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_CREATE_PRESCRIPTION);
+        if (patient == null || lines == null || lines.isEmpty()) {
+            return null;
+        }
+        Date now = new Date();
+        Set<Integer> activeOrderIds = new LinkedHashSet<Integer>();
+        for (PrescriptionLineCommand line : lines) {
+            for (DrugOrder activeOrder : findActiveSameOrderableOrders(patient, prescribedDrugWithoutChanges(line), now, null)) {
+                activeOrderIds.add(activeOrder.getOrderId());
+            }
+        }
+        if (activeOrderIds.isEmpty()) {
+            return null;
+        }
+        List<PatientDispensingRequestLine> openLines = dispensingService.getOpenRequestLinesForOrders(activeOrderIds);
+        if (openLines == null || openLines.isEmpty()) {
+            return null;
+        }
+        Map<Integer, Boolean> paymentReceivedByRequestId = new HashMap<Integer, Boolean>();
+        List<String> problems = new ArrayList<String>();
+        for (PatientDispensingRequestLine openLine : openLines) {
+            PatientDispensingRequest request = openLine == null ? null : openLine.getPatientDispensingRequest();
+            if (request == null) {
+                continue;
+            }
+            Boolean paymentReceived = paymentReceivedByRequestId.get(request.getPatientDispensingRequestId());
+            if (paymentReceived == null) {
+                paymentReceived = Boolean.valueOf(dispensingService.isPaymentReceived(request));
+                paymentReceivedByRequestId.put(request.getPatientDispensingRequestId(), paymentReceived);
+            }
+            String problem = openPrescriptionProblem(openLine, request, paymentReceived.booleanValue());
+            if (!problems.contains(problem)) {
+                problems.add(problem);
+            }
+        }
+        return problems.isEmpty() ? null : "This prescription was not saved. " + StringUtils.join(problems, " ");
+    }
+
+    String openPrescriptionProblem(PatientDispensingRequestLine openLine, PatientDispensingRequest request,
+                                   boolean paymentReceived) {
+        String name = openLine.getItem() != null && hasText(openLine.getItem().getName()) ? openLine.getItem().getName()
+                : openLine.getOrder() != null && openLine.getOrder().getDrug() != null
+                ? openLine.getOrder().getDrug().getName() : "This drug";
+        String reference = "prescription #" + request.getPatientDispensingRequestId();
+        if (openLine.getLineStatus() == RequestStatus.IN_PROGRESS || request.getRequestStatus() == RequestStatus.IN_PROGRESS) {
+            return name + " is being dispensed at the pharmacy (" + reference + ").";
+        }
+        if (Boolean.TRUE.equals(request.getPaymentExceptionApproved())) {
+            return name + " is approved for dispensing without payment and waiting at the pharmacy (" + reference + ").";
+        }
+        if (paymentReceived) {
+            return name + " is already paid and waiting at the pharmacy (" + reference + ").";
+        }
+        if (Boolean.TRUE.equals(request.getBillable()) && !Boolean.TRUE.equals(request.getPaymentConfirmed())) {
+            return name + " is already prescribed and not yet paid (" + reference
+                    + "). Edit that prescription instead of prescribing it again.";
+        }
+        return name + " is already prescribed and waiting at the pharmacy (" + reference
+                + "). Edit that prescription instead of prescribing it again.";
+    }
+
+    /**
+     * The drug a line orders, looked up without creating a local item for a legacy product master line.
+     */
+    private Drug prescribedDrugWithoutChanges(PrescriptionLineCommand line) {
+        if (line == null) {
+            return null;
+        }
+        if (line.getItemId() != null) {
+            org.openmrs.module.rwandapharmacymanagement.model.Item item = pharmacyService.getItem(line.getItemId());
+            return item == null ? null : item.getDrug();
+        }
+        if (line.getProductMasterItemId() == null) {
+            return null;
+        }
+        ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(line.getProductMasterItemId());
+        if (productMasterItem == null) {
+            return null;
+        }
+        org.openmrs.module.rwandapharmacymanagement.model.Item item =
+                pharmacyService.getMappedItemForProductMasterItem(productMasterItem);
+        return item != null ? item.getDrug() : productMasterItem.getDrug();
+    }
+
+    @Override
     public PatientDispensingRequest updatePrescriptionLine(Integer requestId,
                                                            Integer requestLineId,
                                                            Provider orderingProvider,
@@ -245,9 +339,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         if (request == null) {
             throw new IllegalArgumentException("Prescription request not found");
         }
-        if (isPrescriptionPaymentConfirmed(request)) {
-            throw new IllegalArgumentException("This prescription is already paid and cannot be edited");
-        }
+        requireNotLockedByPayment(request);
         PatientDispensingRequestLine requestLine = findEditableRequestLine(request, requestLineId);
         PrescriptionLineCommand line = lines.get(0);
         boolean billingOnlyEdit = Boolean.FALSE.equals(line.getBillable());
@@ -891,9 +983,7 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         if (request == null) {
             throw new IllegalArgumentException("Prescription request not found");
         }
-        if (isPrescriptionPaymentConfirmed(request)) {
-            throw new IllegalArgumentException("This prescription is already paid and cannot be edited");
-        }
+        requireNotLockedByPayment(request);
         Integer relatedPatientBillId = request.getPatientBillId();
         PatientDispensingRequestLine requestLine = findEditableRequestLine(request, requestLineId);
         DrugOrder matchingOrder = findMatchingOrder(request, requestLine);
@@ -1285,14 +1375,11 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         return status == RequestStatus.PENDING_PAYMENT || status == RequestStatus.PENDING_DISPENSE;
     }
 
-    private boolean isPrescriptionPaymentConfirmed(PatientDispensingRequest request) {
-        if (request == null) {
-            return false;
+    private void requireNotLockedByPayment(PatientDispensingRequest request) {
+        String lockReason = dispensingService.getPaymentEditLockReason(request);
+        if (lockReason != null) {
+            throw new IllegalArgumentException(lockReason);
         }
-        if (Boolean.TRUE.equals(request.getPaymentConfirmed())) {
-            return true;
-        }
-        return request.getPatientBillId() != null && Boolean.TRUE.equals(dispensingService.isPatientBillPaid(request.getPatientBillId()));
     }
 
     private void updateRequestStatusAfterLineChange(PatientDispensingRequest request, String reason) {

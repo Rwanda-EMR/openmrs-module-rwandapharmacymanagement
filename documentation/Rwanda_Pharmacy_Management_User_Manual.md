@@ -37,7 +37,7 @@ The system creates OpenMRS drug orders, creates a patient dispensing request, li
 When a clinical form contains an embedded prescription order section, add one or more prescription lines in the section before saving the form. The prescription request is queued when the form is saved. If the embedded section is left empty and it is not configured as required, no pharmacy request is created from that section.
 
 > **Billing note:** if the configured payment mode is strict, only the bill linked to the request is checked. If it is latest, the system may use the latest patient bill when no bill was passed from the prescription page.
-> **Repeat prescription note:** if the same patient already has an active order for the same drug, the module replaces the active same-drug order before saving the new one. This avoids OpenMRS blocking repeat prescribing within 24 hours.
+> **Repeat prescription note:** if the same drug is still open at the pharmacy for this patient (not yet paid, paid and waiting, or being dispensed), the prescription is not saved and the message names the open prescription. Edit the unpaid prescription instead of prescribing the drug again. Once the earlier prescription is dispensed or closed, the module replaces its active order when the drug is prescribed again, so OpenMRS does not block repeat prescribing within 24 hours.
 Dose unit is intentionally not displayed on the dispensing workflow and is sent blank to HIE because the system cannot reliably determine whether the product is tablet, capsule, liquid, injection, or another form from the available data.
 ### 4.2 Patient Queue
 1. Open **Patient queue**.

@@ -262,7 +262,7 @@
                     <td>${ request.dateCreated ? ui.formatDatePretty(request.dateCreated) : '' }</td>
                     <td><span class="cons-status ${ request.requestStatus?.toString() == 'DISPENSED' ? 'cons-status-dispensed' : request.requestStatus?.toString() == 'CANCELLED' ? 'cons-status-cancelled' : '' }">${ request.requestStatus ?: '' }</span></td>
                     <td>
-                        ${ paid ? 'Paid' : (request.billable == true ? 'Not paid / pending' : 'Not billable') }
+                        ${ paid ? 'Paid' : request.paymentExceptionApproved == true ? 'Payment exception' : request.billable != true ? 'Not billable' : request.paymentConfirmed == true ? 'Nothing to pay' : 'Not paid / pending' }
                         <% if (request.patientBillId) { %><div class="cons-inline-note">Bill #${ request.patientBillId }</div><% } %>
                     </td>
                     <td>${ row.activeLineCount ?: 0 }</td>
@@ -270,7 +270,7 @@
                         <div class="cons-history-actions">
                             <button type="button" class="cons-link" onclick="toggleConsumableHistory('${ detailId }')">View</button>
                             <% if (!editable) { %>
-                            <span class="cons-muted">${ hasDispensedLine ? 'View only after dispensing starts' : paid ? 'View only after payment' : 'View only' }</span>
+                            <span class="cons-muted">${ hasDispensedLine ? 'View only after dispensing starts' : paid ? 'View only after payment' : request.paymentExceptionApproved == true ? 'View only after payment exception' : 'View only' }</span>
                             <% } %>
                         </div>
                     </td>

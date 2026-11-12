@@ -932,8 +932,9 @@ public class ConsumableOrderServiceImpl extends BaseOpenmrsService implements Co
         if (hasNonPendingLine(request)) {
             throw new IllegalArgumentException("Consumable requests cannot be edited or deleted after dispensing has started");
         }
-        if (request.getPatientBillId() != null && Boolean.TRUE.equals(dispensingService.isPatientBillPaid(request.getPatientBillId()))) {
-            throw new IllegalArgumentException("Paid consumable requests cannot be edited or deleted");
+        String paymentLockReason = dispensingService.getPaymentEditLockReason(request);
+        if (paymentLockReason != null) {
+            throw new IllegalArgumentException(paymentLockReason);
         }
         return request;
     }

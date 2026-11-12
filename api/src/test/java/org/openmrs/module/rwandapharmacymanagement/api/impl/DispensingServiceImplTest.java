@@ -193,11 +193,55 @@ public class DispensingServiceImplTest {
         Assert.assertSame(request, dispensingDao.savedRequest);
     }
 
+    @Test
+    public void zeroPriceBillShouldNotLockEditing() {
+        Assert.assertNull(paymentLockReason(RequestType.PRESCRIPTION, Boolean.TRUE, BigDecimal.ZERO, Boolean.FALSE));
+    }
+
+    @Test
+    public void billPaidWithMoneyShouldLockEditing() {
+        Assert.assertEquals("This prescription is already paid and cannot be edited or deleted",
+                paymentLockReason(RequestType.PRESCRIPTION, Boolean.TRUE, new BigDecimal("1500"), Boolean.FALSE));
+    }
+
+    @Test
+    public void partlyPaidBillShouldNotLockEditing() {
+        Assert.assertNull(paymentLockReason(RequestType.CONSUMABLE, Boolean.FALSE, new BigDecimal("500"), Boolean.FALSE));
+    }
+
+    @Test
+    public void approvedPaymentExceptionShouldLockEditing() {
+        Assert.assertEquals("A payment exception was approved for this consumable request, so it can no longer be edited or deleted",
+                paymentLockReason(RequestType.CONSUMABLE, Boolean.FALSE, BigDecimal.ZERO, Boolean.TRUE));
+    }
+
+    @Test
+    public void unreadablePaymentsShouldFallBackToTheSettledBill() {
+        Assert.assertNotNull(paymentLockReason(RequestType.PRESCRIPTION, Boolean.TRUE, null, Boolean.FALSE));
+    }
+
+    private String paymentLockReason(RequestType requestType, Boolean billSettled, BigDecimal amountPaid,
+                                     Boolean paymentExceptionApproved) {
+        PatientDispensingRequest request = new PatientDispensingRequest();
+        request.setPatientDispensingRequestId(1);
+        request.setRequestType(requestType);
+        request.setPatientBillId(Integer.valueOf(77));
+        request.setPaymentExceptionApproved(paymentExceptionApproved);
+        FakeDispensingDao dispensingDao = new FakeDispensingDao(request);
+        dispensingDao.billSettled = billSettled;
+        dispensingDao.billAmountPaid = amountPaid;
+        DispensingServiceImpl service = new DispensingServiceImpl();
+        service.setDispensingDao(dispensingDao);
+        return service.getPaymentEditLockReason(request);
+    }
+
     private static class FakeDispensingDao implements DispensingDao {
 
         private final PatientDispensingRequest request;
         private PatientDispensingRequest savedRequest;
         private DispenseRecord savedDispenseRecord;
+        private Boolean billSettled;
+        private BigDecimal billAmountPaid;
 
         private FakeDispensingDao(PatientDispensingRequest request) {
             this.request = request;
@@ -271,6 +315,11 @@ public class DispensingServiceImplTest {
         }
 
         @Override
+        public List<PatientDispensingRequestLine> getOpenRequestLinesForOrders(Collection<Integer> orderIds) {
+            return Collections.emptyList();
+        }
+
+        @Override
         public List<PatientDispensingRequest> getPatientConsumableHistory(Integer patientId, int firstResult, int maxResults) {
             return Collections.emptyList();
         }
@@ -297,7 +346,12 @@ public class DispensingServiceImplTest {
 
         @Override
         public Boolean isPatientBillPaid(Integer patientBillId) {
-            return null;
+            return billSettled;
+        }
+
+        @Override
+        public BigDecimal getPatientBillAmountPaid(Integer patientBillId) {
+            return billAmountPaid;
         }
 
         @Override

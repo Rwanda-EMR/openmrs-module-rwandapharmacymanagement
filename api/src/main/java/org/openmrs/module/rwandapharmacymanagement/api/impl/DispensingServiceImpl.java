@@ -83,6 +83,11 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
     }
 
     @Override
+    public List<PatientDispensingRequestLine> getOpenRequestLinesForOrders(Collection<Integer> orderIds) {
+        return dispensingDao.getOpenRequestLinesForOrders(orderIds);
+    }
+
+    @Override
     public List<PatientDispensingRequest> getPendingRequestsForPharmacy(Integer pharmacyLocationId) {
         return dispensingDao.getPendingRequestsForPharmacy(pharmacyLocationId);
     }
@@ -191,6 +196,40 @@ public class DispensingServiceImpl extends BaseOpenmrsService implements Dispens
     @Override
     public Boolean isPatientBillPaid(Integer patientBillId) {
         return dispensingDao.isPatientBillPaid(patientBillId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isPaymentReceived(PatientDispensingRequest request) {
+        if (request == null || request.getPatientBillId() == null) {
+            return false;
+        }
+        Boolean settled = dispensingDao.isPatientBillPaid(request.getPatientBillId());
+        if (settled == null) {
+            settled = Boolean.valueOf(Boolean.TRUE.equals(request.getPaymentConfirmed())
+                    && !Boolean.TRUE.equals(request.getPaymentExceptionApproved()));
+        }
+        if (!settled.booleanValue()) {
+            return false;
+        }
+        BigDecimal amountPaid = dispensingDao.getPatientBillAmountPaid(request.getPatientBillId());
+        return amountPaid == null || amountPaid.signum() > 0;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public String getPaymentEditLockReason(PatientDispensingRequest request) {
+        if (request == null) {
+            return null;
+        }
+        String subject = request.getRequestType() == RequestType.CONSUMABLE ? "consumable request" : "prescription";
+        if (Boolean.TRUE.equals(request.getPaymentExceptionApproved())) {
+            return "A payment exception was approved for this " + subject + ", so it can no longer be edited or deleted";
+        }
+        if (isPaymentReceived(request)) {
+            return "This " + subject + " is already paid and cannot be edited or deleted";
+        }
+        return null;
     }
 
     @Override

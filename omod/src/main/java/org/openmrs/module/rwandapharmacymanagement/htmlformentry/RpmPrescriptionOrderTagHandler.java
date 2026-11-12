@@ -145,6 +145,13 @@ public class RpmPrescriptionOrderTagHandler extends AbstractRpmOrderTagHandler {
             if (patient != null && activeVisit(patient) == null) {
                 errors.add(new FormSubmissionError(ERROR_ID, "An active visit is required before creating a prescription order."));
             }
+            if (patient != null && errors.isEmpty()) {
+                String openPrescriptionConflict = Context.getRegisteredComponent("prescriptionService", PrescriptionService.class)
+                        .getOpenPrescriptionConflict(patient, lines);
+                if (openPrescriptionConflict != null) {
+                    errors.add(new FormSubmissionError(ERROR_ID, openPrescriptionConflict));
+                }
+            }
             return errors;
         }
 

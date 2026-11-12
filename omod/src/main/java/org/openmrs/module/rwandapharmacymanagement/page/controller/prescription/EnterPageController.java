@@ -27,11 +27,14 @@ import org.openmrs.module.rwandapharmacymanagement.model.PatientDispensingReques
 import org.openmrs.module.rwandapharmacymanagement.model.PharmacyLocation;
 import org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem;
 import org.openmrs.module.rwandapharmacymanagement.util.PrescribableItemSupport;
+import org.openmrs.module.rwandapharmacymanagement.web.support.FlashMessageSupport;
 import org.openmrs.ui.framework.UiUtils;
 import org.openmrs.ui.framework.annotation.SpringBean;
 import org.openmrs.ui.framework.page.PageModel;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import javax.servlet.http.HttpSession;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -47,6 +50,8 @@ import java.util.Map;
 @Controller
 public class EnterPageController {
 
+    private static final String FLASH_PRESCRIPTION_ERROR = "rpm.prescriptionEnter.error";
+
     public void get(PageModel model,
                     @SpringBean("dispensingService") DispensingService dispensingService,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
@@ -59,7 +64,8 @@ public class EnterPageController {
                     @RequestParam(value = "billId", required = false) Integer billId,
                     @RequestParam(value = "patient_bill_id", required = false) Integer patientBillIdSnakeCase,
                     @RequestParam(value = "requestId", required = false) Integer requestId,
-                    @RequestParam(value = "historyPage", required = false) Integer historyPage) {
+                    @RequestParam(value = "historyPage", required = false) Integer historyPage,
+                    HttpSession session) {
         Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_CREATE_PRESCRIPTION);
         Integer resolvedPatientBillId = firstNonNull(patientBillId, billId, patientBillIdSnakeCase);
         Patient patient = resolvePatient(patientIdOrUuid);
@@ -95,6 +101,7 @@ public class EnterPageController {
         model.addAttribute("patientPhoneNumber", patientPhoneNumber);
         model.addAttribute("patientSmsPhoneValid", SmsPhoneNumberUtil.isValidForSending(patientPhoneNumber));
         model.addAttribute("prescriptionSaved", Boolean.FALSE);
+        model.addAttribute("prescriptionError", FlashMessageSupport.consumeString(session, FLASH_PRESCRIPTION_ERROR));
         model.addAttribute("requestId", requestId);
         model.addAttribute("historyEntries", buildHistoryEntries(historyRequests, dispensingService));
         model.addAttribute("historyPage", currentHistoryPage);
@@ -128,7 +135,8 @@ public class EnterPageController {
                        @RequestParam(value = "instructions", required = false) String[] instructions,
                        @RequestParam(value = "billable", required = false) Boolean[] billables,
                        @RequestParam(value = "billingExclusionReason", required = false) String[] billingExclusionReasons,
-                       UiUtils ui) {
+                       UiUtils ui,
+                       HttpSession session) {
         Context.requirePrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_CREATE_PRESCRIPTION);
         Integer resolvedPatientBillId = firstNonNull(patientBillId, billId, patientBillIdSnakeCase);
         Patient patient = resolvePatient(patientIdOrUuid);
@@ -162,6 +170,11 @@ public class EnterPageController {
         validatePatientPhoneForBilling(patient, hieMedicationPayloadBuilder);
         List<PrescriptionLineCommand> lines = buildCommands(itemIds, productMasterItemIds, doses, routes, frequencies,
                 durations, durationUnits, startDates, quantities, instructions, billables, billingExclusionReasons);
+        String openPrescriptionConflict = prescriptionService.getOpenPrescriptionConflict(patient, lines);
+        if (openPrescriptionConflict != null) {
+            FlashMessageSupport.set(session, FLASH_PRESCRIPTION_ERROR, openPrescriptionConflict);
+            return redirectToPrescriptionPage(ui, patient, historyPage);
+        }
         PatientDispensingRequest request = prescriptionService.createPrescription(patient, activeVisit, orderingProvider,
                 encounterLocation, lines, resolvedPatientBillId);
         Map<String, Object> redirectParams = new LinkedHashMap<String, Object>();
@@ -464,6 +477,7 @@ public class EnterPageController {
             entry.put("orderingProvider", request.getOrderingProvider() == null ? "" : request.getOrderingProvider().getName());
             entry.put("medicalActReference", request.getMedicalActReference());
             List<Map<String, Object>> lineEntries = new ArrayList<Map<String, Object>>();
+            boolean lockedByPayment = dispensingService.getPaymentEditLockReason(request) != null;
             if (request.getLines() != null) {
                 for (PatientDispensingRequestLine line : request.getLines()) {
                     if (line == null || Boolean.TRUE.equals(line.getVoided())) {
@@ -471,8 +485,7 @@ public class EnterPageController {
                     }
                     Map<String, Object> lineEntry = new LinkedHashMap<String, Object>();
                     DrugOrderHistoryInfo orderInfo = findOrderInfo(request, line);
-                    boolean requestPaid = Boolean.TRUE.equals(request.getPaymentConfirmed());
-                    boolean editable = !requestPaid
+                    boolean editable = !lockedByPayment
                             && (line.getLineStatus() == org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.PENDING_PAYMENT
                             || line.getLineStatus() == org.openmrs.module.rwandapharmacymanagement.model.enums.RequestStatus.PENDING_DISPENSE);
                     String statusLabel = String.valueOf(line.getLineStatus());

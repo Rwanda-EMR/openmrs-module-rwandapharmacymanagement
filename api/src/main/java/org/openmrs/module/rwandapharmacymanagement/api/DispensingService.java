@@ -56,6 +56,18 @@ public interface DispensingService extends OpenmrsService {
 
     Boolean isPatientBillPaid(Integer patientBillId);
 
+    /**
+     * True when the request's MOH bill is settled and money was actually received on it. A bill settled because the
+     * patient owes nothing (zero price, fully insured) is not paid in this sense.
+     */
+    boolean isPaymentReceived(PatientDispensingRequest request);
+
+    /**
+     * Why the requester can no longer edit or delete this request because of payment (money received, or an
+     * approved payment exception), or null when payment does not lock it.
+     */
+    String getPaymentEditLockReason(PatientDispensingRequest request);
+
     void refreshPendingRequestPayments();
 
     void refreshPendingRequestPayments(Integer pharmacyLocationId);
@@ -93,6 +105,12 @@ public interface DispensingService extends OpenmrsService {
     List<PatientDispensingRequest> getPatientPrescriptionHistory(Integer patientId, int firstResult, int maxResults);
 
     long countPatientPrescriptionHistory(Integer patientId);
+
+    /**
+     * Request lines for these drug orders that the pharmacy has not finished: not voided, not dispensed, cancelled,
+     * unavailable or not served, in a request that is still pending payment, pending dispense or in progress.
+     */
+    List<PatientDispensingRequestLine> getOpenRequestLinesForOrders(Collection<Integer> orderIds);
 
     List<PatientDispensingRequest> getPatientConsumableHistory(Integer patientId, int firstResult, int maxResults);
 

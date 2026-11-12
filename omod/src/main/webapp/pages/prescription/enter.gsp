@@ -144,6 +144,9 @@
     <% if (prescriptionSavedFlag) { %>
     <div class="rx-banner">Prescription saved and queued for the dispensing pharmacies linked to this location.</div>
     <% } %>
+    <% if (prescriptionError) { %>
+    <div class="rx-banner" style="border-color:#fecaca;background:#fef2f2;color:#b91c1c;">${ ui.encodeHtmlContent(prescriptionError) }</div>
+    <% } %>
     <% if (patient && !billingReady) { %>
     <div class="rx-banner rx-warn">${ ui.encodeHtmlContent(billingReadinessMessage ?: 'Patient is not ready for prescription billing.') }</div>
     <% } %>
