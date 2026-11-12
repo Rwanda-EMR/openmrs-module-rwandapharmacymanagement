@@ -21,9 +21,14 @@ public class SettingsPageController {
     public void get(PageModel model,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
                     @RequestParam(value = "supplierId", required = false) Integer supplierId) {
-        model.addAttribute("supplierSetting", pharmacyService.getSupplierSetting());
+        SupplierSetting supplierSetting = pharmacyService.getSupplierSetting();
+        Supplier selectedSupplier = supplierId == null ? null : pharmacyService.getSupplier(supplierId);
+        model.addAttribute("supplierSetting", supplierSetting);
         model.addAttribute("suppliers", pharmacyService.getAllSuppliers());
-        model.addAttribute("selectedSupplier", supplierId == null ? null : pharmacyService.getSupplier(supplierId));
+        model.addAttribute("selectedSupplier", selectedSupplier);
+        // Saved passwords are never sent to the browser; the page only shows whether one is saved.
+        model.addAttribute("supplierSettingPasswordSaved", supplierSetting != null && hasText(supplierSetting.getPassword()));
+        model.addAttribute("selectedSupplierPasswordSaved", selectedSupplier != null && hasText(selectedSupplier.getApiPassword()));
         AdministrationService administrationService = Context.getAdministrationService();
         model.addAttribute("facilityId", facilityId(administrationService));
         String hospitalName = administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_PURCHASE_ORDER_HOSPITAL, "");
@@ -34,7 +39,7 @@ public class SettingsPageController {
         model.addAttribute("smtpHost", administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_HOST, ""));
         model.addAttribute("smtpPort", administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_PORT, "587"));
         model.addAttribute("smtpUsername", administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_USERNAME, ""));
-        model.addAttribute("smtpPassword", administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_PASSWORD, ""));
+        model.addAttribute("smtpPasswordSaved", hasText(administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_PASSWORD, "")));
         model.addAttribute("smtpFrom", administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_FROM, ""));
         model.addAttribute("smtpAuth", administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_AUTH, "true"));
         model.addAttribute("smtpStarttls", administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_STARTTLS, "true"));
@@ -81,7 +86,9 @@ public class SettingsPageController {
             supplier.setApiEnabled(Boolean.TRUE.equals(supplierApiEnabled));
             supplier.setApiBaseUrl(supplierApiBaseUrl);
             supplier.setApiUsername(supplierApiUsername);
-            supplier.setApiPassword(supplierApiPassword);
+            if (hasText(supplierApiPassword)) {
+                supplier.setApiPassword(supplierApiPassword);
+            }
             supplier.setConnectionTimeout(supplierConnectionTimeout == null ? 10000 : supplierConnectionTimeout);
             supplier.setReadTimeout(supplierReadTimeout == null ? 30000 : supplierReadTimeout);
             supplier.setActive(Boolean.TRUE.equals(supplierActive));
@@ -95,7 +102,9 @@ public class SettingsPageController {
             administrationService.setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_HOST, safe(smtpHost));
             administrationService.setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_PORT, safe(smtpPort));
             administrationService.setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_USERNAME, safe(smtpUsername));
-            administrationService.setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_PASSWORD, safe(smtpPassword));
+            if (hasText(smtpPassword)) {
+                administrationService.setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_PASSWORD, smtpPassword);
+            }
             administrationService.setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_FROM, safe(smtpFrom));
             administrationService.setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_AUTH, Boolean.TRUE.equals(smtpAuth) ? "true" : "false");
             administrationService.setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMTP_STARTTLS, Boolean.TRUE.equals(smtpStarttls) ? "true" : "false");
@@ -104,7 +113,9 @@ public class SettingsPageController {
         SupplierSetting supplierSetting = pharmacyService.getSupplierSetting();
         supplierSetting.setBaseUrl(baseUrl);
         supplierSetting.setUsername(username);
-        supplierSetting.setPassword(password);
+        if (hasText(password)) {
+            supplierSetting.setPassword(password);
+        }
         supplierSetting.setConnectionTimeout(connectionTimeout);
         supplierSetting.setReadTimeout(readTimeout);
         supplierSetting.setIntegrationEnabled(Boolean.TRUE.equals(integrationEnabled));
@@ -124,6 +135,10 @@ public class SettingsPageController {
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
     private String facilityId(AdministrationService administrationService) {

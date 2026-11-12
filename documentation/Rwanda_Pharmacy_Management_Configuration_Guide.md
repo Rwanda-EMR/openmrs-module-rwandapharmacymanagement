@@ -80,7 +80,7 @@ Scheduled tasks are configured by the module on every server start and are not s
 | Property | Example | Use |
 | --- | --- | --- |
 | `rwandapharmacymanagement.supplier.baseUrl` | RMS base URL | RMS/supplier API root. |
-| `rwandapharmacymanagement.supplier.username` | MOH.USER | RMS username. |
+| `rwandapharmacymanagement.supplier.username` | RMS username | RMS username. |
 | `rwandapharmacymanagement.supplier.password` | Password | RMS password. |
 | `rwandapharmacymanagement.supplier.connectionTimeout` | `10000` | API connection timeout in milliseconds. |
 | `rwandapharmacymanagement.supplier.readTimeout` | `30000` | API read timeout in milliseconds. |
@@ -125,7 +125,7 @@ Use **Missing billing mappings** to identify products that cannot be billed, and
 | --- | --- | --- |
 | `rwandapharmacymanagement.sms.enabled` | `true` | Enable prescription SMS. |
 | `rwandapharmacymanagement.sms.authorizationUrl` | Auth endpoint | Optional token/auth endpoint when the SMS provider requires authentication before send. |
-| `rwandapharmacymanagement.sms.postUrl` | `http://41.186.44.171:1401/send` | Intouch HTTP send endpoint from the high-volume API documentation. |
+| `rwandapharmacymanagement.sms.postUrl` | Provided by Intouch | Intouch HTTP send endpoint from the high-volume API documentation. SMS is skipped while it is empty. |
 | `rwandapharmacymanagement.sms.username` | Provided by Intouch | SMS username. |
 | `rwandapharmacymanagement.sms.password` | Provided by Intouch | SMS password. |
 | `rwandapharmacymanagement.sms.sender` | Approved sender name | SMS sender/from value. |

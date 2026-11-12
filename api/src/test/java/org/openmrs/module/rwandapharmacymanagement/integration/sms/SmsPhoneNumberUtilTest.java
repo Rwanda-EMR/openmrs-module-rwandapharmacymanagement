@@ -11,12 +11,12 @@ public class SmsPhoneNumberUtilTest {
 
     @Test
     public void normalizeForSendingShouldKeepValidTwelveDigitNumber() {
-        assertEquals("250788453692", SmsPhoneNumberUtil.normalizeForSending("250788453692"));
+        assertEquals("250788123456", SmsPhoneNumberUtil.normalizeForSending("250788123456"));
     }
 
     @Test
     public void normalizeForSendingShouldPrefixTenDigitNumber() {
-        assertEquals("250788453692", SmsPhoneNumberUtil.normalizeForSending("0788453692"));
+        assertEquals("250788123456", SmsPhoneNumberUtil.normalizeForSending("0788123456"));
     }
 
     @Test
@@ -26,7 +26,7 @@ public class SmsPhoneNumberUtilTest {
 
     @Test
     public void isValidForSendingShouldReflectNormalization() {
-        assertTrue(SmsPhoneNumberUtil.isValidForSending("0788453692"));
+        assertTrue(SmsPhoneNumberUtil.isValidForSending("0788123456"));
         assertFalse(SmsPhoneNumberUtil.isValidForSending(""));
     }
 }

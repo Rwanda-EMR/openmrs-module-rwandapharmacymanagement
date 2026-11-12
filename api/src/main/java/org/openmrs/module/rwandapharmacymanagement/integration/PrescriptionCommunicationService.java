@@ -353,6 +353,10 @@ public class PrescriptionCommunicationService {
             log(IntegrationType.SMS_NOTIFICATION, IntegrationStatus.SKIPPED, smsPostUrl(), "", "SMS integration is disabled");
             return;
         }
+        if (isBlank(smsPostUrl())) {
+            log(IntegrationType.SMS_NOTIFICATION, IntegrationStatus.SKIPPED, "", "", "SMS post URL is not configured");
+            return;
+        }
         String sourcePhoneNumber = hieMedicationPayloadBuilder.resolvePatientPhoneNumber(request.getPatient(),
                 administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_PHONE_PERSON_ATTRIBUTE_TYPE_UUID, ""));
         if (isBlank(sourcePhoneNumber)) {
@@ -506,7 +510,7 @@ public class PrescriptionCommunicationService {
 
     private String smsPostUrl() {
         String postUrl = administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_POST_URL, "");
-        return isBlank(postUrl) ? "http://41.186.44.171:1401/send" : postUrl;
+        return postUrl == null ? "" : postUrl.trim();
     }
 
     private String safeString(String value) {

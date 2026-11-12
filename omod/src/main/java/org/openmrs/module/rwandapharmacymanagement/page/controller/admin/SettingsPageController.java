@@ -36,11 +36,12 @@ public class SettingsPageController {
         model.addAttribute("smsEnabled", Context.getAdministrationService()
                 .getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_ENABLED, "false"));
         model.addAttribute("smsPostUrl", Context.getAdministrationService()
-                .getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_POST_URL, "http://41.186.44.171:1401/send"));
+                .getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_POST_URL, ""));
         model.addAttribute("smsUsername", Context.getAdministrationService()
                 .getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_USERNAME, ""));
-        model.addAttribute("smsPassword", Context.getAdministrationService()
-                .getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_PASSWORD, ""));
+        // The saved password is never sent to the browser; the page only shows whether one is saved.
+        String smsPassword = Context.getAdministrationService().getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_PASSWORD, "");
+        model.addAttribute("smsPasswordSaved", smsPassword != null && !smsPassword.trim().isEmpty());
         model.addAttribute("smsSender", Context.getAdministrationService()
                 .getGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_SENDER, ""));
         model.addAttribute("smsCoding", Context.getAdministrationService()
@@ -117,11 +118,13 @@ public class SettingsPageController {
         Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_ENABLED,
                 "true".equalsIgnoreCase(smsEnabled) ? "true" : "false");
         Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_POST_URL,
-                blankToDefault(smsPostUrl, "http://41.186.44.171:1401/send"));
+                trimToEmpty(smsPostUrl));
         Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_USERNAME,
                 trimToEmpty(smsUsername));
-        Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_PASSWORD,
-                trimToEmpty(smsPassword));
+        if (smsPassword != null && !smsPassword.trim().isEmpty()) {
+            Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_PASSWORD,
+                    smsPassword.trim());
+        }
         Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_SENDER,
                 trimToEmpty(smsSender));
         Context.getAdministrationService().setGlobalProperty(RwandaPharmacyManagementConfig.GP_SMS_CODING,

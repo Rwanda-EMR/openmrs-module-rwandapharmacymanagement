@@ -217,7 +217,7 @@ public class MetadataSetup implements Setup {
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_AUTH_URL, "");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_USERNAME, "");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_PASSWORD, "");
-        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_POST_URL, "http://41.186.44.171:1401/send");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_POST_URL, "");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_SENDER, "");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_CODING, "0");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_DLR_URL, "");

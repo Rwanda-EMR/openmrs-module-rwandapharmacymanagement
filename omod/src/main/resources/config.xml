@@ -180,8 +180,8 @@
 
     <globalProperty>
         <property>rwandapharmacymanagement.sms.postUrl</property>
-        <defaultValue>http://41.186.44.171:1401/send</defaultValue>
-        <description>Intouch SMS HTTP send endpoint.</description>
+        <defaultValue></defaultValue>
+        <description>Intouch SMS HTTP send endpoint, provided by Intouch. SMS is skipped while it is empty.</description>
     </globalProperty>
 
     <globalProperty>

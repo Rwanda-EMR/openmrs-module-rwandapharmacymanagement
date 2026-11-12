@@ -6,7 +6,7 @@
 <form method="post">
     <p><label>Base URL</label><br/><input type="text" name="baseUrl" value="${ supplierSetting?.baseUrl ?: '' }" size="80"/></p>
     <p><label>Username</label><br/><input type="text" name="username" value="${ supplierSetting?.username ?: '' }"/></p>
-    <p><label>Password</label><br/><input type="password" name="password" value="${ supplierSetting?.password ?: '' }"/></p>
+    <p><label>Password</label><br/><input type="password" name="password" value="" autocomplete="new-password" placeholder="${ supplierSettingPasswordSaved ? 'Saved - leave blank to keep' : 'Not set' }"/></p>
     <p><label>Facility ID / FOSAID</label><br/><input type="text" name="facilityId" value="${ facilityId ?: '1660' }"/></p>
     <p><label>Hospital Name</label><br/><input type="text" name="hospitalName" value="${ hospitalName ?: '' }" size="80"/></p>
     <p><label>Connection Timeout</label><br/><input type="number" name="connectionTimeout" value="${ supplierSetting?.connectionTimeout ?: 10000 }"/></p>
@@ -42,7 +42,7 @@
     <p><label>Email Address</label><br/><input type="email" name="supplierEmailAddress" value="${ selectedSupplier?.emailAddress ?: '' }"/></p>
     <p><label>API Base URL</label><br/><input type="text" name="supplierApiBaseUrl" value="${ selectedSupplier?.apiBaseUrl ?: '' }" size="80"/></p>
     <p><label>API Username</label><br/><input type="text" name="supplierApiUsername" value="${ selectedSupplier?.apiUsername ?: '' }"/></p>
-    <p><label>API Password</label><br/><input type="password" name="supplierApiPassword" value="${ selectedSupplier?.apiPassword ?: '' }"/></p>
+    <p><label>API Password</label><br/><input type="password" name="supplierApiPassword" value="" autocomplete="new-password" placeholder="${ selectedSupplierPasswordSaved ? 'Saved - leave blank to keep' : 'Not set' }"/></p>
     <p><label>Connection Timeout</label><br/><input type="number" name="supplierConnectionTimeout" value="${ selectedSupplier?.connectionTimeout ?: 10000 }"/></p>
     <p><label>Read Timeout</label><br/><input type="number" name="supplierReadTimeout" value="${ selectedSupplier?.readTimeout ?: 30000 }"/></p>
     <p><label><input type="checkbox" name="supplierApiEnabled" value="true" ${ selectedSupplier?.apiEnabled ? 'checked="checked"' : '' }/> Supplier uses API</label></p>
@@ -55,7 +55,7 @@
     <p><label>SMTP Host</label><br/><input type="text" name="smtpHost" value="${ smtpHost ?: '' }" size="60"/></p>
     <p><label>SMTP Port</label><br/><input type="text" name="smtpPort" value="${ smtpPort ?: '587' }"/></p>
     <p><label>SMTP Username</label><br/><input type="text" name="smtpUsername" value="${ smtpUsername ?: '' }"/></p>
-    <p><label>SMTP Password</label><br/><input type="password" name="smtpPassword" value="${ smtpPassword ?: '' }"/></p>
+    <p><label>SMTP Password</label><br/><input type="password" name="smtpPassword" value="" autocomplete="new-password" placeholder="${ smtpPasswordSaved ? 'Saved - leave blank to keep' : 'Not set' }"/></p>
     <p><label>From Email Address</label><br/><input type="email" name="smtpFrom" value="${ smtpFrom ?: '' }" size="60"/></p>
     <p><label><input type="checkbox" name="smtpAuth" value="true" ${ smtpAuth == 'true' ? 'checked="checked"' : '' }/> Require authentication</label></p>
     <p><label><input type="checkbox" name="smtpStarttls" value="true" ${ smtpStarttls == 'true' ? 'checked="checked"' : '' }/> Enable STARTTLS</label></p>

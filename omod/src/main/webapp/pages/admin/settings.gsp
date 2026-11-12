@@ -28,9 +28,9 @@
     </p>
     <h3>Intouch SMS Settings</h3>
     <p><label><input type="checkbox" name="smsEnabled" value="true" ${ smsEnabled == 'true' ? 'checked="checked"' : '' }/> Enable prescription SMS</label></p>
-    <p><label>Post URL</label><br/><input type="text" name="smsPostUrl" value="${ smsPostUrl ?: 'http://41.186.44.171:1401/send' }" size="80"/></p>
+    <p><label>Post URL</label><br/><input type="text" name="smsPostUrl" value="${ smsPostUrl ?: '' }" size="80" placeholder="Send URL provided by Intouch"/></p>
     <p><label>Username</label><br/><input type="text" name="smsUsername" value="${ smsUsername ?: '' }"/></p>
-    <p><label>Password</label><br/><input type="password" name="smsPassword" value="${ smsPassword ?: '' }"/></p>
+    <p><label>Password</label><br/><input type="password" name="smsPassword" value="" autocomplete="new-password" placeholder="${ smsPasswordSaved ? 'Saved - leave blank to keep' : 'Not set' }"/></p>
     <p><label>Sender</label><br/><input type="text" name="smsSender" value="${ smsSender ?: '' }"/></p>
     <p><label>Coding</label><br/><input type="text" name="smsCoding" value="${ smsCoding ?: '0' }"/></p>
     <p><label>DLR URL</label><br/><input type="text" name="smsDlrUrl" value="${ smsDlrUrl ?: '' }" size="80"/></p>
