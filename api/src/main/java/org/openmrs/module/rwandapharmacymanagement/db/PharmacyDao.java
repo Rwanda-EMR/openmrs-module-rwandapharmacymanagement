@@ -28,6 +28,16 @@ public interface PharmacyDao {
 
     Item getItemByExactName(String name);
 
+    org.openmrs.module.rwandapharmacymanagement.model.ItemRenameProposal saveItemRenameProposal(
+            org.openmrs.module.rwandapharmacymanagement.model.ItemRenameProposal proposal);
+
+    List<org.openmrs.module.rwandapharmacymanagement.model.ItemRenameProposal> getItemRenameProposals(Integer itemId,
+            org.openmrs.module.rwandapharmacymanagement.model.enums.ItemRenameProposalStatus status);
+
+    List<Integer> getOtherActiveDrugIdsByName(String name, Integer excludedDrugId);
+
+    java.util.Map<String, List<Integer>> getNonRetiredFacilityServiceIdsByName(java.util.Collection<String> names);
+
     List<Item> getDispensableDrugItems();
 
     java.util.Map<Integer, org.openmrs.module.rwandapharmacymanagement.api.dto.PrescribableItemInfo> getPrescribableItemInfo(

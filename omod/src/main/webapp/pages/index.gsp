@@ -96,6 +96,10 @@
         <span class="tile-icon">?</span>
         <span class="tile-label">Missing Billing Mappings</span>
     </a>
+    <a class="tile tile-admin" href="${ ui.pageLink("rwandapharmacymanagement", "admin/itemRenames") }">
+        <span class="tile-icon">✎</span>
+        <span class="tile-label">Item Renames</span>
+    </a>
     <% } %>
     <a class="tile tile-inventory" href="${ ui.pageLink("rwandapharmacymanagement", "report/inventoryMovement") }">
         <span class="tile-icon">↕</span>

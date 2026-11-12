@@ -89,6 +89,7 @@
                     [path: "admin/patientQueueCleanup", label: "Patient queue cleanup", privilege: "Task: rwandapharmacymanagement.manageSettings"],
                     [path: "admin/linkBill", label: "Link prescription bills"],
                     [path: "admin/missingBillingMappings", label: "Missing billing mappings", privilege: "Task: rwandapharmacymanagement.manageSettings"],
+                    [path: "admin/itemRenames", label: "Item renames", privilege: "Task: rwandapharmacymanagement.manageSettings"],
                     [path: "safety/rules", label: "Safety rules"],
                     [path: "integration/pendingHie", label: "Pending HIE queue"],
                     [path: "integration/logs", label: "Integration logs"]

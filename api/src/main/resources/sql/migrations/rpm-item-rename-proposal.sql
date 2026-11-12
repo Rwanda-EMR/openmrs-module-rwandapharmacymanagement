@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS rpm_item_rename_proposal (
+    item_rename_proposal_id INT NOT NULL AUTO_INCREMENT,
+    item_id INT NOT NULL,
+    product_master_item_id INT,
+    npc_code VARCHAR(255),
+    program VARCHAR(255),
+    current_name VARCHAR(255),
+    proposed_name VARCHAR(255) NOT NULL,
+    source VARCHAR(50) NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    reason VARCHAR(500),
+    decided_by INT,
+    date_decided DATETIME,
+    creator INT,
+    date_created DATETIME,
+    voided TINYINT(1) NOT NULL DEFAULT 0,
+    voided_by INT,
+    date_voided DATETIME,
+    void_reason VARCHAR(255),
+    uuid CHAR(38),
+    PRIMARY KEY (item_rename_proposal_id),
+    INDEX rpm_item_rename_proposal_status_item_idx (status, item_id)
+);

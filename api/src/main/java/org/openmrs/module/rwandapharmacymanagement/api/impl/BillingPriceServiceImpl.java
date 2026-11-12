@@ -172,6 +172,23 @@ public class BillingPriceServiceImpl extends BaseOpenmrsService implements Billi
         }
     }
 
+    @Override
+    public void renameFacilityService(Integer facilityServicePriceId, String newName) {
+        if (facilityServicePriceId == null || newName == null || newName.trim().isEmpty()) {
+            throw new IllegalArgumentException("A billing service and a new name are required.");
+        }
+        Object billingService = getBillingService();
+        Object facilityServicePrice = invokeRequired(billingService, "getFacilityServicePrice", facilityServicePriceId);
+        if (facilityServicePrice == null) {
+            throw new IllegalStateException("MOH Billing service " + facilityServicePriceId + " was not found.");
+        }
+        String name = newName.trim();
+        invokeRequired(facilityServicePrice, "setName", name);
+        invokeRequired(facilityServicePrice, "setShortName", name);
+        invokeRequired(facilityServicePrice, "setDescription", name);
+        invokeRequired(billingService, "saveFacilityServicePrice", facilityServicePrice);
+    }
+
     private BigDecimal calculateCurrentSellingPrice(Item item) {
         BigDecimal cost = getHighestCurrentStockCost(item);
         return cost == null ? null : pricingService.calculateSellingPrice(cost);

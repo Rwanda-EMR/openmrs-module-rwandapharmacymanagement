@@ -82,6 +82,87 @@ public class HibernatePharmacyDao implements PharmacyDao {
     }
 
     @Override
+    public org.openmrs.module.rwandapharmacymanagement.model.ItemRenameProposal saveItemRenameProposal(
+            org.openmrs.module.rwandapharmacymanagement.model.ItemRenameProposal proposal) {
+        sessionFactory.getCurrentSession().saveOrUpdate(proposal);
+        return proposal;
+    }
+
+    @Override
+    public List<org.openmrs.module.rwandapharmacymanagement.model.ItemRenameProposal> getItemRenameProposals(Integer itemId,
+            org.openmrs.module.rwandapharmacymanagement.model.enums.ItemRenameProposalStatus status) {
+        org.hibernate.Criteria criteria = sessionFactory.getCurrentSession()
+                .createCriteria(org.openmrs.module.rwandapharmacymanagement.model.ItemRenameProposal.class)
+                .add(notVoided());
+        if (itemId != null) {
+            criteria.add(Restrictions.eq("item.itemId", itemId));
+        }
+        if (status != null) {
+            criteria.add(Restrictions.eq("status", status));
+        }
+        return criteria.addOrder(Order.asc("dateCreated")).list();
+    }
+
+    @Override
+    public List<Integer> getOtherActiveDrugIdsByName(String name, Integer excludedDrugId) {
+        List<Integer> drugIds = new ArrayList<Integer>();
+        if (name == null || name.trim().isEmpty()) {
+            return drugIds;
+        }
+        SQLQuery query = sessionFactory.getCurrentSession().createSQLQuery(
+                "select drug_id from drug where name = :name and retired = 0"
+                        + (excludedDrugId == null ? "" : " and drug_id <> :excludedDrugId"));
+        query.setParameter("name", name.trim());
+        if (excludedDrugId != null) {
+            query.setParameter("excludedDrugId", excludedDrugId);
+        }
+        for (Object id : query.list()) {
+            drugIds.add(((Number) id).intValue());
+        }
+        return drugIds;
+    }
+
+    /**
+     * Non-retired MOH Billing facility services by name, keyed by lower-cased trimmed name. This is the same set
+     * MOH Billing's getFacilityServiceByName searches; null names means all of them.
+     */
+    @Override
+    public java.util.Map<String, List<Integer>> getNonRetiredFacilityServiceIdsByName(java.util.Collection<String> names) {
+        java.util.Map<String, List<Integer>> idsByName = new java.util.HashMap<String, List<Integer>>();
+        if (names != null && names.isEmpty()) {
+            return idsByName;
+        }
+        Object table = sessionFactory.getCurrentSession()
+                .createSQLQuery("select table_name from information_schema.tables where table_schema = database() "
+                        + "and table_name = 'moh_bill_facility_service_price'")
+                .setMaxResults(1)
+                .uniqueResult();
+        if (table == null) {
+            return idsByName;
+        }
+        SQLQuery query = sessionFactory.getCurrentSession().createSQLQuery(
+                "select facility_service_price_id, name from moh_bill_facility_service_price where retired = 0"
+                        + (names == null ? "" : " and name in (:names)"));
+        if (names != null) {
+            query.setParameterList("names", names);
+        }
+        for (Object row : query.list()) {
+            Object[] values = (Object[]) row;
+            if (values[0] == null || values[1] == null) {
+                continue;
+            }
+            String key = values[1].toString().trim().toLowerCase();
+            List<Integer> ids = idsByName.get(key);
+            if (ids == null) {
+                ids = new ArrayList<Integer>();
+                idsByName.put(key, ids);
+            }
+            ids.add(((Number) values[0]).intValue());
+        }
+        return idsByName;
+    }
+
+    @Override
     public List<Item> getDispensableDrugItems() {
         return sessionFactory.getCurrentSession().createCriteria(Item.class)
                 .add(notVoided())

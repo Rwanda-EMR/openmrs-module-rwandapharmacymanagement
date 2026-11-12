@@ -47,6 +47,7 @@
         InventoryBalance.hbm.xml
         Item.hbm.xml
         ItemProductMasterMapping.hbm.xml
+        ItemRenameProposal.hbm.xml
         ItemCategory.hbm.xml
         LabSupplyRequest.hbm.xml
         LabSupplyRequestLine.hbm.xml

@@ -94,6 +94,15 @@
         <property name="integrationLogService" ref="integrationLogService"/>
         <property name="pharmacyService" ref="pharmacyService"/>
         <property name="supplierApiClient" ref="supplierApiClient"/>
+        <property name="itemRenameService" ref="itemRenameService"/>
+    </bean>
+
+    <bean id="itemRenameServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.ItemRenameServiceImpl">
+        <property name="pharmacyDao" ref="pharmacyDao"/>
+        <property name="pharmacyService" ref="pharmacyService"/>
+        <property name="billingPriceService" ref="billingPriceService"/>
+        <property name="integrationLogService" ref="integrationLogService"/>
+        <property name="conceptService" ref="conceptService"/>
     </bean>
 
     <bean id="pricingServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.PricingServiceImpl">
@@ -224,6 +233,15 @@
         </property>
     </bean>
 
+    <bean id="itemRenameService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="target" ref="itemRenameServiceTarget"/>
+        <property name="preInterceptors" ref="serviceInterceptors"/>
+        <property name="transactionAttributeSource">
+            <bean class="org.springframework.transaction.annotation.AnnotationTransactionAttributeSource"/>
+        </property>
+    </bean>
+
     <bean id="billingPriceService" class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
         <property name="transactionManager" ref="transactionManager"/>
         <property name="target" ref="billingPriceServiceTarget"/>
@@ -317,6 +335,8 @@
                 <ref bean="pricingService"/>
                 <value>org.openmrs.module.rwandapharmacymanagement.api.BillingPriceService</value>
                 <ref bean="billingPriceService"/>
+                <value>org.openmrs.module.rwandapharmacymanagement.api.ItemRenameService</value>
+                <ref bean="itemRenameService"/>
                 <value>org.openmrs.module.rwandapharmacymanagement.api.PaymentStatusService</value>
                 <ref bean="paymentStatusService"/>
                 <value>org.openmrs.module.rwandapharmacymanagement.api.PrescriptionService</value>

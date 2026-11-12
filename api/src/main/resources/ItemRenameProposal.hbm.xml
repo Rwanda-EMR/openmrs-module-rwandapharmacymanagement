@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+ "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+ "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<hibernate-mapping package="org.openmrs.module.rwandapharmacymanagement.model">
+    <class name="ItemRenameProposal" table="rpm_item_rename_proposal">
+        <id name="itemRenameProposalId" type="int" column="item_rename_proposal_id" unsaved-value="0">
+            <generator class="native"/>
+        </id>
+        <many-to-one name="item" class="org.openmrs.module.rwandapharmacymanagement.model.Item" column="item_id"/>
+        <many-to-one name="productMasterItem" class="org.openmrs.module.rwandapharmacymanagement.model.ProductMasterItem" column="product_master_item_id"/>
+        <property name="npcCode" column="npc_code" type="string"/>
+        <property name="program" column="program" type="string"/>
+        <property name="currentName" column="current_name" type="string"/>
+        <property name="proposedName" column="proposed_name" type="string"/>
+        <property name="source" column="source" type="string"/>
+        <property name="status" column="status">
+            <type name="org.hibernate.type.EnumType">
+                <param name="enumClass">org.openmrs.module.rwandapharmacymanagement.model.enums.ItemRenameProposalStatus</param>
+                <param name="useNamed">true</param>
+            </type>
+        </property>
+        <property name="reason" column="reason" type="string"/>
+        <many-to-one name="decidedBy" class="org.openmrs.User" column="decided_by"/>
+        <property name="dateDecided" column="date_decided"/>
+        <many-to-one name="creator" class="org.openmrs.User" column="creator"/>
+        <property name="dateCreated" column="date_created"/>
+        <property name="voided" column="voided" type="boolean"/>
+        <many-to-one name="voidedBy" class="org.openmrs.User" column="voided_by"/>
+        <property name="dateVoided" column="date_voided"/>
+        <property name="voidReason" column="void_reason" type="string"/>
+        <property name="uuid" column="uuid" type="string"/>
+    </class>
+</hibernate-mapping>

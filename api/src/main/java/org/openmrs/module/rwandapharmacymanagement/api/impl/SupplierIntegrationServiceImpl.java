@@ -78,6 +78,7 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
     private IntegrationLogService integrationLogService;
     private PharmacyService pharmacyService;
     private SupplierApiClient supplierApiClient;
+    private org.openmrs.module.rwandapharmacymanagement.api.ItemRenameService itemRenameService;
 
     public void setAdministrationService(AdministrationService administrationService) {
         this.administrationService = administrationService;
@@ -93,6 +94,10 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
 
     public void setSupplierApiClient(SupplierApiClient supplierApiClient) {
         this.supplierApiClient = supplierApiClient;
+    }
+
+    public void setItemRenameService(org.openmrs.module.rwandapharmacymanagement.api.ItemRenameService itemRenameService) {
+        this.itemRenameService = itemRenameService;
     }
 
     @Override
@@ -980,21 +985,37 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
         }
     }
 
+    /**
+     * An already linked item keeps its name, drug and concept: a supplier rename only records a proposal, which an
+     * admin approves on the item renames page so the item, drug and MOH Billing service are renamed together.
+     */
     private void linkProductMasterItemToLocalItem(ProductMasterItem productMasterItem, SupplierProductMapping mapping,
                                                   String programName) {
-        Concept concept = resolveConceptForItem(productMasterItem.getItemName(), productMasterItem.getMaterialType());
-        Drug drug = isDrugMaterialType(productMasterItem.getMaterialType())
-                ? findOrCreateDrug(productMasterItem.getItemName())
-                : null;
-        productMasterItem.setDrug(drug);
-        pharmacyService.saveProductMasterItem(productMasterItem);
-
-        Item ensuredLocalItem = ensureLocalItem(productMasterItem.getNpcCode(), productMasterItem.getItemName(),
-                concept, drug, programName);
+        boolean drugProduct = isDrugMaterialType(productMasterItem.getMaterialType());
+        Item linkedItem = pharmacyService.getMappedItemForProductMasterItem(productMasterItem);
+        if (linkedItem == null && mapping != null) {
+            linkedItem = mapping.getItem();
+        }
+        Item ensuredLocalItem;
+        if (linkedItem != null && (linkedItem.getDrug() != null || !drugProduct)) {
+            productMasterItem.setDrug(drugProduct ? linkedItem.getDrug() : null);
+            pharmacyService.saveProductMasterItem(productMasterItem);
+            ensuredLocalItem = linkedItem;
+        } else {
+            Concept concept = resolveConceptForItem(productMasterItem.getItemName(), productMasterItem.getMaterialType());
+            Drug drug = drugProduct ? findOrCreateDrug(productMasterItem.getItemName()) : null;
+            productMasterItem.setDrug(drug);
+            pharmacyService.saveProductMasterItem(productMasterItem);
+            ensuredLocalItem = ensureLocalItem(productMasterItem.getNpcCode(), productMasterItem.getItemName(),
+                    concept, drug, programName);
+        }
         pharmacyService.mapProductMasterItemToItem(productMasterItem, ensuredLocalItem);
 
         mapping.setItem(ensuredLocalItem);
         pharmacyService.saveSupplierProductMapping(mapping);
+        if (itemRenameService != null) {
+            itemRenameService.proposeSupplierRename(ensuredLocalItem, productMasterItem);
+        }
     }
 
     private void saveProductMasterMappingFailure(ProductMasterItem productMasterItem, SupplierProductMapping mapping,
@@ -1066,8 +1087,11 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
             existingItem = findExistingItemForRmsProduct(itemName, concept, drug);
         }
         if (existingItem != null) {
-            existingItem.setDrug(drug);
-            if (concept != null) {
+            // Never re-point an item's drug or concept: MOH Billing finds the billing service by the drug's name.
+            if (existingItem.getDrug() == null) {
+                existingItem.setDrug(drug);
+            }
+            if (concept != null && existingItem.getConcept() == null) {
                 existingItem.setConcept(concept);
             }
             if (existingItem.getName() == null || existingItem.getName().trim().isEmpty()) {

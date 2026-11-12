@@ -16,4 +16,10 @@ public interface BillingPriceService extends OpenmrsService {
     void createBillingMapping(Item item, BigDecimal displayedPrice);
 
     void updatePricesForReceivedItems(Collection<Item> items);
+
+    /**
+     * Renames a MOH Billing facility service (name, short name and description) in place through MOH Billing's own
+     * service, so drug orders keep finding it by drug name. Insurer prices stay attached to it.
+     */
+    void renameFacilityService(Integer facilityServicePriceId, String newName);
 }
