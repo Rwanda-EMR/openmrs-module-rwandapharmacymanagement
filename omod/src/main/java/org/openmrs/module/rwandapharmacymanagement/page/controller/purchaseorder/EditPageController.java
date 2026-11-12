@@ -34,6 +34,7 @@ public class EditPageController {
     private static final String FLASH_REJECTED = "rpm.purchaseOrderEdit.rejected";
     private static final String FLASH_PRICE_FAILED = "rpm.purchaseOrderEdit.priceFailed";
     private static final String FLASH_ERROR_REFERENCE = "rpm.purchaseOrderEdit.errorReference";
+    private static final String FLASH_SUBMISSION_ERROR = "rpm.purchaseOrderEdit.submissionError";
 
     public void get(PageModel model,
                     @SpringBean("pharmacyService") PharmacyService pharmacyService,
@@ -55,10 +56,13 @@ public class EditPageController {
         }
         model.addAttribute("purchaseOrder", purchaseOrder);
         model.addAttribute("priceRefreshResult", priceRefreshResult);
+        model.addAttribute("apiSupplierOrder", isRmsPurchaseOrder(purchaseOrder));
+        model.addAttribute("lineProblems", lineProblems(supplierIntegrationService, purchaseOrder, priceRefreshResult));
         model.addAttribute("saved", FlashMessageSupport.consumeBoolean(session, FLASH_SAVED));
         model.addAttribute("approved", FlashMessageSupport.consumeBoolean(session, FLASH_APPROVED));
         model.addAttribute("rejected", FlashMessageSupport.consumeBoolean(session, FLASH_REJECTED));
         model.addAttribute("priceFailed", FlashMessageSupport.consumeBoolean(session, FLASH_PRICE_FAILED));
+        model.addAttribute("submissionError", FlashMessageSupport.consumeString(session, FLASH_SUBMISSION_ERROR));
         model.addAttribute("errorReference", errorReference);
         model.addAttribute("canApprovePurchaseOrders",
                 Context.hasPrivilege(RwandaPharmacyManagementConfig.PRIVILEGE_APPROVE_PURCHASE_ORDERS));
@@ -95,6 +99,11 @@ public class EditPageController {
                 if (!"PENDING".equalsIgnoreCase(purchaseOrder.getApprovalStatus())) {
                     throw new IllegalArgumentException("Only pending purchase orders can be approved.");
                 }
+                String submissionError = supplierIntegrationService.getPurchaseOrderSubmissionError(purchaseOrder);
+                if (submissionError != null) {
+                    pharmacyService.savePurchaseOrder(purchaseOrder);
+                    return redirectToEdit(ui, session, purchaseOrderId, FLASH_SUBMISSION_ERROR, submissionError);
+                }
                 validatePurchaseOrderItemsForSupplier(purchaseOrder);
                 if (isRmsPurchaseOrder(purchaseOrder)) {
                     PurchaseOrderPriceRefreshResult priceRefreshResult = supplierIntegrationService.refreshPurchaseOrderPrices(purchaseOrder);
@@ -126,7 +135,11 @@ public class EditPageController {
     }
 
     private String redirectToEdit(UiUtils ui, HttpSession session, Integer purchaseOrderId, String flashKey) {
-        FlashMessageSupport.set(session, flashKey, Boolean.TRUE);
+        return redirectToEdit(ui, session, purchaseOrderId, flashKey, Boolean.TRUE);
+    }
+
+    private String redirectToEdit(UiUtils ui, HttpSession session, Integer purchaseOrderId, String flashKey, Object flashValue) {
+        FlashMessageSupport.set(session, flashKey, flashValue);
         Map<String, Object> params = new LinkedHashMap<String, Object>();
         params.put("purchaseOrderId", purchaseOrderId);
         return "redirect:" + ui.pageLink("rwandapharmacymanagement", "purchaseorder/edit", params);
@@ -201,6 +214,9 @@ public class EditPageController {
             ProductMasterItem productMasterItem = pharmacyService.getProductMasterItem(productMasterItemId);
             if (!isProductMasterItemAllowedForPurchaseOrder(productMasterItem, purchaseOrder)) {
                 continue;
+            }
+            if (isRmsPurchaseOrder(purchaseOrder) && requiredText(purchaseOrder.getProgram(), "").isEmpty()) {
+                purchaseOrder.setProgram(productMasterItem.getProgram().trim());
             }
             PurchaseOrderItem item = new PurchaseOrderItem();
             item.setPurchaseOrder(purchaseOrder);
@@ -292,6 +308,37 @@ public class EditPageController {
                 && "FAILED".equalsIgnoreCase(purchaseOrder.getDispatchStatus());
     }
 
+    /**
+     * Why each line blocks the purchase order, for highlighting: the supplier rules from the service plus NPC codes
+     * the supplier returned no price for under the order's program.
+     */
+    private Map<PurchaseOrderItem, String> lineProblems(SupplierIntegrationService supplierIntegrationService,
+                                                        PurchaseOrder purchaseOrder,
+                                                        PurchaseOrderPriceRefreshResult priceRefreshResult) {
+        Map<PurchaseOrderItem, String> problems = new LinkedHashMap<PurchaseOrderItem, String>();
+        if (purchaseOrder == null || purchaseOrder.getItems() == null) {
+            return problems;
+        }
+        problems.putAll(supplierIntegrationService.getPurchaseOrderLineProblems(purchaseOrder));
+        List<String> unmatchedNpcCodes = priceRefreshResult == null ? null : priceRefreshResult.getUnmatchedNpcCodes();
+        if (unmatchedNpcCodes == null || unmatchedNpcCodes.isEmpty()) {
+            return problems;
+        }
+        for (PurchaseOrderItem item : purchaseOrder.getItems()) {
+            String itemCode = item == null ? "" : requiredText(item.getItemCode(), "");
+            for (String unmatched : unmatchedNpcCodes) {
+                if (!itemCode.isEmpty() && itemCode.equalsIgnoreCase(requiredText(unmatched, ""))) {
+                    String reason = "the supplier returned no price for " + itemCode + " under program "
+                            + requiredText(purchaseOrder.getProgram(), requiredText(item.getProgram(), "(none)"));
+                    String existing = problems.get(item);
+                    problems.put(item, existing == null ? reason : existing + "; " + reason);
+                    break;
+                }
+            }
+        }
+        return problems;
+    }
+
     private boolean isRmsPurchaseOrder(PurchaseOrder purchaseOrder) {
         if (purchaseOrder == null || purchaseOrder.getSupplier() == null) {
             return false;
@@ -318,7 +365,11 @@ public class EditPageController {
             return false;
         }
         if (isRmsPurchaseOrder(purchaseOrder)) {
-            return ProductMasterItem.SOURCE_API_SYNCED.equalsIgnoreCase(requiredText(item.getSource(), ""));
+            // One program per API order: only the order's program, once it has one.
+            String orderProgram = requiredText(purchaseOrder.getProgram(), "");
+            return ProductMasterItem.SOURCE_API_SYNCED.equalsIgnoreCase(requiredText(item.getSource(), ""))
+                    && !requiredText(item.getProgram(), "").isEmpty()
+                    && (orderProgram.isEmpty() || orderProgram.equalsIgnoreCase(requiredText(item.getProgram(), "")));
         }
         return true;
     }

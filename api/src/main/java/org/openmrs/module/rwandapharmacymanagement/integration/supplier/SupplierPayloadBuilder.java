@@ -53,7 +53,7 @@ public final class SupplierPayloadBuilder {
                 appendField(builder, "itemName", line.getSupplierProductCode() == null
                         ? (line.getItem() == null ? "" : value(line.getItem().getCode()))
                         : value(line.getSupplierProductCode()), true);
-                appendField(builder, "lnProgramName", value(line.getProgramName() == null ? "CP" : line.getProgramName()), false);
+                appendField(builder, "lnProgramName", value(line.getProgramName()), false);
                 builder.append("}");
             }
         }

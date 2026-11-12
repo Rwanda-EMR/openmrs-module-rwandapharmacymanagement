@@ -29,6 +29,20 @@ public interface SupplierIntegrationService extends OpenmrsService {
 
     IntegrationLog submitPurchaseOrder(PurchaseOrder purchaseOrder);
 
+    /**
+     * Returns why the purchase order cannot be sent to its supplier, or null when it can. For API suppliers every
+     * line needs a program, all lines must share one program (one program per order, matching the product master),
+     * and the order's program is set to it.
+     */
+    String getPurchaseOrderSubmissionError(PurchaseOrder purchaseOrder);
+
+    /**
+     * The reason each blocking line stops the purchase order from being sent, keyed by the line itself, so pages can
+     * highlight them. Does not include missing supplier prices, which come from the price refresh.
+     */
+    java.util.Map<org.openmrs.module.rwandapharmacymanagement.model.PurchaseOrderItem, String> getPurchaseOrderLineProblems(
+            PurchaseOrder purchaseOrder);
+
     PurchaseOrderPriceRefreshResult refreshPurchaseOrderPrices(PurchaseOrder purchaseOrder);
 
     DeliveryReceiptImportRequest fetchRmsDeliveryDetails(PurchaseOrder purchaseOrder);

@@ -120,6 +120,8 @@
 <% if (saved) { %><div style="margin:0 0 12px 0;padding:8px 12px;border:1px solid #bce8f1;background:#d9edf7;color:#31708f;border-radius:3px;">Purchase order saved.</div><% } %>
 <% if (approved) { %><div style="margin:0 0 12px 0;padding:8px 12px;border:1px solid #d6e9c6;background:#dff0d8;color:#3c763d;border-radius:3px;">Purchase order approved and sent to supplier.</div><% } %>
 <% if (rejected) { %><div style="margin:0 0 12px 0;padding:8px 12px;border:1px solid #ebccd1;background:#f2dede;color:#a94442;border-radius:3px;">Purchase order rejected.</div><% } %>
+<% if (lineProblems) { %><div style="margin:0 0 12px 0;padding:8px 12px;border:1px solid #ebccd1;background:#f2dede;color:#a94442;border-radius:3px;">${ lineProblems.size() } item${ lineProblems.size() == 1 ? '' : 's' } block${ lineProblems.size() == 1 ? 's' : '' } this purchase order. They are highlighted in red below with the reason.</div><% } %>
+<% if (submissionError) { %><div style="margin:0 0 12px 0;padding:8px 12px;border:1px solid #ebccd1;background:#f2dede;color:#a94442;border-radius:3px;">Purchase order was not approved: ${ ui.encodeHtmlContent(submissionError) }</div><% } %>
 <% if (priceFailed) { %><div style="margin:0 0 12px 0;padding:8px 12px;border:1px solid #ebccd1;background:#f2dede;color:#a94442;border-radius:3px;">Purchase order cannot be approved until RMS returns prices for every item code. Zero prices from RMS are allowed.</div><% } %>
 <% if (priceRefreshResult?.errorMessage) { %><div style="margin:0 0 12px 0;padding:8px 12px;border:1px solid #ebccd1;background:#f2dede;color:#a94442;border-radius:3px;">${ priceRefreshResult.errorMessage }</div><% } %>
 <% if (priceRefreshResult?.unmatchedNpcCodes) { %><div style="margin:0 0 12px 0;padding:8px 12px;border:1px solid #faebcc;background:#fcf8e3;color:#8a6d3b;border-radius:3px;">RMS did not return prices for: ${ priceRefreshResult.unmatchedNpcCodes.join(', ') }</div><% } %>
@@ -168,15 +170,19 @@
                         </thead>
                         <tbody>
                         <% purchaseOrder.items.each { item -> %>
-                        <tr>
+                        <% def lineProblem = lineProblems?.get(item) %>
+                        <tr ${ lineProblem ? 'class="po-line-blocking" style="background:#f2dede;"' : '' }>
                             <td>
                                 ${ item.orderNumber ?: '' }
                                 <input type="hidden" name="purchaseOrderItemIds" value="${ item.purchaseOrderItemId }"/>
                             </td>
                             <td>${ item.program ?: '' }</td>
-                            <td>${ item.itemName ?: '' }</td>
+                            <td>
+                                ${ item.itemName ?: '' }
+                                <% if (lineProblem) { %><div style="color:#a94442;font-size:12px;font-weight:bold;">Blocks this order: ${ ui.encodeHtmlContent(lineProblem) }</div><% } %>
+                            </td>
                             <td>${ item.itemCode ?: '' }</td>
-	                            <td><input type="number" step="0.01" min="0.01" name="quantities" value="${ item.quantity }" ${ purchaseOrder.approvalStatus != 'PENDING' || !canManagePurchaseOrders ? 'readonly="readonly"' : '' }/></td>
+	                            <td><input type="number" step="${ apiSupplierOrder ? '1' : '0.01' }" min="${ apiSupplierOrder ? '1' : '0.01' }" name="quantities" value="${ apiSupplierOrder && item.quantity != null ? item.quantity.stripTrailingZeros().toPlainString() : item.quantity }" ${ purchaseOrder.approvalStatus != 'PENDING' || !canManagePurchaseOrders ? 'readonly="readonly"' : '' }/></td>
 	                            <td><input type="number" step="0.01" min="0" name="unitPrices" value="${ item.unitPrice ?: 0 }" ${ purchaseOrder.approvalStatus != 'PENDING' || !canManagePurchaseOrders ? 'readonly="readonly"' : '' }/></td>
                             <td>${ item.totalPrice ?: 0 }</td>
                             <td>

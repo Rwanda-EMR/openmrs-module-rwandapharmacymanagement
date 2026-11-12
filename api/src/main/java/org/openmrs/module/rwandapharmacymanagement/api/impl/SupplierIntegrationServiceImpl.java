@@ -51,6 +51,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Date;
 import java.util.List;
@@ -230,6 +231,12 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
         String baseUrl = supplier.getApiBaseUrl();
         String facilityId = facilityId();
         long start = System.currentTimeMillis();
+        String programError = supplierOrderProgramError(supplierOrder);
+        if (programError != null) {
+            IntegrationLog log = createLog(IntegrationType.ORDER_SUBMISSION, IntegrationStatus.FAILED, programError);
+            log.setEndpoint(buildEndpoint(baseUrl, "/api/integration/submit-order"));
+            return integrationLogService.saveLog(log);
+        }
         try {
             prepareSupplierOrderForPersistence(supplierOrder);
             pharmacyService.saveSupplierOrder(supplierOrder);
@@ -263,7 +270,7 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
         if (purchaseOrder == null) {
             throw new IllegalArgumentException("Purchase order is required");
         }
-        String productMasterValidationError = validatePurchaseOrderProductMasterItems(purchaseOrder);
+        String productMasterValidationError = getPurchaseOrderSubmissionError(purchaseOrder);
         if (!isBlank(productMasterValidationError)) {
             IntegrationLog log = createLog(IntegrationType.ORDER_SUBMISSION, IntegrationStatus.FAILED,
                     productMasterValidationError);
@@ -1396,33 +1403,128 @@ public class SupplierIntegrationServiceImpl extends BaseOpenmrsService implement
         return Boolean.TRUE.equals(purchaseOrder.getSupplier().getApiEnabled());
     }
 
-    private String validatePurchaseOrderProductMasterItems(PurchaseOrder purchaseOrder) {
+    /**
+     * RMS does not check lnProgramName, so an API order line without a program, or an order mixing programs, is
+     * never sent.
+     */
+    private String supplierOrderProgramError(SupplierOrder supplierOrder) {
+        if (supplierOrder == null || supplierOrder.getLines() == null || supplierOrder.getLines().isEmpty()) {
+            return "Supplier order must include at least one line";
+        }
+        List<String> linesWithoutProgram = new ArrayList<String>();
+        List<String> fractionalQuantities = new ArrayList<String>();
+        Set<String> programs = new LinkedHashSet<String>();
+        for (SupplierOrderLine line : supplierOrder.getLines()) {
+            String program = normalized(line == null ? null : line.getProgramName());
+            if (program.isEmpty()) {
+                linesWithoutProgram.add(resolveProductName(line));
+            } else {
+                programs.add(program.toUpperCase(Locale.ENGLISH));
+            }
+            BigDecimal quantity = line == null ? null : line.getOrderedQuantity();
+            if (quantity != null && quantity.signum() != 0 && quantity.stripTrailingZeros().scale() > 0) {
+                fractionalQuantities.add(resolveProductName(line) + " (" + quantity.stripTrailingZeros().toPlainString() + ")");
+            }
+        }
+        if (!linesWithoutProgram.isEmpty()) {
+            return "Supplier order was not sent: these lines have no program: " + linesWithoutProgram;
+        }
+        if (!fractionalQuantities.isEmpty()) {
+            return "Supplier order was not sent: quantities must be whole numbers: " + fractionalQuantities;
+        }
+        if (programs.size() > 1) {
+            return "Supplier order was not sent: it mixes programs " + programs + ". Send one program per order.";
+        }
+        return null;
+    }
+
+    @Override
+    public String getPurchaseOrderSubmissionError(PurchaseOrder purchaseOrder) {
         if (purchaseOrder == null) {
             return "Purchase order is required";
         }
         if (purchaseOrder.getItems() == null || purchaseOrder.getItems().isEmpty()) {
             return "Purchase order must include at least one Product Master item";
         }
+        Map<PurchaseOrderItem, String> problems = getPurchaseOrderLineProblems(purchaseOrder);
+        if (!problems.isEmpty()) {
+            List<String> details = new ArrayList<String>();
+            for (Map.Entry<PurchaseOrderItem, String> problem : problems.entrySet()) {
+                details.add(safe(problem.getKey().getItemName()) + " (" + safe(problem.getKey().getItemCode()) + "): "
+                        + problem.getValue());
+            }
+            return "Purchase order cannot be sent to the supplier. Fix the highlighted items: " + details;
+        }
+        if (isRmsPurchaseOrder(purchaseOrder)) {
+            purchaseOrder.setProgram(normalized(purchaseOrder.getItems().get(0).getProductMasterItem().getProgram()));
+        }
+        return null;
+    }
+
+    /**
+     * For API suppliers each line needs the supplier's program for its NPC code, all lines must share one program
+     * (prices are looked up per program), and quantities must be whole numbers as the supplier API requires.
+     */
+    @Override
+    public Map<PurchaseOrderItem, String> getPurchaseOrderLineProblems(PurchaseOrder purchaseOrder) {
+        Map<PurchaseOrderItem, String> problems = new LinkedHashMap<PurchaseOrderItem, String>();
+        if (purchaseOrder == null || purchaseOrder.getItems() == null) {
+            return problems;
+        }
         boolean apiSupplier = isRmsPurchaseOrder(purchaseOrder);
-        List<String> invalidItems = new ArrayList<String>();
+        Map<PurchaseOrderItem, String> programByItem = new LinkedHashMap<PurchaseOrderItem, String>();
         for (PurchaseOrderItem item : purchaseOrder.getItems()) {
-            ProductMasterItem productMasterItem = item == null ? null : item.getProductMasterItem();
+            if (item == null) {
+                continue;
+            }
+            ProductMasterItem productMasterItem = item.getProductMasterItem();
             if (productMasterItem == null) {
-                invalidItems.add(safe(item == null ? null : item.getItemName()));
+                addProblem(problems, item, "not linked to a Product Master item");
                 continue;
             }
             if (Boolean.FALSE.equals(productMasterItem.getActive())) {
-                invalidItems.add(productMasterItem.getItemName() + " is inactive");
+                addProblem(problems, item, "product is inactive in the Product Master");
                 continue;
             }
-            if (apiSupplier && !ProductMasterItem.SOURCE_API_SYNCED.equalsIgnoreCase(normalized(productMasterItem.getSource()))) {
-                invalidItems.add(productMasterItem.getItemName() + " is not from the API product master");
+            if (!apiSupplier) {
+                continue;
+            }
+            if (!ProductMasterItem.SOURCE_API_SYNCED.equalsIgnoreCase(normalized(productMasterItem.getSource()))) {
+                addProblem(problems, item, "not from the supplier's API product master");
+                continue;
+            }
+            String program = normalized(productMasterItem.getProgram());
+            if (program.isEmpty()) {
+                addProblem(problems, item, "no program");
+            } else if (!isBlank(item.getProgram()) && !program.equalsIgnoreCase(normalized(item.getProgram()))) {
+                addProblem(problems, item, "set to program " + normalized(item.getProgram())
+                        + " but the supplier lists it under " + program);
+            } else {
+                programByItem.put(item, program.toUpperCase(Locale.ENGLISH));
+            }
+            BigDecimal quantity = item.getQuantity();
+            if (quantity != null && quantity.signum() != 0 && quantity.stripTrailingZeros().scale() > 0) {
+                addProblem(problems, item, "quantity " + quantity.stripTrailingZeros().toPlainString()
+                        + " must be a whole number");
             }
         }
-        if (!invalidItems.isEmpty()) {
-            return "Purchase order contains items that are not orderable for the selected supplier: " + invalidItems;
+        Set<String> programs = new LinkedHashSet<String>(programByItem.values());
+        String orderProgram = normalized(purchaseOrder.getProgram());
+        for (Map.Entry<PurchaseOrderItem, String> entry : programByItem.entrySet()) {
+            if (programs.size() > 1) {
+                addProblem(problems, entry.getKey(), "program " + entry.getValue() + " - this order mixes programs "
+                        + programs + "; send one program per purchase order");
+            } else if (!orderProgram.isEmpty() && !orderProgram.equalsIgnoreCase(entry.getValue())) {
+                addProblem(problems, entry.getKey(), "program " + entry.getValue()
+                        + " differs from the purchase order's program " + orderProgram);
+            }
         }
-        return null;
+        return problems;
+    }
+
+    private void addProblem(Map<PurchaseOrderItem, String> problems, PurchaseOrderItem item, String problem) {
+        String existing = problems.get(item);
+        problems.put(item, existing == null ? problem : existing + "; " + problem);
     }
 
     private String resolveProductName(SupplierOrderLine line) {
