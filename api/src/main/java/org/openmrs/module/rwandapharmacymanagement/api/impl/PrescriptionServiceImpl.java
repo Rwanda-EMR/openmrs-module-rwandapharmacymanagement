@@ -551,8 +551,10 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
 
     /**
      * Queues the HIE and SMS messages inside this transaction; the HIE and SMS scheduler tasks send them, so the
-     * user does not wait on the network. After commit only the patient bill link runs, which does nothing when the
-     * bill was already found before commit.
+     * user does not wait on the network. After commit the patient bill link runs, which does nothing when the
+     * bill was already found before commit. The MMI inpatient prescription is sent once the bill is linked, since
+     * the insurance, admission and reception number come from the bill: right after commit when it is already
+     * linked, otherwise from the delayed bill link retries.
      */
     private void queuePrescriptionSavedCommunications(final PatientDispensingRequest request, final boolean sendSms) {
         if (prescriptionCommunicationService == null || request == null) {
@@ -561,19 +563,64 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
         prescriptionCommunicationService.queuePrescriptionSaved(request, sendSms);
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             PatientDispensingRequest linkedRequest = linkCommittedPrescriptionBill(request);
-            schedulePrescriptionBillLinkRetries(linkedRequest == null ? request : linkedRequest, 2);
+            afterPrescriptionSavedBillLink(linkedRequest == null ? request : linkedRequest);
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronizationAdapter() {
             @Override
             public void afterCommit() {
                 PatientDispensingRequest linkedRequest = linkCommittedPrescriptionBillInSingleTransaction(request, 1);
-                schedulePrescriptionBillLinkRetries(linkedRequest == null ? request : linkedRequest, 2);
+                afterPrescriptionSavedBillLink(linkedRequest == null ? request : linkedRequest);
             }
         });
     }
 
+    private void afterPrescriptionSavedBillLink(PatientDispensingRequest request) {
+        if (isReadyForRhipInpatientPrescription(request)) {
+            sendRhipInpatientPrescriptionInSingleTransaction(request.getPatientDispensingRequestId());
+            return;
+        }
+        schedulePrescriptionBillLinkRetries(request, 2, true);
+    }
+
+    /**
+     * The bill is linked, or the prescription has nothing billable and so never gets one
+     */
+    private boolean isReadyForRhipInpatientPrescription(PatientDispensingRequest request) {
+        return request != null && (request.getPatientBillId() != null || Boolean.FALSE.equals(request.getBillable()));
+    }
+
+    private void sendRhipInpatientPrescriptionInSingleTransaction(final Integer requestId) {
+        if (prescriptionCommunicationService == null || requestId == null) {
+            return;
+        }
+        try {
+            if (transactionManager == null) {
+                prescriptionCommunicationService.sendRhipInpatientPrescriptionAfterSave(dispensingService.getRequest(requestId));
+                return;
+            }
+            TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+            transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            transactionTemplate.execute(new TransactionCallback<Void>() {
+                @Override
+                public Void doInTransaction(TransactionStatus status) {
+                    prescriptionCommunicationService.sendRhipInpatientPrescriptionAfterSave(
+                            dispensingService.getRequest(requestId));
+                    return null;
+                }
+            });
+        }
+        catch (Exception e) {
+            log.error("Unable to send the RHIP inpatient prescription. requestId=" + requestId, e);
+        }
+    }
+
     private void schedulePrescriptionBillLinkRetries(final PatientDispensingRequest request, final int firstAttempt) {
+        schedulePrescriptionBillLinkRetries(request, firstAttempt, false);
+    }
+
+    private void schedulePrescriptionBillLinkRetries(final PatientDispensingRequest request, final int firstAttempt,
+                                                     final boolean sendRhipInpatientPrescription) {
         if (request == null || request.getPatientDispensingRequestId() == null || request.getPatientBillId() != null) {
             return;
         }
@@ -581,6 +628,16 @@ public class PrescriptionServiceImpl extends BaseOpenmrsService implements Presc
             @Override
             public void run() {
                 retryPrescriptionBillLink(request.getPatientDispensingRequestId(), firstAttempt);
+                if (sendRhipInpatientPrescription) {
+                    // Linked or not: without a bill the payload builder logs why it was skipped
+                    org.openmrs.api.context.Context.openSession();
+                    try {
+                        sendRhipInpatientPrescriptionInSingleTransaction(request.getPatientDispensingRequestId());
+                    }
+                    finally {
+                        org.openmrs.api.context.Context.closeSession();
+                    }
+                }
             }
         });
     }

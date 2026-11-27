@@ -48,6 +48,14 @@ public final class RwandaPharmacyManagementConfig {
     public static final String GP_HIE_RETRY_SCHEDULER_ENABLED = MODULE_ID + ".hie.retrySchedulerEnabled";
     public static final String GP_HIE_RETRY_BATCH_SIZE = MODULE_ID + ".hie.retryBatchSize";
     public static final String GP_INTEGRATION_MAX_RETRY_ATTEMPTS = MODULE_ID + ".integration.maxRetryAttempts";
+    public static final String GP_RHIP_ENABLED = MODULE_ID + ".rhip.enabled";
+    public static final String GP_RHIP_INPATIENT_PRESCRIPTION_PATH = MODULE_ID + ".rhip.inpatientPrescriptionPath";
+    public static final String GP_RHIP_VISIT_DISPENSE_PATH = MODULE_ID + ".rhip.visitDispensePath";
+    public static final String GP_RHIP_CONNECT_TIMEOUT = MODULE_ID + ".rhip.connectionTimeout";
+    public static final String GP_RHIP_READ_TIMEOUT = MODULE_ID + ".rhip.readTimeout";
+    public static final String GP_RHIP_MEDICINE_DELIVERY_ENABLED = MODULE_ID + ".rhip.medicineDeliveryEnabled";
+    public static final String GP_RHIP_MEDICINE_DELIVERY_PATH = MODULE_ID + ".rhip.medicineDeliveryPath";
+    public static final String GP_RHIP_DELIVERY_MARKUP_PERCENT = MODULE_ID + ".rhip.deliveryPriceMarkupPercent";
     public static final String GP_SMS_ENABLED = MODULE_ID + ".sms.enabled";
     public static final String GP_SMS_AUTH_URL = MODULE_ID + ".sms.authorizationUrl";
     public static final String GP_SMS_USERNAME = MODULE_ID + ".sms.username";

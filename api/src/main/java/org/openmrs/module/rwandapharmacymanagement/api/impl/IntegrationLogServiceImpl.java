@@ -50,6 +50,12 @@ public class IntegrationLogServiceImpl extends BaseOpenmrsService implements Int
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<IntegrationLog> getLogs(IntegrationType integrationType, java.util.Date fromInclusive) {
+        return integrationLogDao.getLogs(integrationType, fromInclusive);
+    }
+
+    @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public IntegrationLog saveLog(IntegrationLog log) {
         return integrationLogDao.saveLog(log);

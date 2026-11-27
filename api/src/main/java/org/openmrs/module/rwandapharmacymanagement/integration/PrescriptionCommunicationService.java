@@ -10,6 +10,13 @@ import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfi
 import org.openmrs.module.rwandapharmacymanagement.api.IntegrationLogService;
 import org.openmrs.module.rwandapharmacymanagement.integration.hie.HieMedicationApiClient;
 import org.openmrs.module.rwandapharmacymanagement.integration.hie.HieMedicationPayloadBuilder;
+import org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipCallException;
+import org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipCallOutcome;
+import org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipInsuranceApiClient;
+import org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipInsuranceConfig;
+import org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipInsurancePayloadBuilder;
+import org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipInsurancePayloadBuilder.RhipPrescriptionPayload;
+import org.openmrs.module.rwandapharmacymanagement.integration.rhip.MohBillingRhipIntegrationLogBridge;
 import org.openmrs.module.rwandapharmacymanagement.integration.sms.SmsGatewayClient;
 import org.openmrs.module.rwandapharmacymanagement.integration.sms.SmsPhoneNumberUtil;
 import org.openmrs.module.rwandapharmacymanagement.model.DispenseRecord;
@@ -35,6 +42,10 @@ public class PrescriptionCommunicationService {
     private IntegrationLogService integrationLogService;
     private HieMedicationApiClient hieMedicationApiClient;
     private HieMedicationPayloadBuilder hieMedicationPayloadBuilder;
+    private RhipInsuranceConfig rhipInsuranceConfig;
+    private RhipInsuranceApiClient rhipInsuranceApiClient;
+    private RhipInsurancePayloadBuilder rhipInsurancePayloadBuilder;
+    private MohBillingRhipIntegrationLogBridge mohBillingRhipIntegrationLogBridge;
     private SmsGatewayClient smsGatewayClient;
 
     public void setAdministrationService(AdministrationService administrationService) {
@@ -53,6 +64,22 @@ public class PrescriptionCommunicationService {
         this.hieMedicationPayloadBuilder = hieMedicationPayloadBuilder;
     }
 
+    public void setRhipInsuranceConfig(RhipInsuranceConfig rhipInsuranceConfig) {
+        this.rhipInsuranceConfig = rhipInsuranceConfig;
+    }
+
+    public void setRhipInsuranceApiClient(RhipInsuranceApiClient rhipInsuranceApiClient) {
+        this.rhipInsuranceApiClient = rhipInsuranceApiClient;
+    }
+
+    public void setRhipInsurancePayloadBuilder(RhipInsurancePayloadBuilder rhipInsurancePayloadBuilder) {
+        this.rhipInsurancePayloadBuilder = rhipInsurancePayloadBuilder;
+    }
+
+    public void setMohBillingRhipIntegrationLogBridge(MohBillingRhipIntegrationLogBridge mohBillingRhipIntegrationLogBridge) {
+        this.mohBillingRhipIntegrationLogBridge = mohBillingRhipIntegrationLogBridge;
+    }
+
     public void setSmsGatewayClient(SmsGatewayClient smsGatewayClient) {
         this.smsGatewayClient = smsGatewayClient;
     }
@@ -62,6 +89,7 @@ public class PrescriptionCommunicationService {
             return;
         }
         sendMedicationRequests(request, request.getLines());
+        sendRhipInpatientPrescription(request);
         if (sendSms) {
             sendPrescriptionSavedSms(request);
         }
@@ -72,6 +100,7 @@ public class PrescriptionCommunicationService {
             return;
         }
         sendMedicationRequests(request, Collections.singletonList(requestLine));
+        logRhipLineUpdateNotSent(request, requestLine);
     }
 
     /**
@@ -89,6 +118,18 @@ public class PrescriptionCommunicationService {
         }
     }
 
+    /**
+     * Sends a newly saved MMI inpatient prescription to RHIP (/inpatient-prescription), so MMI accepts its medicines
+     * on /visit-dispense later. Call it once per saved prescription, after its patient bill is linked: sending it
+     * again records the medicines a second time. Outpatients and other insurers are logged as skipped.
+     */
+    public void sendRhipInpatientPrescriptionAfterSave(PatientDispensingRequest request) {
+        if (request == null || request.getRequestType() != RequestType.PRESCRIPTION) {
+            return;
+        }
+        sendRhipInpatientPrescription(request);
+    }
+
     public void queuePrescriptionLineUpdated(PatientDispensingRequest request, PatientDispensingRequestLine requestLine) {
         if (request == null || requestLine == null || request.getRequestType() != RequestType.PRESCRIPTION) {
             return;
@@ -102,6 +143,7 @@ public class PrescriptionCommunicationService {
                 || dispenseRecord.getPatientDispensingRequest().getRequestType() != RequestType.PRESCRIPTION) {
             return;
         }
+        sendRhipVisitDispense(dispenseRecord);
         if (!isHieEnabled()) {
             log(IntegrationType.HIE_MEDICATION_DISPENSE, IntegrationStatus.SKIPPED,
                     buildEndpoint(administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_DISPENSE_PATH, "")),
@@ -148,6 +190,99 @@ public class PrescriptionCommunicationService {
                         buildEndpoint(administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_DISPENSE_PATH, "/MedicationDispense")),
                         payload, truncate(e.getMessage()), "Queued medication dispense for HIE retry", start);
             }
+        }
+    }
+
+    /**
+     * MMI can neither edit nor cancel a line of an inpatient prescription, and sending the prescription again records
+     * its medicines a second time. So an edited or cancelled line is not sent; the log says so for MMI inpatients.
+     */
+    private void logRhipLineUpdateNotSent(PatientDispensingRequest request, PatientDispensingRequestLine requestLine) {
+        if (!isRhipEnabled()) {
+            return;
+        }
+        try {
+            RhipPrescriptionPayload prepared = rhipInsurancePayloadBuilder.buildInpatientPrescription(request);
+            if (!prepared.isReady()) {
+                return;
+            }
+            String item = requestLine.getItem() == null ? "a medicine" : requestLine.getItem().getCode();
+            log(IntegrationType.RHIP_INPATIENT_PRESCRIPTION, IntegrationStatus.SKIPPED,
+                    rhipInsuranceConfig.inpatientPrescriptionUrl(), "",
+                    "Change to " + item + " on prescription " + safeRequestId(request) + " was not sent: MMI cannot "
+                            + "edit or cancel an inpatient prescription line");
+        }
+        catch (Exception e) {
+            log.debug("Unable to log RHIP prescription line update", e);
+        }
+    }
+
+    private void sendRhipInpatientPrescription(PatientDispensingRequest request) {
+        if (!isRhipEnabled()) {
+            log(IntegrationType.RHIP_INPATIENT_PRESCRIPTION, IntegrationStatus.SKIPPED,
+                    rhipInsuranceConfig == null ? "" : rhipInsuranceConfig.inpatientPrescriptionUrl(),
+                    "", "RHIP inpatient prescription integration is disabled");
+            return;
+        }
+        long start = System.currentTimeMillis();
+        String payload = "";
+        try {
+            RhipPrescriptionPayload prepared = rhipInsurancePayloadBuilder.buildInpatientPrescription(request);
+            if (!prepared.isReady()) {
+                log(IntegrationType.RHIP_INPATIENT_PRESCRIPTION, IntegrationStatus.SKIPPED,
+                        rhipInsuranceConfig.inpatientPrescriptionUrl(), "", "", prepared.getSkipReason(), start);
+                return;
+            }
+            payload = prepared.getPayload();
+            String response = rhipInsuranceApiClient.post(rhipInsuranceConfig.inpatientPrescriptionUrl(),
+                    rhipInsuranceConfig.apiKey(), rhipInsuranceConfig.apiOrigin(), payload,
+                    rhipInsuranceConfig.connectionTimeout(), rhipInsuranceConfig.readTimeout());
+            log(IntegrationType.RHIP_INPATIENT_PRESCRIPTION, IntegrationStatus.SUCCESS,
+                    rhipInsuranceConfig.inpatientPrescriptionUrl(), payload, truncate(response),
+                    RhipCallOutcome.successSummary(IntegrationType.RHIP_INPATIENT_PRESCRIPTION, response), start);
+        }
+        catch (Exception e) {
+            log.error("RHIP inpatient prescription failed. requestId=" + safeRequestId(request)
+                    + ", payload=" + truncate(payload), e);
+            log(IntegrationType.RHIP_INPATIENT_PRESCRIPTION, RhipCallOutcome.failureStatus(e),
+                    rhipInsuranceConfig.inpatientPrescriptionUrl(), payload, truncate(responseBody(e)),
+                    RhipCallOutcome.failureSummary(IntegrationType.RHIP_INPATIENT_PRESCRIPTION, e), start,
+                    RhipCallOutcome.httpStatus(e));
+        }
+    }
+
+    private void sendRhipVisitDispense(DispenseRecord dispenseRecord) {
+        if (!isRhipEnabled()) {
+            log(IntegrationType.RHIP_VISIT_DISPENSE, IntegrationStatus.SKIPPED,
+                    rhipInsuranceConfig == null ? "" : rhipInsuranceConfig.visitDispenseUrl(),
+                    "", "RHIP visit dispense integration is disabled");
+            return;
+        }
+        long start = System.currentTimeMillis();
+        String payload = "";
+        try {
+            RhipPrescriptionPayload prepared = rhipInsurancePayloadBuilder.buildVisitDispense(dispenseRecord);
+            if (!prepared.isReady()) {
+                log(IntegrationType.RHIP_VISIT_DISPENSE, IntegrationStatus.SKIPPED,
+                        rhipInsuranceConfig.visitDispenseUrl(), "", "", prepared.getSkipReason(), start);
+                return;
+            }
+            payload = prepared.getPayload();
+            String response = rhipInsuranceApiClient.post(rhipInsuranceConfig.visitDispenseUrl(),
+                    rhipInsuranceConfig.apiKey(), rhipInsuranceConfig.apiOrigin(), payload,
+                    rhipInsuranceConfig.connectionTimeout(), rhipInsuranceConfig.readTimeout());
+            log(IntegrationType.RHIP_VISIT_DISPENSE, IntegrationStatus.SUCCESS,
+                    rhipInsuranceConfig.visitDispenseUrl(), payload, truncate(response),
+                    RhipCallOutcome.successSummary(IntegrationType.RHIP_VISIT_DISPENSE, response), start);
+        }
+        catch (Exception e) {
+            log.error("RHIP visit dispense failed. requestId="
+                    + safeRequestId(dispenseRecord == null ? null : dispenseRecord.getPatientDispensingRequest())
+                    + ", payload=" + truncate(payload), e);
+            log(IntegrationType.RHIP_VISIT_DISPENSE, RhipCallOutcome.failureStatus(e),
+                    rhipInsuranceConfig.visitDispenseUrl(), payload, truncate(responseBody(e)),
+                    RhipCallOutcome.failureSummary(IntegrationType.RHIP_VISIT_DISPENSE, e), start,
+                    RhipCallOutcome.httpStatus(e));
         }
     }
 
@@ -452,6 +587,11 @@ public class PrescriptionCommunicationService {
                 && !isBlank(administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_BASE_URL, ""));
     }
 
+    private boolean isRhipEnabled() {
+        return rhipInsuranceConfig != null && rhipInsuranceApiClient != null && rhipInsurancePayloadBuilder != null
+                && rhipInsuranceConfig.isEnabled();
+    }
+
     private void log(IntegrationType type, IntegrationStatus status, String endpoint,
                      String requestPayload, String summary) {
         log(type, status, endpoint, requestPayload, "", summary, System.currentTimeMillis());
@@ -459,6 +599,11 @@ public class PrescriptionCommunicationService {
 
     private void log(IntegrationType type, IntegrationStatus status, String endpoint,
                      String requestPayload, String responsePayload, String summary, long start) {
+        log(type, status, endpoint, requestPayload, responsePayload, summary, start, null);
+    }
+
+    private void log(IntegrationType type, IntegrationStatus status, String endpoint,
+                     String requestPayload, String responsePayload, String summary, long start, Integer httpStatus) {
         String truncatedPayload = truncate(requestPayload);
         IntegrationLog log = status == IntegrationStatus.RETRY_PENDING
                 ? integrationLogService.getPendingLog(type, truncatedPayload) : null;
@@ -479,6 +624,11 @@ public class PrescriptionCommunicationService {
         User currentUser = Context.getAuthenticatedUser();
         log.setCreator(currentUser);
         integrationLogService.saveLog(log);
+        if (mohBillingRhipIntegrationLogBridge != null
+                && (type == IntegrationType.RHIP_INPATIENT_PRESCRIPTION || type == IntegrationType.RHIP_VISIT_DISPENSE)) {
+            mohBillingRhipIntegrationLogBridge.save(type, status, endpoint, truncatedPayload, truncate(responsePayload), summary,
+                    httpStatus);
+        }
     }
 
     private String buildEndpoint(String path) {
@@ -551,6 +701,13 @@ public class PrescriptionCommunicationService {
 
     private String escapeJson(String value) {
         return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
+    }
+
+    private String responseBody(Exception e) {
+        if (e instanceof RhipCallException && ((RhipCallException) e).getResponseBody() != null) {
+            return ((RhipCallException) e).getResponseBody();
+        }
+        return e.getMessage();
     }
 
     private String truncate(String value) {

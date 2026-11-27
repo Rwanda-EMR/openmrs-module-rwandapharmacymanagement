@@ -213,6 +213,17 @@ public class MetadataSetup implements Setup {
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_READ_TIMEOUT, "30000");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_RETRY_SCHEDULER_ENABLED, "true");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_HIE_RETRY_BATCH_SIZE, "50");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_RHIP_ENABLED, "false");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_RHIP_INPATIENT_PRESCRIPTION_PATH,
+                "/practitioner/inpatient-prescription");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_RHIP_VISIT_DISPENSE_PATH,
+                "/visit-dispense");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_RHIP_CONNECT_TIMEOUT, "15000");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_RHIP_READ_TIMEOUT, "30000");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_RHIP_MEDICINE_DELIVERY_ENABLED, "true");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_RHIP_MEDICINE_DELIVERY_PATH,
+                "/practitioner/medicines/delivery");
+        saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_RHIP_DELIVERY_MARKUP_PERCENT, "20");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_ENABLED, "false");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_AUTH_URL, "");
         saveGlobalProperty(administrationService, RwandaPharmacyManagementConfig.GP_SMS_USERNAME, "");

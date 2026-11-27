@@ -12,6 +12,7 @@ import org.openmrs.module.rwandapharmacymanagement.api.BillingPriceService;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.TransferBatchAllocationCommand;
 import org.openmrs.module.rwandapharmacymanagement.api.dto.TransferPreviousInfo;
 import org.openmrs.module.rwandapharmacymanagement.db.InventoryDao;
+import org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipMedicineDeliveryService;
 import org.openmrs.module.rwandapharmacymanagement.model.DeliveryReceipt;
 import org.openmrs.module.rwandapharmacymanagement.model.DeliveryReceiptLine;
 import org.openmrs.module.rwandapharmacymanagement.model.InterPharmacyTransfer;
@@ -41,6 +42,8 @@ import java.util.Set;
 @Transactional
 public class InventoryServiceImpl extends BaseOpenmrsService implements InventoryService {
 
+    private RhipMedicineDeliveryService rhipMedicineDeliveryService;
+
     private InventoryDao inventoryDao;
     private PharmacyService pharmacyService;
     private BillingPriceService billingPriceService;
@@ -55,6 +58,10 @@ public class InventoryServiceImpl extends BaseOpenmrsService implements Inventor
 
     public void setBillingPriceService(BillingPriceService billingPriceService) {
         this.billingPriceService = billingPriceService;
+    }
+
+    public void setRhipMedicineDeliveryService(RhipMedicineDeliveryService rhipMedicineDeliveryService) {
+        this.rhipMedicineDeliveryService = rhipMedicineDeliveryService;
     }
 
     @Override
@@ -362,6 +369,10 @@ public class InventoryServiceImpl extends BaseOpenmrsService implements Inventor
             billingPriceService.updatePricesForReceivedItems(receivedItems);
         }
         closeLinkedOrders(deliveryReceipt);
+        if (rhipMedicineDeliveryService != null) {
+            // Lets MMI bill in-house medicines at this delivery's price; sent after commit, never fails the receipt
+            rhipMedicineDeliveryService.sendAfterCommit(deliveryReceipt);
+        }
         return deliveryReceipt;
     }
 
