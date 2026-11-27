@@ -40,5 +40,12 @@
             <artifactId>poi-ooxml</artifactId>
             <version>5.2.5</version>
         </dependency>
+        <!-- Shipped by OpenMRS core. Unlike HttpURLConnection it sends the Origin header RHIP requires -->
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+            <version>4.5.13</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 </project>

@@ -42,10 +42,25 @@
     <bean id="supplierApiClient" class="org.openmrs.module.rwandapharmacymanagement.integration.supplier.SupplierApiClient"/>
     <bean id="hieMedicationApiClient" class="org.openmrs.module.rwandapharmacymanagement.integration.hie.HieMedicationApiClient"/>
     <bean id="hieMedicationPayloadBuilder" class="org.openmrs.module.rwandapharmacymanagement.integration.hie.HieMedicationPayloadBuilder"/>
+    <bean id="rhipInsuranceConfig" class="org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipInsuranceConfig">
+        <property name="administrationService" ref="adminService"/>
+    </bean>
+    <bean id="rhipInsuranceApiClient" class="org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipInsuranceApiClient"/>
+    <bean id="rhipInsurancePayloadBuilder" class="org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipInsurancePayloadBuilder"/>
+    <bean id="mohBillingRhipIntegrationLogBridge" class="org.openmrs.module.rwandapharmacymanagement.integration.rhip.MohBillingRhipIntegrationLogBridge"/>
+    <bean id="rhipMedicineDeliveryService" class="org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipMedicineDeliveryService">
+        <property name="rhipInsuranceConfig" ref="rhipInsuranceConfig"/>
+        <property name="rhipInsuranceApiClient" ref="rhipInsuranceApiClient"/>
+        <property name="rhipInsurancePayloadBuilder" ref="rhipInsurancePayloadBuilder"/>
+        <property name="integrationLogService" ref="integrationLogService"/>
+        <property name="mohBillingRhipIntegrationLogBridge" ref="mohBillingRhipIntegrationLogBridge"/>
+    </bean>
     <bean id="hieRetryService" class="org.openmrs.module.rwandapharmacymanagement.integration.hie.HieRetryService">
         <property name="administrationService" ref="adminService"/>
         <property name="integrationLogService" ref="integrationLogService"/>
         <property name="hieMedicationApiClient" ref="hieMedicationApiClient"/>
+        <property name="rhipInsuranceConfig" ref="rhipInsuranceConfig"/>
+        <property name="rhipInsuranceApiClient" ref="rhipInsuranceApiClient"/>
     </bean>
     <bean id="smsGatewayClient" class="org.openmrs.module.rwandapharmacymanagement.integration.sms.SmsGatewayClient"/>
     <bean id="smsRetryService" class="org.openmrs.module.rwandapharmacymanagement.integration.sms.SmsRetryService">
@@ -58,6 +73,10 @@
         <property name="integrationLogService" ref="integrationLogService"/>
         <property name="hieMedicationApiClient" ref="hieMedicationApiClient"/>
         <property name="hieMedicationPayloadBuilder" ref="hieMedicationPayloadBuilder"/>
+        <property name="rhipInsuranceConfig" ref="rhipInsuranceConfig"/>
+        <property name="rhipInsuranceApiClient" ref="rhipInsuranceApiClient"/>
+        <property name="rhipInsurancePayloadBuilder" ref="rhipInsurancePayloadBuilder"/>
+        <property name="mohBillingRhipIntegrationLogBridge" ref="mohBillingRhipIntegrationLogBridge"/>
         <property name="smsGatewayClient" ref="smsGatewayClient"/>
     </bean>
 
@@ -70,6 +89,7 @@
         <property name="inventoryDao" ref="inventoryDao"/>
         <property name="pharmacyService" ref="pharmacyService"/>
         <property name="billingPriceService" ref="billingPriceService"/>
+        <property name="rhipMedicineDeliveryService" ref="rhipMedicineDeliveryService"/>
     </bean>
 
     <bean id="dispensingServiceTarget" class="org.openmrs.module.rwandapharmacymanagement.api.impl.DispensingServiceImpl">

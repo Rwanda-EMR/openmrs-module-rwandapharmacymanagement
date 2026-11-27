@@ -32,7 +32,9 @@ public class HibernateIntegrationLogDao implements IntegrationLogDao {
         Criterion hieTypes = Restrictions.disjunction()
                 .add(Restrictions.eq("integrationType", IntegrationType.HIE_ENCOUNTER))
                 .add(Restrictions.eq("integrationType", IntegrationType.HIE_MEDICATION_REQUEST))
-                .add(Restrictions.eq("integrationType", IntegrationType.HIE_MEDICATION_DISPENSE));
+                .add(Restrictions.eq("integrationType", IntegrationType.HIE_MEDICATION_DISPENSE))
+                .add(Restrictions.eq("integrationType", IntegrationType.RHIP_INPATIENT_PRESCRIPTION))
+                .add(Restrictions.eq("integrationType", IntegrationType.RHIP_VISIT_DISPENSE));
         return sessionFactory.getCurrentSession().createCriteria(IntegrationLog.class)
                 .add(Restrictions.eq("status", IntegrationStatus.RETRY_PENDING))
                 .add(hieTypes)
@@ -57,6 +59,17 @@ public class HibernateIntegrationLogDao implements IntegrationLogDao {
     public IntegrationLog getLog(Integer integrationLogId) {
         return integrationLogId == null ? null
                 : (IntegrationLog) sessionFactory.getCurrentSession().get(IntegrationLog.class, integrationLogId);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<IntegrationLog> getLogs(IntegrationType integrationType, java.util.Date fromInclusive) {
+        org.hibernate.Criteria criteria = sessionFactory.getCurrentSession().createCriteria(IntegrationLog.class)
+                .add(Restrictions.eq("integrationType", integrationType));
+        if (fromInclusive != null) {
+            criteria.add(Restrictions.ge("dateCreated", fromInclusive));
+        }
+        return criteria.addOrder(Order.desc("dateCreated")).addOrder(Order.desc("integrationLogId")).list();
     }
 
     @Override

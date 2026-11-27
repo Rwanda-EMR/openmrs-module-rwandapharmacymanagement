@@ -92,7 +92,8 @@
                     [path: "admin/itemRenames", label: "Item renames", privilege: "Task: rwandapharmacymanagement.manageSettings"],
                     [path: "safety/rules", label: "Safety rules"],
                     [path: "integration/pendingHie", label: "Pending HIE queue"],
-                    [path: "integration/logs", label: "Integration logs"]
+                    [path: "integration/logs", label: "Integration logs"],
+                    [path: "integration/mmiDeliveries", label: "MMI deliveries"]
             ]],
             [title: "Reports", links: [
                     [path: "report/pharmacyStock", label: "Individual pharmacy report"],

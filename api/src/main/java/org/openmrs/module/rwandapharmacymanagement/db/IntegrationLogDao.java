@@ -17,5 +17,7 @@ public interface IntegrationLogDao {
 
     IntegrationLog getPendingLog(IntegrationType integrationType, String requestPayload);
 
+    List<IntegrationLog> getLogs(IntegrationType integrationType, java.util.Date fromInclusive);
+
     IntegrationLog saveLog(IntegrationLog log);
 }

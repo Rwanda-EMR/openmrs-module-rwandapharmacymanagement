@@ -5,6 +5,10 @@ import org.openmrs.api.context.Context;
 import org.openmrs.module.rwandapharmacymanagement.RwandaPharmacyManagementConfig;
 import org.openmrs.module.rwandapharmacymanagement.api.IntegrationLogService;
 import org.openmrs.module.rwandapharmacymanagement.integration.RetryOutcome;
+import org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipCallException;
+import org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipCallOutcome;
+import org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipInsuranceApiClient;
+import org.openmrs.module.rwandapharmacymanagement.integration.rhip.RhipInsuranceConfig;
 import org.openmrs.module.rwandapharmacymanagement.model.IntegrationLog;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.IntegrationStatus;
 import org.openmrs.module.rwandapharmacymanagement.model.enums.IntegrationType;
@@ -23,6 +27,8 @@ public class HieRetryService {
     private AdministrationService administrationService;
     private IntegrationLogService integrationLogService;
     private HieMedicationApiClient hieMedicationApiClient;
+    private RhipInsuranceConfig rhipInsuranceConfig;
+    private RhipInsuranceApiClient rhipInsuranceApiClient;
 
     public void setAdministrationService(AdministrationService administrationService) {
         this.administrationService = administrationService;
@@ -36,6 +42,14 @@ public class HieRetryService {
         this.hieMedicationApiClient = hieMedicationApiClient;
     }
 
+    public void setRhipInsuranceConfig(RhipInsuranceConfig rhipInsuranceConfig) {
+        this.rhipInsuranceConfig = rhipInsuranceConfig;
+    }
+
+    public void setRhipInsuranceApiClient(RhipInsuranceApiClient rhipInsuranceApiClient) {
+        this.rhipInsuranceApiClient = rhipInsuranceApiClient;
+    }
+
     public int retryPending() {
         return retryPending(batchSize());
     }
@@ -45,7 +59,7 @@ public class HieRetryService {
      * still unsent, and the run stops at the first connection failure so an HIE outage does not stall the task.
      */
     public int retryPending(int maxResults) {
-        if (!isHieEnabled()) {
+        if (!isHieEnabled() && !isRhipEnabled()) {
             return 0;
         }
         List<IntegrationLog> pendingLogs = integrationLogService.getPendingHieLogs(maxResults);
@@ -73,46 +87,71 @@ public class HieRetryService {
     }
 
     public boolean retryLog(Integer integrationLogId) {
-        if (!isHieEnabled()) {
+        if (!isHieEnabled() && !isRhipEnabled()) {
             return false;
         }
         IntegrationLog pendingLog = integrationLogService.getLog(integrationLogId);
-        if (pendingLog == null || pendingLog.getStatus() != IntegrationStatus.RETRY_PENDING || !isHieType(pendingLog.getIntegrationType())) {
+        if (pendingLog == null || pendingLog.getStatus() != IntegrationStatus.RETRY_PENDING || !isRetriableType(pendingLog.getIntegrationType())) {
+            return false;
+        }
+        if (!integrationEnabled(pendingLog.getIntegrationType())) {
             return false;
         }
         return retry(pendingLog) == RetryOutcome.SENT;
     }
 
     private RetryOutcome retry(IntegrationLog pendingLog) {
+        if (!integrationEnabled(pendingLog == null ? null : pendingLog.getIntegrationType())) {
+            return RetryOutcome.FAILED;
+        }
         long start = System.currentTimeMillis();
         pendingLog.setRetryCount(Integer.valueOf((pendingLog.getRetryCount() == null ? 0 : pendingLog.getRetryCount().intValue()) + 1));
         pendingLog.setLastAttemptDate(new Date());
         try {
-            String response = hieMedicationApiClient.post(
-                    administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_BASE_URL, ""),
-                    endpointPath(pendingLog.getIntegrationType()),
-                    administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_USERNAME, ""),
-                    administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_PASSWORD, ""),
-                    pendingLog.getRequestPayload(),
-                    integerProperty(RwandaPharmacyManagementConfig.GP_HIE_CONNECT_TIMEOUT, 10000),
-                    integerProperty(RwandaPharmacyManagementConfig.GP_HIE_READ_TIMEOUT, 30000));
+            String response = isRhipType(pendingLog.getIntegrationType())
+                    ? rhipInsuranceApiClient.post(endpointPath(pendingLog.getIntegrationType()),
+                            rhipInsuranceConfig.apiKey(),
+                            rhipInsuranceConfig.apiOrigin(),
+                            pendingLog.getRequestPayload(),
+                            rhipInsuranceConfig.connectionTimeout(),
+                            rhipInsuranceConfig.readTimeout())
+                    : hieMedicationApiClient.post(
+                            administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_BASE_URL, ""),
+                            endpointPath(pendingLog.getIntegrationType()),
+                            administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_USERNAME, ""),
+                            administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_PASSWORD, ""),
+                            pendingLog.getRequestPayload(),
+                            integerProperty(RwandaPharmacyManagementConfig.GP_HIE_CONNECT_TIMEOUT, 10000),
+                            integerProperty(RwandaPharmacyManagementConfig.GP_HIE_READ_TIMEOUT, 30000));
             pendingLog.setStatus(IntegrationStatus.SUCCESS);
             pendingLog.setResponsePayload(truncate(response));
-            pendingLog.setSummary("Queued HIE payload sent successfully");
+            pendingLog.setSummary(isRhipType(pendingLog.getIntegrationType())
+                    ? RhipCallOutcome.successSummary(pendingLog.getIntegrationType(), response)
+                    : "Queued HIE payload sent successfully");
             pendingLog.setDurationMs(Long.valueOf(Math.max(0L, System.currentTimeMillis() - start)));
             integrationLogService.saveLog(pendingLog);
             return RetryOutcome.SENT;
         }
         catch (Exception e) {
-            log.error("Queued HIE payload retry failed. logId=" + pendingLog.getIntegrationLogId()
+            log.error("Queued integration payload retry failed. logId=" + pendingLog.getIntegrationLogId()
                     + ", type=" + pendingLog.getIntegrationType(), e);
             boolean unreachable = RetryOutcome.isUnreachable(e);
-            boolean giveUp = !unreachable && pendingLog.getRetryCount().intValue() >= maxRetryAttempts();
-            pendingLog.setStatus(giveUp ? IntegrationStatus.FAILED : IntegrationStatus.RETRY_PENDING);
-            pendingLog.setResponsePayload(truncate(e.getMessage()));
-            pendingLog.setSummary(giveUp
-                    ? "HIE rejected the payload; stopped after " + pendingLog.getRetryCount() + " attempts"
-                    : unreachable ? "HIE unreachable; will retry" : "Queued HIE payload retry failed");
+            if (isRhipType(pendingLog.getIntegrationType())) {
+                // Only calls that never reached RHIP, or got 429/502/503/504, stay in the queue
+                pendingLog.setStatus(RhipCallOutcome.failureStatus(e));
+                pendingLog.setResponsePayload(truncate(e instanceof RhipCallException
+                        && ((RhipCallException) e).getResponseBody() != null
+                        ? ((RhipCallException) e).getResponseBody() : e.getMessage()));
+                pendingLog.setSummary(RhipCallOutcome.failureSummary(pendingLog.getIntegrationType(), e));
+            }
+            else {
+                boolean giveUp = !unreachable && pendingLog.getRetryCount().intValue() >= maxRetryAttempts();
+                pendingLog.setStatus(giveUp ? IntegrationStatus.FAILED : IntegrationStatus.RETRY_PENDING);
+                pendingLog.setResponsePayload(truncate(e.getMessage()));
+                pendingLog.setSummary(giveUp
+                        ? "HIE rejected the payload; stopped after " + pendingLog.getRetryCount() + " attempts"
+                        : unreachable ? "HIE unreachable; will retry" : "Queued HIE payload retry failed");
+            }
             pendingLog.setDurationMs(Long.valueOf(Math.max(0L, System.currentTimeMillis() - start)));
             integrationLogService.saveLog(pendingLog);
             return unreachable ? RetryOutcome.UNREACHABLE : RetryOutcome.FAILED;
@@ -130,6 +169,12 @@ public class HieRetryService {
         if (integrationType == IntegrationType.HIE_MEDICATION_DISPENSE) {
             return administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_DISPENSE_PATH, "/MedicationDispense");
         }
+        if (integrationType == IntegrationType.RHIP_INPATIENT_PRESCRIPTION) {
+            return rhipInsuranceConfig == null ? "" : rhipInsuranceConfig.inpatientPrescriptionUrl();
+        }
+        if (integrationType == IntegrationType.RHIP_VISIT_DISPENSE) {
+            return rhipInsuranceConfig == null ? "" : rhipInsuranceConfig.visitDispenseUrl();
+        }
         return administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_MEDICATION_REQUEST_PATH, "/MedicationRequest");
     }
 
@@ -138,10 +183,33 @@ public class HieRetryService {
                 && !isBlank(administrationService.getGlobalProperty(RwandaPharmacyManagementConfig.GP_HIE_BASE_URL, ""));
     }
 
+    private boolean isRhipEnabled() {
+        return rhipInsuranceConfig != null && rhipInsuranceApiClient != null && rhipInsuranceConfig.isEnabled();
+    }
+
+    private boolean isRetriableType(IntegrationType integrationType) {
+        return isHieType(integrationType) || isRhipType(integrationType);
+    }
+
+    private boolean integrationEnabled(IntegrationType integrationType) {
+        if (isRhipType(integrationType)) {
+            return isRhipEnabled();
+        }
+        if (isHieType(integrationType)) {
+            return isHieEnabled();
+        }
+        return false;
+    }
+
     private boolean isHieType(IntegrationType integrationType) {
         return integrationType == IntegrationType.HIE_ENCOUNTER
                 || integrationType == IntegrationType.HIE_MEDICATION_REQUEST
                 || integrationType == IntegrationType.HIE_MEDICATION_DISPENSE;
+    }
+
+    private boolean isRhipType(IntegrationType integrationType) {
+        return integrationType == IntegrationType.RHIP_INPATIENT_PRESCRIPTION
+                || integrationType == IntegrationType.RHIP_VISIT_DISPENSE;
     }
 
     private int batchSize() {

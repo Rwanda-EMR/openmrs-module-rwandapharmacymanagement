@@ -18,5 +18,10 @@ public interface IntegrationLogService extends OpenmrsService {
 
     IntegrationLog getPendingLog(IntegrationType integrationType, String requestPayload);
 
+    /**
+     * @return logs of this type created on or after the given date, newest first
+     */
+    List<IntegrationLog> getLogs(IntegrationType integrationType, java.util.Date fromInclusive);
+
     IntegrationLog saveLog(IntegrationLog log);
 }
